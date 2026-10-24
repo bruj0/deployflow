@@ -1,4 +1,6 @@
-<img src="assets/logo.png" alt="DeployFlow" width="96">
+<p align="center">
+  <img src="assets/logo.png" alt="DeployFlow" width="420">
+</p>
 
 # DeployFlow
 
