@@ -437,16 +437,65 @@
     daemon_reload: true
   when: om_unit.changed
 
+- name: Read the build the running process actually loaded
+  # The server loads its bundle once, at start-up, so the process and the
+  # tree on disk can disagree: a tree shipped while the service kept running
+  # leaves the old manifest in the process and the new chunks on disk, and
+  # every page render answers 500 while healthz keeps answering 200.
+  #
+  # The comparison is the process start time against the bundle's mtime. The
+  # bundle is written when the build lands, so a bundle newer than the
+  # process means the process predates the build it is serving.
+  #
+  # The probe runs twice: once before the service is started, to decide
+  # whether it needs restarting, and once after, to confirm the restart
+  # settled the disagreement.
+  ansible.builtin.shell:
+    cmd: >-
+      p=$(systemctl show {{ app_service_name }}.service -p MainPID --value);
+      e=$(ps -o etimes= -p "$p" | tr -d ' ');
+      n=$(date +%s);
+      s=$((n - e));
+      m=$(stat -c %Y {{ om_dist_dir }}/.build/next/BUILD_ID);
+      echo "process_started=$s bundle_written=$m";
+      if [ "$m" -gt "$s" ]; then echo stale; else echo fresh; fi
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  register: om_build_freshness
+
 - name: Start OmniRoute and make it survive a reboot
   # A restart when the configuration or the unit changed, a plain start
   # otherwise: a restart on every play would make the role report changed
   # forever, and would drop live traffic on every install.
+  #
+  # A stale process is also a reason to restart, and it is the reason that
+  # matters. The server loads its bundle once, at start-up. A tree that
+  # arrives afterwards is on disk but not in the running process, and the two
+  # disagree in a way the rest of the play cannot see:
+  #
+  #   the new bundle's client manifest names chunks from the new build
+  #   the running process answers with the old manifest
+  #   every page render fails with
+  #     Could not find the module "..." in the React Client Manifest
+  #   and the dashboard answers 500
+  #
+  # The service stays "active" through all of it, the port stays bound, and
+  # /healthz keeps answering 200 — healthz reports the lifecycle phase, not
+  # the build. A play that only checks those passes while the UI is broken.
+  # The restart is what makes the running process and the shipped tree agree.
+  #
+  # The trigger is the staleness probe above, not the transfer's own change
+  # flag. The transfer reports changed for reasons that have nothing to do
+  # with the build — a file the server wrote into the tree, a mode — and
+  # restarting on those would drop live traffic on every install.
   ansible.builtin.systemd:
     name: "{{ app_service_name }}"
     enabled: true
     state: >-
       {{ 'restarted' if
-         (om_secrets_written.changed or om_env_written.changed or om_unit.changed)
+         (om_secrets_written.changed or om_env_written.changed or om_unit.changed
+          or 'stale' in om_build_freshness.stdout | default(''))
          else 'started' }}
     daemon_reload: true
 
@@ -500,6 +549,71 @@
   retries: 30
   delay: 10
   changed_when: false
+
+- name: Re-read the build the running process actually loaded
+  # The probe ran before the restart, so its value describes the process that
+  # was running then. This is the value that describes the process running
+  # now, after any restart.
+  ansible.builtin.shell:
+    cmd: >-
+      p=$(systemctl show {{ app_service_name }}.service -p MainPID --value);
+      e=$(ps -o etimes= -p "$p" | tr -d ' ');
+      n=$(date +%s);
+      s=$((n - e));
+      m=$(stat -c %Y {{ om_dist_dir }}/.build/next/BUILD_ID);
+      echo "process_started=$s bundle_written=$m";
+      if [ "$m" -gt "$s" ]; then echo stale; else echo fresh; fi
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  register: om_build_freshness_after
+
+- name: Fail when the running process is older than the tree it serves
+  # This is the assertion the shape needed most. Every other check asks
+  # whether the service is up. None of them asks whether it is serving the
+  # tree that was just shipped, and that is the difference between a green
+  # play and a working dashboard.
+  #
+  # The first probe decided whether the service needed restarting. This one
+  # checks the outcome: a restart that did not take, or a tree that changed
+  # underneath a process that started after the probe, leaves the same
+  # disagreement this reports.
+  ansible.builtin.fail:
+    msg: >-
+      The shipped tree is newer than the running process. The service is up
+      and healthz answers 200, but the dashboard answers 500: the process
+      loaded the previous bundle, and its React Client Manifest names chunks
+      that no longer exist. Restart the unit:
+      systemctl restart {{ app_service_name }}
+  when: "'stale' in om_build_freshness_after.stdout | default('')"
+
+- name: Assert the dashboard serves a page
+  # The last postcondition, and the one this shape needed most. Every check
+  # above asks whether the service is up. None of them asks whether it can
+  # render a page — and a Next.js server with a stale client manifest is up,
+  # healthy, bound and answering, and renders nothing but 500.
+  #
+  # The request is anonymous, so it gets the login redirect rather than a
+  # page; the redirect itself is the answer. A 500 here means the render
+  # path is broken.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/login"
+    method: GET
+    status_code: [200, 307]
+    follow_redirects: false
+  become_user: "{{ app_user }}"
+  register: om_login_page
+  failed_when: false
+  changed_when: false
+
+- name: Fail when the dashboard cannot render a page
+  ansible.builtin.fail:
+    msg: >-
+      The dashboard answered {{ om_login_page.status | default('no status') }}
+      for /login. The service is up but cannot render. Check the application
+      log for a React Client Manifest error: a tree that was shipped while
+      the service kept running leaves the process and the bundle disagreeing.
+  when: om_login_page.status | default(0) not in [200, 307]
 
 - name: Assert the application wrote its own store
   # A running server with nothing to log in to.

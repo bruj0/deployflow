@@ -172,6 +172,8 @@ warning:
 | `storage.sqlite` exists and is not empty | a running server with nothing to log in to |
 | the listener is on the address the role configured | the process listening somewhere else |
 | `/healthz` answers 200 | a service that binds a port and does not serve |
+| the running process is not older than the shipped bundle | a tree shipped while the service kept running |
+| `/login` renders a page | a server that is up, healthy, and renders only 500 |
 | `/v1/chat/completions` answers 401 without a key | an inference plane any device on the network can spend |
 | `/v1` answers 401 for a bad key, and names the gate | a proxy answering 401 instead of the application |
 | `/api/providers` answers 401 | a dashboard serving an anonymous caller |
@@ -180,6 +182,15 @@ warning:
 The key gate checks are the ones worth reading. A server that serves `/v1`
 without a key spends the operator's provider credentials for anyone who can
 reach the port, and nothing else in the play would notice.
+
+The render check is the second one worth reading. OmniRoute loads its bundle
+once, at start-up, so a tree that arrives while the service keeps running
+leaves the process serving the previous build while the new chunks sit on
+disk. The result is a server that is active, bound, and answering
+`/healthz` with 200, and a dashboard that answers 500 with `Could not find
+the module "..." in the React Client Manifest`. The role restarts the unit
+when the shipped bundle is newer than the running process, and fails the play
+if the disagreement survives the restart.
 
 ## Quickstart
 

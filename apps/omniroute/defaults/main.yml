@@ -117,6 +117,15 @@ om_sync_excludes:
   - "**/__tests__"
   - "**/node_modules/.cache"
   - .env
+  # The route cache is written by the running server, into the tree it was
+  # started from. It is not part of the artifact: the build does not produce
+  # it, and it holds render output keyed by route.
+  #
+  # Without this exclusion, rsync sees the controller's tree without it and
+  # the guest's tree with it, and `--delete` removes it. Every run then
+  # reports changed, the run never settles to changed=0, and a rule that
+  # restarts on a changed tree restarts the service on every install.
+  - "dist/.build/next/server/route-cache"
 
 # ---------------------------------------------------------------------------
 # State and configuration
