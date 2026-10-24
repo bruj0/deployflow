@@ -1,0 +1,24 @@
+---
+# Spike probe: prove Ansible can drive a guest created by `pct create` from a
+# stock Proxmox template, and measure the round trip.
+- name: Probe the spike container
+  hosts: example
+  gather_facts: true
+
+  tasks:
+    - name: Record the facts that decide the install path
+      ansible.builtin.debug:
+        msg:
+          - "hostname={{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "python={{ ansible_facts['python_version'] }}"
+          - "init={{ ansible_facts['service_mgr'] }}"
+          - "arch={{ ansible_facts['architecture'] }}"
+
+    - name: Assert the base satisfies example-app's floor (Python >= 3.12)
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['python_version'] is version('3.12', '>=')
+        fail_msg: >-
+          example-app requires Python >= 3.12, this guest has
+          {{ ansible_facts['python_version'] }}
+        success_msg: "Python floor satisfied"

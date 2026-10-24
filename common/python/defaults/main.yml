@@ -1,0 +1,67 @@
+---
+# The contract between the framework and an application.
+#
+# An application role does not have to restate any of this. It sets only what
+# differs — `apps/example-app/defaults/main.yml` is a handful of lines — and inherits
+# the rest from here. A guest may override any value through group_vars.
+#
+# Paths are derived from `app_name` rather than written out, so adding an
+# application never means inventing a new set of path variables: every name
+# below follows from one word.
+
+# The application's name. There is deliberately NO default for this.
+#
+# A default here once silently overrode the including role's own `app_name`,
+# so the guest was given /opt/<the wrong name>. Ansible applies a role's
+# meta-dependency defaults AFTER the including role's own, so a framework
+# default wins. It went unnoticed for the first application only because that
+# application's name happened to equal the framework's default.
+#
+# With no default, an application that forgets to set it fails at the assertion
+# below, which names the role that should have set it. That is the correct
+# failure: a missing required value, reported once, instead of a wrong path
+# discovered later on a guest.
+
+
+# Service account. The application runs as this account; nothing else writes to
+# its files.
+app_user: "{{ app_name }}"
+app_home: "/opt/{{ app_name }}"
+
+# Install root. The venv lives under it, so the whole installed application is
+# one directory that can be backed up, diffed or replaced as a unit.
+app_dir: "/opt/{{ app_name }}/app"
+app_venv: "/opt/{{ app_name }}/app/venv"
+
+# Mutable state — database, secrets, user data — kept outside app_dir so that
+# reinstalling the application never destroys it. This is the boundary the
+# whole idempotency story rests on.
+app_state_dir: "/opt/{{ app_name }}/state"
+
+# TCP port the application listens on. Used to open the firewall and to assert
+# the service is actually serving. Set by the application, for the same reason
+# app_name has no default.
+
+
+# Address to bind. 127.0.0.1 keeps it private to the guest; 0.0.0.0 exposes it
+# on the LAN. Only 0.0.0.0 gets a reachability assertion from the controller,
+# because a loopback bind is unreachable by design and failing on it would
+# report a correct lockdown as a broken service.
+app_bind_host: 127.0.0.1
+
+# systemd unit name.
+app_service_name: "{{ app_name }}"
+
+# The interpreter that builds the venv. Ubuntu 26.04 ships 3.14; the names of
+# the venv and dev packages follow it, so this is a variable rather than a
+# literal for that reason alone.
+app_python: python3
+app_python_version: "3.14"
+
+# `app_python` is a command name ("python3") and the packages are named after
+# the version, keeping the dot: "python3.14-venv". The two share the major
+# version, so the tag is app_python plus the minor version prefixed by a dot.
+# Concatenating the full "3.14" onto "python3" yields "python33.14-venv", and
+# dropping the dot yields "python314-venv"; apt rejects both with
+# "No package matching ... is available".
+app_python_tag: "{{ app_python }}.{{ app_python_version.split('.')[1] }}"

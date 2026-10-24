@@ -1,0 +1,47 @@
+---
+# Container shape. Everything the lxc role passes to `pct create` lives here,
+# so adding a guest is a block of variables rather than a copy of the role.
+
+# Stock Proxmox templates present in /var/lib/vz/template/cache on this host.
+# Keep the version in the name: pinning it is what makes a rebuild land on the
+# same package versions as the last one.
+#
+# Ubuntu 26.04 is the base because it ships Python 3.14.4. The Debian 13
+# template this replaced ships 3.13.5, and every compiled dependency in the
+# application tree would then resolve against that instead.
+lxc_template: ubuntu-26.04-standard_26.04-1_amd64.tar.zst
+
+lxc_storage: data1
+# 16 GB, not 8. Measured: a pinned 200-package install plus the Chromium build
+# leaves a 4 GB rootfs at 100% ("[Errno 28] No space left on device"), and the
+# install fails part-way through rather than at a task boundary. 8 GB is
+# uncomfortably close to the same failure once the lockfile grows.
+lxc_rootfs_gb: 16
+lxc_cores: 2
+lxc_memory: 2048
+lxc_swap: 512
+lxc_unprivileged: 1
+lxc_onboot: 0
+
+# nesting and keyctl let an application start its own containers.
+# fuse is needed by anything mounting FUSE filesystems. Drop what the
+# application does not use; every feature is extra attack surface.
+lxc_features: nesting=1,fuse=1,keyctl=1
+
+# vnet0 carries the 10.0.0.0/8 range on this node. vmbr0 is the public bridge
+# and is the wrong choice for an application container.
+#
+# No address or gateway is configured here. The guest takes a DHCP lease from
+# Proxmox's own SDN zone, which also registers the hostname in its resolver.
+# See the ip=dhcp handling in tasks/main.yml.
+lxc_net_name: eth0
+lxc_bridge: vnet0
+
+# Where the operator public key is staged on the Proxmox host before
+# `pct create` reads it.
+lxc_pubkey_path_on_proxmox: /root/lxc-ansible.pub
+
+# Seconds to wait for sshd after the container starts. A container that has just
+# run `pct create` needs time for systemd to reach multi-user.
+lxc_ssh_timeout: 180
+

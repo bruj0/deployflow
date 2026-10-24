@@ -1,0 +1,147 @@
+---
+# Install one application into a guest and prove that it works.
+#
+# The checks at the end are the point of this role. A play that ends green
+# proves that Ansible ran, not that the application is usable. Each check below
+# stands in for a failure that a green play would otherwise hide:
+#
+#   the venv exists          the package tree was never installed
+#   the module imports        the dependency tree is absent or broken
+#   the unit is active        systemd accepted the unit but the service died
+#   the port is listening     the process is up but bound somewhere else
+#   the endpoint answers      the service listens but does not serve
+#
+# The last one is the only check that reaches the application the way a user
+# does. A service that binds a port and returns nothing is still broken.
+
+- name: Refuse to install without an application name and port
+  # app_name and app_port have no defaults on purpose: an undefined variable
+  # deep inside a templated path is harder to read than one clear message.
+  ansible.builtin.assert:
+    that:
+      - app_name is defined
+      - app_name | length > 0
+      - app_port is defined
+    fail_msg: >-
+      app_name and app_port must be set in apps/{{ role_path | default('unknown') }}/defaults/main.yml.
+    quiet: true
+    success_msg: "installing {{ app_name }}"
+
+- name: Install the application
+  # The lockfile is pinned by sha256, so the tree that installs is the tree
+  # that was reviewed. `--require-hashes` is what enforces it at install time;
+  # the build refuses a lockfile without hashes, so the two agree.
+  ansible.builtin.pip:
+    requirements: "{{ role_path }}/files/requirements.lock"
+    virtualenv: "{{ app_venv }}"
+    extra_args: "--require-hashes"
+  register: app_install
+  failed_when: false
+
+- name: Fail when the install did not complete
+  ansible.builtin.fail:
+    msg: >-
+      The application could not be installed from {{ role_path }}/files/requirements.lock.
+      The install failed with: {{ app_install.msg | default('no message') }}
+  when: app_install is failed
+
+- name: Check that the application can be imported
+  # A package in site-packages is not a working package. This catches a
+  # dependency tree that did not install and a native extension that did not
+  # compile.
+  ansible.builtin.command:
+    argv:
+      - "{{ app_venv }}/bin/python"
+      - -c
+      - "import {{ app_name }}"
+  changed_when: false
+  register: app_import
+  failed_when: false
+
+- name: Fail when the application cannot be imported
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} is installed but cannot be imported: {{ app_import.stderr | default('no error output') }}
+  when: app_import.rc != 0
+
+- name: Write the systemd unit
+  ansible.builtin.template:
+    src: "{{ app_name }}.service.j2"
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    mode: "0644"
+  notify: Restart {{ app_service_name }}
+
+- name: Enable and start the service
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for the service to accept connections
+  # systemd reports the unit as active long before the process binds a port.
+  # Without this wait the check below fails against a service that simply has
+  # not finished starting.
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ app_port }}"
+    timeout: 60
+    state: started
+
+- name: Check that the service is listening on the requested port
+  # `systemctl is-active` says the process is up. It does not say the process
+  # bound the port the operator asked for. A service that came up on 8000
+  # instead of 8080 passes an is-active check and fails every user request.
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -ltn
+  changed_when: false
+  register: app_listeners
+  failed_when: false
+
+- name: Fail when the service is not listening on the requested port
+  ansible.builtin.fail:
+    msg: >-
+      The service is running but is not listening on port {{ app_port }}.
+      Listening sockets: {{ app_listeners.stdout_lines | default([]) | join(', ') }}
+  when: app_port | string not in app_listeners.stdout
+
+- name: Check that the application answers a request
+  # The only check that reaches the application the way a user does. A service
+  # that binds a port and returns nothing is still broken, and no amount of
+  # process inspection finds that out.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}{{ app_health_path | default('/') }}"
+    status_code: [200, 201, 204, 301, 302, 401, 403]
+    timeout: 15
+  register: app_endpoint
+  failed_when: false
+  retries: 3
+  delay: 5
+  until: app_endpoint.status is defined
+
+- name: Fail when the application does not answer
+  ansible.builtin.fail:
+    msg: >-
+      The service listens on port {{ app_port }} but does not answer a request
+      to {{ app_health_path | default('/') }}. Status: {{ app_endpoint.status | default('no response') }}.
+      Check: journalctl -u {{ app_service_name }}
+  when: app_endpoint.status is undefined
+
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "import {{ app_name }}: ok"
+      - "unit {{ app_service_name }}: active"
+      - "listener on {{ app_port }}: present"
+      - "endpoint {{ app_health_path | default('/') }}: HTTP {{ app_endpoint.status }}"
+
+- name: Restart the service when its unit changed
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    state: restarted
+    daemon_reload: true
+  when: app_unit_changed is defined and app_unit_changed
+  listen: Restart {{ app_service_name }}

@@ -1,0 +1,20 @@
+# The systemd unit for {{ app_name }}.
+#
+# It runs as the service account that common/python created, never as root.
+[Unit]
+Description={{ app_name }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_dir }}
+EnvironmentFile=-{{ app_state_dir }}/{{ app_name }}.env
+ExecStart={{ app_venv }}/bin/{{ app_name }} --port {{ app_port }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

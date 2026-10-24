@@ -1,0 +1,23 @@
+# Settings shared by every guest.
+
+# The operator's public SSH key, injected into each guest at create time by
+# `pct create --ssh-public-keys`. A public key is not a secret, so it lives in
+# the repository in plain text. That is deliberate: reading it from
+# ~/.ssh/id_ed25519.pub would work only on the machine that happens to hold
+# that key, and would break the moment the key moves to an agent.
+#
+# Replace this with your own key before running anything.
+lxc_ssh_public_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIReplaceThisWithYourOwnKey
+  you@example
+
+# The repository root, for roles that read a build artifact from the controller.
+#
+# This lives in group_vars/all rather than a role default for a concrete reason:
+# a role reads files/dist/BUILDINFO with delegate_to: localhost, and a role
+# default from common/lxc does not exist on localhost.
+#
+# `playbook_dir` is the directory holding site.yml, which is playbooks/, so
+# `{{ playbook_dir }}/apps/...` resolves to playbooks/apps/... and does not
+# exist. Hence the explicit variable rather than a relative path.
+lxc_repo_root: "{{ playbook_dir }}/.."

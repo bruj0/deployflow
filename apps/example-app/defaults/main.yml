@@ -1,0 +1,12 @@
+---
+# The whole interface of this application.
+#
+# app_name is the only required value: common/python derives the service
+# account, the directories, the virtual environment and the unit name from it.
+app_name: example-app
+app_port: 8080
+app_service_name: example-app
+
+# Where the rendered configuration is copied on the guest. `lxcctl render`
+# writes it on the controller; common/python copies it here.
+app_config_target: "{{ app_state_dir }}/config.json"

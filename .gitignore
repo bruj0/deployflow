@@ -1,0 +1,44 @@
+# Ansible
+*.retry
+
+# Local secrets. .env holds every secret this deployment needs and is never
+# committed: it is created by `appctl secrets init` with mode 0600, and
+# .env.example is the committed list of which keys are required.
+.env
+.env.*
+!.env.example
+
+# ansible-vault helpers
+.vault_pass
+vault-password-file
+*.vault_pass
+
+# Rejected hosts. host_key_checking=accept-new records first contact and refuses
+# a changed key, which is the behaviour we want. The file is still noise in git.
+.rejected_hosts
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local scratch
+*.log
+.cache/
+
+# The manifest an operator edits. app.example.yaml is the committed template.
+app.yaml
+
+# Build artifacts. The wheel is a multi-megabyte binary that changes on every
+# commit, and BUILDINFO records the sha256 the role checks before installing
+# anything. The lockfile beside them IS committed: it is a pure function of the
+# checkout's pyproject.toml, so a diff of it means something.
+apps/*/files/dist/
+
+# Run logs and scratch output. The logs are kept on purpose, but they stay out
+# of git.
+tmp/
+
+# Upstream installer sources fetched for analysis. Not part of this repository.
+tools/

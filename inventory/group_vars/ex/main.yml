@@ -1,0 +1,7 @@
+# Applications installed on this guest.
+#
+# The list names roles under apps/. Each role declares its dependency on
+# common/python through its meta/main.yml, so adding an application never
+# edits a playbook.
+app_roles:
+  - example-app

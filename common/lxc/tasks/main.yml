@@ -1,0 +1,182 @@
+---
+# Create the guest with `pct`.
+#
+# There is no Ansible module for this. community.proxmox 2.1.0 ships 45 modules
+# and none of them manages a container: `proxmox_kvm` is VM-only, and
+# `proxmox_template` downloads a vztmpl but never runs `pct create`. The
+# `proxmox_pct_remote` connection plugin is not a substitute — it drives tasks in
+# a container that already exists and it needs paramiko, which cannot use the
+# Bitwarden agent socket this account authenticates with.
+#
+# So `pct` runs here as a command delegated to the Proxmox host. The cost is
+# real and worth stating: no module means no diff, no change reporting and no
+# rollback. Creation is guarded by a stat so a second run is a no-op.
+
+- name: Put the operator public key on the Proxmox host
+  # `pct create --ssh-public-keys` takes a FILE PATH, not inline text. Passing
+  # the key directly fails with "can't open 'ssh-ed25519 AAAA...' - No such file
+  # or directory", which reads like a quoting problem rather than a wrong
+  # argument type.
+  ansible.builtin.copy:
+    content: "{{ lxc_ssh_public_key }}\n"
+    dest: "{{ lxc_pubkey_path_on_proxmox }}"
+    mode: "0600"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Check whether the container already exists
+  # `creates` cannot be combined with `argv`, so the guard is an explicit stat.
+  # This also reports better: an existing container is visibly skipped rather
+  # than silently reported as unchanged.
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ lxc_vmid }}.conf"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  register: lxc_existing
+
+- name: Create the container from the stock template
+  # ip=dhcp, with no address and no gateway given.
+  #
+  # This was measured, not assumed. A statically addressed Ubuntu 26.04 guest
+  # comes up with no IPv4 on eth0, an empty /etc/netplan/, and systemd-networkd
+  # exiting 243/CREDENTIALS because it carries
+  # ImportCredential=network.wireguard.* with nothing to match. Handing the
+  # address to Proxmox instead avoids the whole fault: networkd starts clean,
+  # /etc/netplan/ stays empty, and networking works. Verified across a
+  # `pct reboot` — the lease and the route both come back.
+  #
+  # Proxmox also writes /etc/resolv.conf in the guest and registers the
+  # hostname in its own resolver, so the guest needs no DNS configuration at all.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/pct
+      - create
+      - "{{ lxc_vmid }}"
+      - "local:vztmpl/{{ lxc_template }}"
+      - "--hostname={{ lxc_hostname }}"
+      - "--arch=amd64"
+      - "--cores={{ lxc_cores }}"
+      - "--memory={{ lxc_memory }}"
+      - "--swap={{ lxc_swap }}"
+      - "--rootfs={{ lxc_storage }}:{{ lxc_rootfs_gb }}"
+      - "--net0=name={{ lxc_net_name }},bridge={{ lxc_bridge }},ip=dhcp,type=veth"
+      - "--unprivileged={{ lxc_unprivileged }}"
+      - "--features={{ lxc_features }}"
+      - "--onboot={{ lxc_onboot }}"
+      - "--start=0"
+      - "--ssh-public-keys={{ lxc_pubkey_path_on_proxmox }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  # `pct create` is not re-entrant, so the guard has to sit in front of it.
+  when: not lxc_existing.stat.exists
+
+- name: Start the container
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/pct
+      - start
+      - "{{ lxc_vmid }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  register: lxc_start
+  changed_when: "'already running' not in lxc_start.stderr"
+  failed_when: false
+
+- name: Ask Proxmox which address the guest was leased
+  # The address is not in this repository, so it has to be discovered. Read from
+  # inside the container with `hostname -I` rather than by DNS: the guest itself
+  # is the authoritative answer, and it works whether the lease came from DHCP
+  # or a fixed address.
+  #
+  # `--` is required. `pct exec` parses the guest's own flags as its own, so
+  # without it `hostname -I` arrives as "Unknown option: i" and pct exits 400.
+  # Everything after `--` is passed to the command untouched.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/pct
+      - exec
+      - "{{ lxc_vmid }}"
+      - --
+      - hostname
+      - -I
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  register: lxc_guest_addr
+  changed_when: false
+  # `pct exec` fails while the container is still booting. Retry rather than
+  # failing the play on a race that resolves itself in seconds.
+  until: lxc_guest_addr.rc == 0 and lxc_guest_addr.stdout | length > 0
+  retries: 30
+  delay: 5
+
+- name: Record the leased address as the host's ansible_host
+  # Everything downstream — play 2, the SSH connection, the health assertions —
+  # reads ansible_host. Overwriting it here is what lets the inventory omit an
+  # address entirely.
+  #
+  # `hostname -I` can list several addresses. The first one on a single-interface
+  # guest is the vnet address; the rest come from container-internal interfaces
+  # such as lo's IPv6.
+  ansible.builtin.set_fact:
+    ansible_host: "{{ lxc_guest_addr.stdout.split()[0] }}"
+
+- name: Show the address the guest was leased
+  ansible.builtin.debug:
+    msg: "{{ lxc_hostname }} is at {{ ansible_host }} (from DHCP)"
+
+- name: Wait for the guest to accept SSH
+  # Creation returns before sshd is listening. Without this wait the next play
+  # fails with a connection reset that looks like a key problem.
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+    timeout: "{{ lxc_ssh_timeout }}"
+    state: started
+  delegate_to: "{{ groups['proxmox'][0] }}"
+
+- name: Forget any stale host key for this guest's address
+  # Only ever runs when the container was created by this task.
+  #
+  # A DHCP lease means the address an earlier guest held now belongs to a
+  # different container, with a different SSH host key. `accept-new` records an
+  # unseen key but REFUSES a changed one, which is the right default and the
+  # right behaviour for a real machine. Here it would stop the play with:
+  #   REMOTE HOST IDENTIFICATION HAS CHANGED
+  #   Offending ECDSA key in ~/.ssh/known_hosts:51
+  # every time a guest is rebuilt at the same address.
+  #
+  # Scoped to this guest's own address on purpose. A known_hosts entry for any
+  # other host is never touched, so the refusal still protects every machine
+  # that is not a guest of this repository.
+  #
+  # Runs against the controller, on localhost, because the keys that matter are
+  # in the operator's own known_hosts and not on the Proxmox node.
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.ssh/known_hosts"
+    regexp: "^{{ ansible_host | regex_escape }}[ \t]"
+    state: absent
+    backup: false
+  delegate_to: localhost
+  become: false
+  when:
+    - not lxc_existing.stat.exists
+    - ansible_env.HOME is defined
+
+- name: Wait for the guest to accept SSH again with the fresh key
+  # The previous connection was refused on the key, so the wait is repeated to
+  # confirm the new one is accepted before the next play connects.
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+    timeout: "{{ lxc_ssh_timeout }}"
+    state: started
+  delegate_to: localhost
+  become: false
+  when:
+    - not lxc_existing.stat.exists
+    - ansible_env.HOME is defined

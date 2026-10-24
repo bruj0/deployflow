@@ -1,0 +1,173 @@
+---
+# Prepare a guest to run a Python application.
+#
+# This role knows nothing about any particular application. It leaves the guest
+# in a state where a pinned application can be installed reproducibly, and it
+# owns every decision that is the same for all of them.
+
+- name: Refuse to prepare a guest without an application name
+  # app_name has no default on purpose; see common/python/defaults/main.yml for
+  # what happens when it does. This turns "undefined variable" deep inside a
+  # templated path into one clear message naming the role at fault.
+  ansible.builtin.assert:
+    that:
+      - app_name is defined
+      - app_name | length > 0
+      - app_port is defined
+    fail_msg: >-
+      app_name and app_port must be set by the application role before
+      common/python runs. Set them in apps/<name>/defaults/main.yml. The role
+      that was being applied here is one of: {{ role_path | default('unknown') }}.
+    quiet: true
+    success_msg: "preparing {{ app_name }}"
+
+- name: Update the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  changed_when: false
+
+- name: Install the toolchain an application venv needs
+  # The venv and dev package names carry the interpreter version on Ubuntu
+  # 26.04: `python3-venv` and `python3-dev` do not exist there, only
+  # `python3.14-venv` and `python3.14-dev`. Verified on a live container —
+  # `apt-cache policy python3-venv` returns nothing while
+  # `python3.14-venv` is the real candidate.
+  #
+  # Without the venv package, `python3 -m venv` creates the directory and then
+  # fails, because the stock interpreter has no ensurepip. That reads as a
+  # broken Python rather than a missing package.
+  #
+  # gcc and the -dev headers build C-extension wheels. linux-libc-dev is needed
+  # by evdev, which arrives via pynput and ships as an sdist for every
+  # interpreter, so it is compiled on every fresh install.
+  #
+  # python3-packaging is not a nicety: Ansible's pip module imports `packaging`
+  # on the target interpreter, and fails with "No module named 'packaging'"
+  # before it can report anything useful.
+  ansible.builtin.apt:
+    name:
+      - "{{ app_python }}"
+      - "{{ app_python_tag }}-venv"
+      - "{{ app_python_tag }}-dev"
+      - gcc
+      - libc6-dev
+      - linux-libc-dev
+      - ca-certificates
+      - python3-packaging
+      - iproute2
+      - sqlite3
+    state: present
+
+- name: Create the application service account
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    home: "{{ app_home }}"
+    shell: /bin/bash
+    system: true
+    create_home: true
+
+- name: Create the application root
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0750"
+
+- name: Create the mutable state directory
+  # Separate from app_dir on purpose, and never removed by any role. A
+  # reinstall replaces the venv and leaves this untouched.
+  ansible.builtin.file:
+    path: "{{ app_state_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0700"
+
+- name: Create the venv only when it is absent
+  # `creates` is the whole idempotency story for the venv. Rebuilding it would
+  # force a full reinstall of every pinned wheel on every run.
+  ansible.builtin.command:
+    cmd: "{{ app_python }} -m venv {{ app_venv }}"
+    creates: "{{ app_venv }}/bin/python"
+
+- name: Hand the venv directory to the service account
+  # The directory only, deliberately. A recursive chown here is undone by every
+  # application that installs into the venv as root afterwards, so the next play
+  # finds 1600-odd root-owned files and chowns them again, forever. Measured:
+  # `changed` on every run, with example-app at 1622 such files.
+  #
+  # The recursive chown belongs after the application roles have run, and it is
+  # a post_task in playbooks/site.yml for that reason. Both units run as
+  # app_user, so the service account does need read access to the installed
+  # tree; it just has to be given it once, at the end, not before every install.
+  ansible.builtin.file:
+    path: "{{ app_venv }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+
+- name: Place the configuration appctl rendered for this application
+  # The framework's half of the generic config path, and it knows nothing about
+  # the application: it moves a file the controller rendered to a path the
+  # application named.
+  #
+  # `appctl_rendered_configs[app_name]` is set by appctl from app.yaml's
+  # `config.files`. It is absent for an application that declares no config, so
+  # this task is skipped for those rather than failing.
+  #
+  # The rendered file is expected to be partial. The application merges its own
+  # defaults into whatever it is given, so nothing here has to know the schema —
+  # which is the whole reason an application needs no code of its own.
+  ansible.builtin.copy:
+    src: "{{ appctl_rendered_configs[app_name] }}"
+    dest: "{{ app_config_target }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    # Readable only by the service account. It contains ${NAME} references, not
+    # secrets, but a config file is the right place to be restrictive anyway.
+    mode: "{{ app_config_mode | default('0640') }}"
+  register: app_rendered_config
+  when:
+    - app_config_target is defined
+    - appctl_rendered_configs is defined
+    - app_name in appctl_rendered_configs
+
+- name: Fail when a rendered config is missing on the controller
+  # Silently skipping would leave the guest with whatever config it had, which is
+  # the worst outcome: the play goes green and the application runs with stale
+  # settings.
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} declares a config block in app.yaml but nothing was
+      rendered for it. Run `appctl render` to see why — usually a
+      {{ name }} placeholder with no matching entry under config.vars.
+  when:
+    - app_config_target is defined
+    - appctl_rendered_configs | default({}) | length == 0
+      or app_name not in appctl_rendered_configs | default([])
+
+- name: Read the interpreter the venv was built with
+  # Guards against a venv left behind by an older template. Ubuntu 26.04 gives
+  # 3.14 and Debian 13 gave 3.13; a venv carries the version it was created
+  # with, so a stale one silently installs wheels for the wrong interpreter and
+  # fails at the first compiled import. Failing here names the cause.
+  ansible.builtin.command:
+    argv:
+      - "{{ app_venv }}/bin/python"
+      - -c
+      - "import sys; print('%s.%s' % sys.version_info[:2])"
+  changed_when: false
+  register: app_venv_python
+  failed_when: false
+
+- name: Fail when the venv was built for a different Python
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_venv }} was built for Python {{ app_venv_python.stdout | trim }},
+      but this guest runs {{ app_python_version }}. The existing venv will install
+      wheels for the interpreter it was built with, not the one this guest now
+      runs, and the application will fail at its first compiled import. Remove
+      {{ app_venv }} and re-run.
+  when: app_venv_python.rc == 0 and (app_venv_python.stdout | trim) != app_python_version

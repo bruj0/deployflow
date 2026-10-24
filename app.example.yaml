@@ -1,0 +1,45 @@
+# Configuration for appctl. Copy this to app.yaml and edit it.
+#
+# Unknown keys are rejected rather than ignored, so a typo fails loudly here
+# instead of silently changing nothing.
+version: 1
+
+defaults:
+  # The interpreter the guest's venv is built from. Must match the Python the
+  # lockfile was compiled for, or pip installs wheels for the wrong ABI.
+  python_version: "3.14"
+  # Stock Proxmox template. Pinned by exact filename: bumping it changes the
+  # apt candidate set in one step.
+  template: ubuntu-26.04-standard_26.04-1_amd64.tar.zst
+  storage: local
+  rootfs_gb: 16
+  cores: 2
+  memory_mb: 2048
+  swap_mb: 512
+  features: nesting=1,fuse=1,keyctl=1
+  onboot: 0
+
+applications:
+
+  # The sample application from the quickstart.
+  #
+  # It is published on PyPI, so nothing is built: the wheel already exists.
+  example-app:
+    description: the quickstart sample
+    target:
+      kind: proxmox_lxc        # the only implemented target
+      options:
+        hostname: example-app
+        vmid: 121               # optional; omit to let the role skip create
+        bind_host: 127.0.0.1    # 0.0.0.0 exposes the service to the network
+    source:
+      kind: package
+      package: "example-app==1.0.0"
+    config:
+      target: "{{ app_state_dir }}/config.json"
+      files:
+        - apps/example-app/config.yml
+      mode: "0640"
+      vars:
+        app_port: 8080
+    secrets: []                 # names of keys required in .env

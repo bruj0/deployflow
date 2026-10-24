@@ -1,0 +1,11 @@
+---
+# Galaxy collections used by this repository.
+#
+# Deliberately short. There is no Proxmox collection here on purpose:
+# community.proxmox ships no LXC module, so the lxc role drives `pct` directly
+# over SSH. The only collection the roles actually need is community.general,
+# and even that is currently unused — it is listed so a future role does not
+# reach for it undeclared.
+collections:
+  - name: community.general
+    version: ">=13.0.0"

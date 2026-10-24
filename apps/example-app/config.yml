@@ -1,0 +1,11 @@
+# The configuration of this application, rendered on the controller.
+#
+# Only what differs from the application's own defaults belongs here. The
+# application merges its defaults into whatever it is given.
+#
+# Two substitution syntaxes, kept apart deliberately:
+#   {{ name }}  substituted by appctl on the controller, from config.vars
+#   ${NAME}    left exactly as written, resolved by the application at runtime
+#              from its EnvironmentFile
+server:
+  port: "{{ app_port }}"

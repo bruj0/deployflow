@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "appctl"
+version = "0.1.0"
+description = "Deploy applications to delivery targets with reproducible artifacts and real verification"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "bruj0" }]
+keywords = ["deployment", "ansible", "proxmox", "lxc", "delivery"]
+
+# Deliberately tiny. PyYAML parses the config and the Ansible inventory;
+# python-dotenv reads the .env that holds the secrets. Everything else is the
+# standard library, so the tool has no opinion about how Ansible is invoked and
+# cannot break a deployment by being upgraded underneath it.
+dependencies = [
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+appctl = "appctl.cli:main"
+
+[project.urls]
+Repository = "https://github.com/bruj0/deployflow"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/appctl"]

@@ -1,0 +1,66 @@
+---
+# Provision every declared guest.
+#
+# Play 1 never connects to a guest. Every task in the lxc role delegates to the
+# Proxmox node, which is what lets it run before the guests exist. `gather_facts`
+# is off for the same reason.
+#
+# Adding a guest is one block in inventory/hosts.yml. Adding an application is
+# one directory under apps/ and one word in that guest's `app_roles`. Nothing in
+# this file changes for either.
+
+- name: Create guests
+  hosts: lxc
+  gather_facts: false
+  become: true
+  become_user: root
+
+  roles:
+    - role: lxc
+      tags: [lxc]
+
+- name: Configure guests
+  hosts: lxc
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Apply the application roles this guest declares
+      # The framework's extension point. A host lists what it runs:
+      #   app_roles: [example-app]
+      # and each entry is a role under apps/ that pulls in common/python through
+      # its meta/main.yml.
+      #
+      # `apply` is required because a tag on the loop itself cannot be
+      # templated from `item`. Without it `--tags example-app` selects nothing.
+      ansible.builtin.include_role:
+        name: "{{ item }}"
+        apply:
+          tags:
+            - "{{ item }}"
+      loop: "{{ app_roles | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+      tags:
+        - always
+
+  post_tasks:
+    - name: Hand the installed venv to the service account
+      # Runs after every application role, which is the only point at which the
+      # tree is complete.
+      #
+      # An application installs into the venv as root, so its files are root
+      # owned, and its unit runs as app_user. Doing this recursion inside
+      # common/python meant the next play found the same root-owned files and
+      # chowned them again: measured `changed` on every run with example-app, at
+      # 1622 files. Here it is a no-op once the tree already belongs to the
+      # service account.
+      ansible.builtin.file:
+        path: "{{ app_venv }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        recurse: true
+      when: app_venv is defined
+      tags:
+        - always
