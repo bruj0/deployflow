@@ -48,7 +48,7 @@ transfers when the next destination arrives.
 - **Pluggable targets** — a destination interface; `proxmox_lxc` ships, `vm` and `docker_vm` are named — [`src/appctl/targets/base.py`](src/appctl/targets/base.py)
 - **Streaming logs** — commands, log, recap and errors kept per run under `tmp/runs/` — [`src/appctl/install.py`](src/appctl/install.py)
 - **Shared framework** — the toolchain, service account and venv every app role depends on — [`common/python/`](common/python/)
-- **Two working applications** — a service built from a checkout, and the build host that builds it — [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/)
+- **Three working applications** — a service installed from a published release, a service built from a checkout, and the build host that builds it — [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/)
 
 ## The problem it solves
 
@@ -395,13 +395,32 @@ The worked example is [`apps/builder/`](apps/builder/).
 
 ## Ready-to-use applications
 
-The repository ships two applications that work, not just two that illustrate.
+The repository ships three applications that work, not just two that illustrate.
+
+### `omniroute-release` — an application installed from a published release
+
+[OmniRoute](https://github.com/cheaper-inference/OmniRoute) is a Next.js
+server with a native SQLite binding, served by one systemd unit on one guest.
+
+This one is installed from a **published npm release**: the guest's own
+`npm install` fetches a pinned version, and nothing OmniRoute-related runs on
+the controller. It is the shape an application takes when its code already
+ships as an artifact.
+
+```bash
+appctl install omniroute-release
+appctl install omniroute-release        # must report changed=0
+```
+
+See [`apps/omniroute-release/`](apps/omniroute-release/) for what the role
+asserts and why the credentials file is group-readable.
 
 ### `omniroute` — an application built from a source checkout
 
-[OmniRoute](https://github.com/cheaper-inference/OmniRoute) is a Next.js
-server with a native SQLite binding, built from the upstream `main` branch and
-served by one systemd unit on one guest.
+The same application, built from the upstream `main` branch instead of
+installed from npm. It is the shape an application takes when there is no
+published artifact — a fork, a development branch — and the build has to
+happen on a guest of its own.
 
 ### `builder` — the build host
 
@@ -449,7 +468,7 @@ The same list as a map, for when you want to go straight to the file.
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
 | **Two working applications** | Two shipped applications cover the two hard shapes: a service built from a source checkout, and the build host that builds it. | [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/) |
-
+| **Three working applications** | A third covers the third shape: an application installed from a published release, with no build at all. | [`apps/omniroute-release/`](apps/omniroute-release/) |
 ## Requirements
 
 ### To run a delivery on the current target

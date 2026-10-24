@@ -43,3 +43,35 @@ applications:
       vars:
         app_port: 8080
     secrets: []                 # names of keys required in .env
+
+  # An application installed from a published release — an npm package, a
+  # tarball, anything the guest itself can fetch.
+  #
+  # `kind: package` means "nothing is built here": the artifact already exists,
+  # and the application's own role does the installing on the guest. The
+  # `package` value is the version pin, and it is the string the role reads.
+  #
+  # The key and the role directory have to match: `appctl install` selects the
+  # role with `--tags lxc,<key>`, and a key that is not a role name selects
+  # nothing. The key does NOT have to match the role's `app_name` — that is
+  # what the guest sees, and it is what derives the service account, the
+  # install root and the state directory. `apps/omniroute-release/` is a
+  # worked example of the two differing on purpose.
+  #
+  # omniroute-release:
+  #   description: OmniRoute from a published npm release
+  #   target:
+  #     kind: proxmox_lxc
+  #     options:
+  #       hostname: omniroute
+  #       vmid: 120
+  #       bind_host: 0.0.0.0       # published on the LAN; secrets are required
+  #   source:
+  #     kind: package
+  #     package: "omniroute-release@3.8.51"
+  #   secrets:
+  #     - omniroute_jwt_secret
+  #     - omniroute_api_key_secret
+  #     - omniroute_storage_encryption_key
+  #     - omniroute_initial_password
+  #     - omniroute_ws_bridge_secret

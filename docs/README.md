@@ -12,6 +12,7 @@
 | [diagrams/deployflow-workflow.html](diagrams/deployflow-workflow.html) | the workflow, lane by lane: who does what, and where the proof happens |
 | [diagrams/deployflow-anatomy.html](diagrams/deployflow-anatomy.html) | what an application looks like in the repository, and which file holds each part |
 | [diagrams/deployflow-current-state.html](diagrams/deployflow-current-state.html) | the current landscape: what is built, what is named but not built, and where the proof lives |
+| [../apps/omniroute-release/](../apps/omniroute-release/) | a working application installed from a published npm release |
 | [../apps/omniroute/](../apps/omniroute/) | a working application built from a source checkout |
 | [../apps/builder/](../apps/builder/) | a working build host — the `toolchain` application |
 
