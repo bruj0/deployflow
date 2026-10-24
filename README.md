@@ -53,15 +53,125 @@ run:   installs the pinned artifact, then checks the service actually answers
 
 Four parts:
 
-1. **The manifest** — what an application is: where its code comes from, what
-   configuration it takes, which secrets it needs, and which destination runs
-   it.
-2. **The application role** — how it is installed, and the checks that prove it
-   works. One directory per application.
-3. **The target** — where it runs. The first target is a container on a Proxmox
-   host; more are planned.
-4. **The checks** — the part most tools skip. A deployment is not done when the
-   command succeeds. It is done when the service answers.
+### 1. The manifest
+
+What an application is: where its code comes from, what configuration it takes,
+which secrets it needs, and which destination runs it. One file, `app.yaml`:
+
+```yaml
+applications:
+  myapp:
+    description: what it is, in one line
+    target:
+      kind: proxmox_lxc        # the destination that runs it
+      options:
+        hostname: myapp
+        vmid: 121
+    source:
+      kind: repo               # a checkout, built here
+      repo: /path/to/myapp
+      ref: HEAD
+    build:
+      python_version: "3.14"
+      verify_lock: true        # refuse a lock entry with no hash
+    config:
+      target: "{{ app_state_dir }}/config.json"
+      files:
+        - apps/myapp/config.yml
+      vars:
+        app_port: 9000
+    secrets:
+      - myapp_api_key
+```
+
+### 2. The application role
+
+How it is installed, in one directory per application. The agent writes this;
+it follows the contract in `AGENTS.md`:
+
+```yaml
+# apps/myapp/tasks/main.yml
+- name: Install the application
+  ansible.builtin.pip:
+    requirements: "{{ role_path }}/files/requirements.lock"
+    virtualenv: "{{ app_venv }}"
+    extra_args: "--require-hashes"
+
+- name: Check that the application answers a request
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/"
+  register: app_endpoint
+  failed_when: false
+
+- name: Fail when the application does not answer
+  ansible.builtin.fail:
+    msg: "The service listens but does not answer"
+  when: app_endpoint.status is undefined
+```
+
+### 3. The target
+
+Where it runs. The manifest names one, and the target owns everything about
+that destination:
+
+```python
+# src/appctl/targets/proxmox_lxc.py
+@register
+class ProxmoxLxcTarget(Target):
+    kind = "proxmox_lxc"
+    summary = "an application installed into a Proxmox LXC guest with Ansible"
+
+    def validate(self, context):
+        """Reject a bad setup before anything is built or started."""
+        if not context.app().target.options.get("hostname"):
+            raise TargetError("target is missing: hostname")
+
+    def deploy(self, context, artifacts, rendered):
+        """Install it, run its checks, and report what was observed."""
+        ...
+```
+
+Two more destinations are named so a manifest can ask for them and get a clear
+answer, but they are not built yet:
+
+```console
+$ appctl targets
+implemented targets:
+  proxmox_lxc: an application installed into a Proxmox LXC guest with Ansible
+planned, not implemented:
+  docker_vm: provision a virtual machine and run the application in Docker there
+  vm: provision a virtual machine and install the application into it
+```
+
+### 4. The checks
+
+The part most tools skip. A deployment is not done when the command succeeds.
+It is done when the service answers. Each application carries its own checks,
+because only the application knows what "working" means for it:
+
+```yaml
+# apps/myapp/tasks/main.yml
+- name: Check that the package imports
+  ansible.builtin.command:
+    argv: ["{{ app_venv }}/bin/python", "-c", "import myapp"]
+  changed_when: false
+
+- name: Check that the service is listening on the requested port
+  ansible.builtin.command:
+    argv: [ss, -ltn]
+  changed_when: false
+  register: app_listeners
+
+- name: Fail when the service is not listening on the requested port
+  ansible.builtin.fail:
+    msg: "The service is running but not listening on port {{ app_port }}"
+  when: app_port | string not in app_listeners.stdout
+```
+
+The port check matters more than it looks. `systemctl is-active` says the
+process is up; it does not say the process bound the port you asked for. A
+service that came up on 8000 instead of 9000 passes an is-active check and
+fails every request.
 
 ## What you get when the agent does it
 
