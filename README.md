@@ -4,194 +4,174 @@
 
 # DeployFlow
 
-Deploy applications to Proxmox LXC containers with Ansible, then verify the
-service works — not just that the deployment command succeeded.
+**Point your coding agent at this repository and tell it to install an
+application. It writes the deployment, you review it, and the service is
+verified before anyone calls it done.**
 
-The tool is `appctl`. It builds a pinned artifact, installs it into a guest,
-and then runs checks that reach the application the way a user does.
+DeployFlow is a workflow for delivering applications to servers. It defines
+what an application needs, how it should be installed, and how we know it
+actually works. The agent does the writing. The workflow does the proving.
 
-```bash
-appctl targets                     # what can be delivered to, and what cannot yet
-appctl list                        # what is configured
-appctl build example-app           # produce the artifacts the role installs
-appctl install example-app         # install it and check that it answers
-appctl secrets check               # are the required secrets set?
-```
+The current implementation delivers to a container on a Proxmox host with
+Ansible. That is the first destination, not the definition of the project.
+The workflow itself — manifest, roles, checks, verification — is what
+transfers when the next destination arrives.
 
-## What it does
+## The problem it solves
 
-A stock Ubuntu template goes in, Ansible configures it, and the application
-runs under systemd with a sha256-pinned dependency tree. No container image is
-built, so there is no tarball to store and no builder in the loop.
+An agent can write a deployment in a few minutes. What it cannot do, on its
+own, is tell you the deployment is *correct*:
+
+- The playbook finished green. That proves Ansible ran, not that the service
+  works. A database file exists on a server that was never bootstrapped, and a
+  process binds the wrong port — both produce a green play.
+- The same steps run on every machine, and the differences between machines
+  are where deployments break.
+- The knowledge of "how this application should be installed" lives in
+  someone's head, and leaves when they do.
+- The next person, or the next agent, starts from nothing.
+
+DeployFlow turns that into a repository an agent can work inside:
 
 | | |
 |---|---|
-| Install | a pinned application into a Proxmox LXC guest, with Ansible |
-| Reproducibility | the lockfile carries a hash for every dependency; the build refuses one that does not |
-| Verification | application-level checks after the install, not only a green playbook |
-| Secrets | in a gitignored `.env`, passed to Ansible in a mode-0600 file, never in `argv` |
+| **The application declares itself** | A manifest says where it comes from, what it needs, and what "working" means for it. |
+| **The agent writes the delivery** | A role per application, generated against a documented contract, reviewable before it runs. |
+| **The workflow proves it works** | Each application carries its own checks, and they run after every install. |
+| **The steps are repeatable** | A second install on the same inputs changes nothing, and says so. |
+| **The knowledge is in the repo** | The next agent reads it instead of guessing. |
 
-## Why the checks matter
+## How it works
 
-Ansible reporting success proves that Ansible ran. It does not prove the
-application is usable. Each of these passed review and only failed in use:
-
-| The check | What it catches |
-|---|---|
-| The package imports | A dependency tree that did not install |
-| The unit is active | A service systemd accepted and then dropped |
-| The port is listening | A process that bound somewhere other than the requested port |
-| The endpoint answers | A service that listens and returns nothing |
-
-Every application role carries its own checks, because only the application
-knows what "working" means for it. The sample role in `apps/example-app/`
-shows the pattern.
-
-## Targets
-
-A **target** says where and how an application runs. The manifest names one:
-
-```yaml
-applications:
-  example-app:
-    target:
-      kind: proxmox_lxc
-      options:
-        hostname: example-app
-        vmid: 121
+```
+you:  "install a new application"
+agent: reads the contract, writes the manifest and the role,
+       runs the checks, reports what it changed and what it verified
+you:   reviews the diff, approves the run
+run:   installs the pinned artifact, then checks the service actually answers
 ```
 
-`proxmox_lxc` is the only implemented target. Two more are planned:
+Four parts:
 
-| Target | What it would do | Status |
+1. **The manifest** — what an application is: where its code comes from, what
+   configuration it takes, which secrets it needs, and which destination runs
+   it.
+2. **The application role** — how it is installed, and the checks that prove it
+   works. One directory per application.
+3. **The target** — where it runs. The first target is a container on a Proxmox
+   host; more are planned.
+4. **The checks** — the part most tools skip. A deployment is not done when the
+   command succeeds. It is done when the service answers.
+
+## What you get when the agent does it
+
+A reviewer reading the diff sees the intent, not a wall of generated YAML:
+
+- the manifest block for the new application,
+- one role directory with the install steps and the checks,
+- a pinned dependency lockfile, so the tree that installs is the tree that was
+  reviewed,
+- a recorded `state:` block saying what was built and when it was last
+  installed.
+
+The agent's own reasoning stays in its session. What lands in the repository is
+declarative and reviewable.
+
+## Features
+
+| Feature | What it gives you | Where |
 |---|---|---|
-| `vm` | Provision a virtual machine and install the application into it | planned |
-| `docker_vm` | Provision a virtual machine and run the application in Docker there | planned |
+| **Declarative application manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | `app.yaml` |
+| **Agent-written application roles** | A scaffold, a contract and a checklist, so an agent can write a new role that matches the others. | `.agents/skills/add-app/` |
+| **Reproducible artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one. | `appctl build` |
+| **Application-level verification** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. | `apps/<app>/tasks/` |
+| **Idempotency check** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | `appctl install` |
+| **Secrets out of the repository** | Secrets live in a gitignored file, reach the run in a mode-0600 file, and never appear in `argv` or in the logs. | `appctl secrets` |
+| **Pluggable destinations** | A target interface separates "what the application is" from "where it runs". One target ships today. | `src/appctl/targets/` |
+| **Fails before side effects** | An unsupported destination or a missing secret stops the run before anything is built, downloaded or started. | `appctl install` |
+| **Run evidence** | Every run keeps its commands, log, recap and errors, so a failure is a file to read rather than a scrollback to search. | `tmp/runs/` |
 
-A manifest that names an unimplemented target fails **before** it builds,
-downloads or starts anything:
+## Requirements
 
-```
-error: target kind 'vm' is planned but not implemented
+### To use the workflow with an agent
 
-provision a virtual machine and install the application into it.
-implemented targets: proxmox_lxc
-```
+| Requirement | Why |
+|---|---|
+| A coding agent that can read a repository and write files | The agent writes the manifest and the role. |
+| An agent that follows the repository's instructions | `AGENTS.md` and `.agents/skills/add-app/` hold the contract and the checklist. |
+| A git repository per deployment | The manifest and the roles are the source of truth and the review surface. |
+| A place to keep secrets | A `.env` file, gitignored. The agent never needs to read a secret value. |
 
-That failure is deliberate. An application that asks for a virtual machine must
-not be silently installed into a container instead.
+### To run a delivery on the current target
 
-## Quickstart
+| Requirement | Detail |
+|---|---|
+| A Proxmox VE host | You need `pct` and SSH access to it. |
+| A cached Linux template on that host | The guest is created from it. |
+| SSH access from the controller to the host | The framework drives `pct` over SSH. |
+| `ansible-playbook` on the controller | The play does the configuring. |
+| Python 3.12 or later on the controller | That is the CLI's own requirement. |
+| A real application to install | The sample role is a reference. Point the agent at your application. |
 
-You need a Proxmox VE host, a cached Linux template on it, and SSH access to
-the host.
+The first guest also needs a bridge and storage on the Proxmox host, and a
+network path from the controller to the guest. The role discovers the guest's
+address over DHCP, so you do not configure one.
+
+### To add a new destination
+
+| Requirement | Detail |
+|---|---|
+| A target implementation | One file under `src/appctl/targets/`. See [docs/targets.md](docs/targets.md). |
+| The target's own prerequisites | It validates them before the run starts. |
+| Checks that fit the destination | The application's own checks still apply; the target adds its own. |
+| An acceptance test on a real host | The same application, installed twice, with one deliberate failure caught by a check. |
+
+## Try it
 
 ```bash
 git clone https://github.com/bruj0/deployflow.git
 cd deployflow
-
-uv tool install --editable .
-
-cp app.example.yaml app.yaml        # then edit it
-cp inventory/hosts.yml inventory/hosts.yml   # already a copy; edit the host
 ```
 
-Edit three things:
+Then tell your agent:
 
-1. `app.yaml` — the application, its port and its target options.
-2. `inventory/hosts.yml` — your Proxmox host and the guest.
-3. `inventory/group_vars/all/main.yml` — your SSH public key.
+> Read AGENTS.md and .agents/skills/add-app/SKILL.md, then add support for
+> <your application>. Use the add-app skill. Show me the diff before you run
+> anything.
 
-Then:
+The skill covers the manifest, the role, the pinned lockfile, the checks, and
+the traps that make a run reinstall itself forever.
+
+To look around first:
 
 ```bash
-appctl secrets init                  # create .env from the required keys
-appctl secrets set NAME 'value'      # add each secret
-appctl secrets check                 # confirm they are all set
-appctl render                        # see the configuration before it lands
-appctl install example-app
-```
-
-Run the install a second time. It should report `changed=0`: the same inputs
-produce the same guest.
-
-## What an application role owes the framework
-
-An application is one directory under `apps/`. Nothing in `common/` or
-`playbooks/` changes when you add one.
-
-```yaml
-# apps/myapp/defaults/main.yml
-app_name: myapp        # the only required value
-app_port: 9000
-```
-
-```yaml
-# apps/myapp/meta/main.yml
-dependencies:
-  - role: python       # declares the dependency, so no playbook changes
-```
-
-`app_name` derives the service account, the directories, the virtual
-environment and the unit name. `app_port` has no derivation and you must set it.
-
-## Layout
-
-```
-app.yaml                 the one configuration file: applications and targets
-common/                  framework. Names no application, anywhere.
-  lxc/                   pct create from a stock template, DHCP, address discovery
-  python/                toolchain, service account, venv — the contract
-apps/                    one directory per application
-  example-app/           the sample used by the quickstart
-src/appctl/              the appctl package
-  targets/               the delivery-target interface and its implementations
-    proxmox_lxc.py       the only implemented target
-docs/                    architecture, configuration, rendering, secrets, build
-playbooks/site.yml
-inventory/               guests; the only file you edit to add one
-```
-
-`roles_path = common:apps`. A role's `meta` dependency declares what it needs,
-so adding an application never edits a playbook.
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `appctl list` | Every application, its target, its destination and its last install |
-| `appctl targets` | The implemented targets, and the planned ones that are not built |
-| `appctl init` | Write a starting `app.yaml` |
-| `appctl build <app>` | Produce the artifacts the role installs |
-| `appctl build --check` | Verify the committed artifacts and build nothing |
-| `appctl render` | Render the application configuration, without deploying |
-| `appctl install <app>` | Install it and run the checks |
-| `appctl secrets init\|set\|list\|check` | Manage the `.env` |
-
-Anything after a bare `--` goes straight to `ansible-playbook`:
-
-```bash
-appctl install example-app -- --check --diff
+appctl targets      # which destinations exist, and which are not built yet
+appctl list         # what this repository has configured
 ```
 
 ## Documentation
 
 | | |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | How the parts fit together, and where the target boundary is |
-| [docs/configuration.md](docs/configuration.md) | Every key in `app.yaml` |
+| [docs/overview.md](docs/overview.md) | The current implementation: the `appctl` command, the Proxmox LXC target, the manifest and the roles |
+| [docs/targets.md](docs/targets.md) | The target interface, and how to add a destination |
+| [docs/architecture.md](docs/architecture.md) | How the parts fit together, and the rules that must hold |
+| [docs/configuration.md](docs/configuration.md) | Every key in the manifest |
 | [docs/build-pipeline.md](docs/build-pipeline.md) | How an artifact is produced and pinned |
-| [docs/rendering.md](docs/rendering.md) | How YAML becomes the configuration the guest reads |
-| [docs/secrets.md](docs/secrets.md) | How a secret reaches the guest |
-| [docs/targets.md](docs/targets.md) | The target interface, and how to add a target |
+| [docs/rendering.md](docs/rendering.md) | How YAML becomes the configuration the server reads |
+| [docs/secrets.md](docs/secrets.md) | How a secret reaches the server |
+| [AGENTS.md](AGENTS.md) | The rules for changing this repository |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and what a change must preserve |
 
 ## Status
 
-Early. `proxmox_lxc` is implemented and tested against one Proxmox VE node.
-The `vm` and `docker_vm` targets are interfaces only. See
-[docs/targets.md](docs/targets.md) for what each would have to prove before it
-could be called supported.
+Early. The Proxmox LXC destination is implemented and tested against one host.
+Two more destinations are interfaces only: they are named, so a manifest can
+ask for them and get a clear answer, and they fail before anything is built.
+See [docs/targets.md](docs/targets.md) for what each would have to prove before
+it could be called supported.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+</content>
