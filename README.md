@@ -227,6 +227,21 @@ The first guest also needs a bridge and storage on the Proxmox host, and a
 network path from the controller to the guest. The role discovers the guest's
 address over DHCP, so you do not configure one.
 
+SSH access means whatever your SSH setup already provides. The framework
+does not read `~/.ssh/config` by name, and it does not need one. If you keep
+your hosts in an SSH config, name the host in the inventory and the alias
+resolves on its own:
+
+```yaml
+all:
+  children:
+    proxmox:
+      hosts:
+        pve:
+          ansible_host: pve.example.net   # a Host block in ~/.ssh/config
+          ansible_user: root
+```
+
 ### To add a new destination
 
 | Requirement | Detail |
