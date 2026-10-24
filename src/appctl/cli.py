@@ -23,7 +23,6 @@ from pathlib import Path
 
 from . import build as build_mod
 from . import config as config_mod
-from . import install as install_mod
 from . import render as render_mod
 from . import secrets as secrets_mod
 from . import state as state_mod

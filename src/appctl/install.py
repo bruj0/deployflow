@@ -30,8 +30,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import render as render_mod
-from . import secrets as secrets_mod
 from .config import Config
 from .errors import InstallError
 

@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 from .config import Config
 from .errors import AppctlError
