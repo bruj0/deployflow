@@ -9,6 +9,9 @@
 | [rendering.md](rendering.md) | YAML → config on the guest |
 | [secrets.md](secrets.md) | `.env`, and the three ways a secret leaks |
 | [build-pipeline.md](build-pipeline.md) | the two build paths: a wheel from a checkout, and a tree from a build host |
+| [diagrams/deployflow-workflow.html](diagrams/deployflow-workflow.html) | the workflow, lane by lane: who does what, and where the proof happens |
+| [diagrams/deployflow-anatomy.html](diagrams/deployflow-anatomy.html) | what an application looks like in the repository, and which file holds each part |
+| [diagrams/deployflow-current-state.html](diagrams/deployflow-current-state.html) | the current landscape: what is built, what is named but not built, and where the proof lives |
 | [../apps/omniroute/](../apps/omniroute/) | a working application built from a source checkout |
 | [../apps/builder/](../apps/builder/) | a working build host — the `toolchain` application |
 

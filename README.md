@@ -2,32 +2,31 @@
   <img src="assets/logo.png" alt="DeployFlow" width="420">
 </p>
 
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#the-problem-it-solves">The problem it solves</a> ·
+  <a href="#try-it">Try it</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#three-kinds-of-application">Three kinds of application</a> ·
+  <a href="#ready-to-use-applications">Ready-to-use applications</a> ·
+  <a href="#where-each-feature-lives">Where each feature lives</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
+
 # DeployFlow
 
 **Point your coding agent at this repository and tell it to install an
 application. It writes the deployment, you review it, and the service is
 verified before anyone calls it done.**
 
-```mermaid
-flowchart TD
-    ASK["You ask the agent for an application"]
-    WRITE["The agent writes the manifest and the role"]
-    REVIEW["You review the diff"]
-    INSTALL["appctl install — the pinned artifact goes in"]
-    CHECK["The role's own checks run"]
-    OK["The service answers — done"]
-    REFUSE["The play refuses and says what to fix"]
+<p align="center">
+  <img src="docs/diagrams/deployflow-current-state.png" alt="Current-state diagram in three zones: authoring, where the agent writes app.yaml and a role that carries its own checks; delivery, where appctl builds pinned artifacts and installs them; and the guests, where a build host and the omniroute service run. Two further destinations are named in the registry but not built." width="100%">
+</p>
 
-    ASK --> WRITE --> REVIEW --> INSTALL --> CHECK
-    CHECK -->|passes| OK
-    CHECK -->|fails| REFUSE
-    REFUSE --> WRITE
-
-    classDef fail fill:#fde8e8,stroke:#c0392b
-    classDef done fill:#eaf7ec,stroke:#2e7d32
-    class REFUSE fail
-    class OK done
-```
+<p align="center"><sub>
+The current landscape. <a href="docs/diagrams/deployflow-current-state.html">Open the diagram</a>.
+</sub></p>
 
 DeployFlow is a workflow for delivering applications to servers. It defines
 what an application needs, how it should be installed, and how we know it
@@ -37,6 +36,19 @@ The current implementation delivers to a container on a Proxmox host with
 Ansible. That is the first destination, not the definition of the project.
 The workflow itself — manifest, roles, checks, verification — is what
 transfers when the next destination arrives.
+
+## Features
+- **Deterministic flow** — `appctl` drives the same order every run: validate, check secrets, render, then play. Every command exits non-zero on failure — [`src/appctl/cli.py`](src/appctl/cli.py)
+- **Agentic skill** — the contract, scaffold and checklist an agent follows to write a new role — [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md)
+- **App manifest** — one file per application: source, config, secrets, destination. Unknown keys error out — [`app.example.yaml`](app.example.yaml)
+- **Pinned artifacts** — every dependency locked by hash; the build refuses a lockfile without one — [`src/appctl/build.py`](src/appctl/build.py)
+- **Application-level checks** — each app asserts its own thing: the listener is on the right address, the endpoint answers, the API refuses an unauthenticated caller — [`apps/omniroute/tasks/main.yml`](apps/omniroute/tasks/main.yml)
+- **Idempotency** — a second install reports `changed=0`, proving the run is repeatable — [`src/appctl/install.py`](src/appctl/install.py)
+- **Secrets management** — `appctl secrets` keeps them in a gitignored `.env`; the run reads them from a mode-0600 file, so they never reach `argv` or a log — [`src/appctl/secrets.py`](src/appctl/secrets.py)
+- **Pluggable targets** — a destination interface; `proxmox_lxc` ships, `vm` and `docker_vm` are named — [`src/appctl/targets/base.py`](src/appctl/targets/base.py)
+- **Streaming logs** — commands, log, recap and errors kept per run under `tmp/runs/` — [`src/appctl/install.py`](src/appctl/install.py)
+- **Shared framework** — the toolchain, service account and venv every app role depends on — [`common/python/`](common/python/)
+- **Two working applications** — a service built from a checkout, and the build host that builds it — [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/)
 
 ## The problem it solves
 
@@ -116,6 +128,14 @@ a linux server.
 
 ## How it works
 
+<p align="center">
+  <img src="docs/diagrams/deployflow-workflow.png" alt="Swimlane diagram: you ask the agent for an application, the agent writes the manifest and the role, you review the diff, appctl builds and installs the pinned artifact, the guest runs the application's own checks, and the service answers. A failed check refuses the install and names the fix." width="100%">
+</p>
+
+<p align="center"><sub>
+The workflow, lane by lane. <a href="docs/diagrams/deployflow-workflow.html">Open the diagram</a>.
+</sub></p>
+
 ```
 you:  "install a new application"
 agent: reads the contract, writes the manifest and the role,
@@ -124,7 +144,15 @@ you:   reviews the diff, approves the run
 run:   installs the pinned artifact, then checks the service actually answers
 ```
 
-Four parts:
+Five parts:
+
+<p align="center">
+  <img src="docs/diagrams/deployflow-anatomy.png" alt="Tree diagram: one application is a manifest entry in app.yaml, a role under apps/name that carries its own checks, and a target file that decides where it runs." width="100%">
+</p>
+
+<p align="center"><sub>
+Where each part lives. <a href="docs/diagrams/deployflow-anatomy.html">Open the diagram</a>.
+</sub></p>
 
 ### 1. The manifest
 
@@ -259,6 +287,69 @@ process is up; it does not say the process bound the port you asked for. A
 service that came up on 8000 instead of 9000 passes an is-active check and
 fails every request.
 
+### 5. Secrets
+
+`appctl secrets` manages a single file: `.env` at the repository root, mode
+0600, gitignored. It is the only plain-text copy of a secret on the controller.
+
+```bash
+appctl secrets init                       # write .env (0600) and .env.example
+appctl secrets check                      # what is required and still missing
+appctl secrets list                       # names and state, never values
+```
+
+`init` reads the `secrets:` blocks in `app.yaml` and creates one key per
+secret, empty, so a fresh clone knows exactly what to fill in. `.env.example`
+— the list of required keys with no values — is committed, so the next person
+sees what the deployment needs without seeing anything it should not.
+
+Setting a value has three forms, and the first is the one to reach for:
+
+```bash
+appctl secrets set myapp_api_key                   # prompts; the value never reaches argv or shell history
+appctl secrets set myapp_api_key '<value>'         # positional
+appctl secrets set myapp_api_key --generate        # random value, 32 bytes of entropy
+```
+
+`--generate` takes several names at once, which is how the shipped
+applications are set up — all five OmniRoute credentials are issued by the
+system itself:
+
+```bash
+appctl secrets set omniroute_jwt_secret omniroute_api_key_secret \
+                     omniroute_storage_encryption_key \
+                     omniroute_initial_password omniroute_ws_bridge_secret \
+                     --generate
+```
+
+`set` rewrites the file in place, preserving existing keys and their order, so
+running it twice for one key leaves one entry — a duplicate `KEY` in a `.env`
+is a well-known source of "I changed it and nothing happened".
+
+Use `--generate` for a secret this system issues for itself. It is wrong for
+anything with an external issuer: a provider API key has to come from the
+provider, not from a random string.
+
+`check` exits 1 while anything required is unset, which is what makes it
+usable in CI. `appctl install` runs the same check before it touches the
+cluster, because discovering a missing secret halfway through a play leaves
+half the guest configured.
+
+| Where | State |
+|---|---|
+| `.env` on the controller | the only plain-text copy, mode 0600, gitignored |
+| the temporary extra-vars file | mode 0600, passed as `--extra-vars @file`, deleted at exit |
+| the guest's `EnvironmentFile` | mode 0600, owned by root |
+| the application's memory | resolved from that file at startup |
+| **any log** | **never** |
+
+A secret is never written to `app.yaml`, to a rendered config file, or to a
+log. In a config file it appears only as a `${NAME}` reference, which the
+guest resolves at startup — that is what makes a config file safe to commit.
+
+Full detail, including the three ways a secret leaks and the guard for each:
+[docs/secrets.md](docs/secrets.md).
+
 ## Three kinds of application
 
 Most applications come from somewhere: a registry, or a checkout. Some
@@ -305,54 +396,12 @@ The worked example is [`apps/builder/`](apps/builder/).
 ## Ready-to-use applications
 
 The repository ships two applications that work, not just two that illustrate.
-They are the ones an agent would otherwise have to write from scratch, and
-between them they cover the two shapes that are hard to get right.
 
 ### `omniroute` — an application built from a source checkout
 
 [OmniRoute](https://github.com/cheaper-inference/OmniRoute) is a Next.js
 server with a native SQLite binding, built from the upstream `main` branch and
 served by one systemd unit on one guest.
-
-| | |
-|---|---|
-| Source | `cheaper-inference/OmniRoute` at `main`, resolved to a commit |
-| Build | on a native x86_64 build host — never on the controller, never emulated |
-| Runtime | Node 24.14.1, pinned and checksummed |
-| Ports | 20128 — dashboard, `/v1` proxy, MCP/A2A and management API; 20132 — the live dashboard WebSocket |
-| Secrets | five, all generated, none ever in `argv` |
-
-Two things make it the hard case, and both are things an agent gets wrong on
-its own:
-
-**The build cannot run where the agent is.** The controller is arm64 macOS;
-the guest is x86_64 Linux. A tree built on the controller carries darwin-only
-native binaries that fail on the guest much later, as an unrelated error deep
-in a request handler. And an emulated container is not the answer either:
-esbuild is a Go binary, and the Go runtime faults under qemu with
-`fatal error: receive on synctest channel from outside bubble`. The build
-host has to be native.
-
-**The role refuses rather than rebuilds.** A role that rebuilds on every play
-cannot tell "no changes" from "rebuilt". The build writes a receipt naming
-the commit it was built from, and the role refuses to ship a tree whose
-receipt does not match the checkout — so a stale tree is a refusal with a
-message naming the command to run, not a silent deployment.
-
-Its checks are worth reading, because they are the ones a green play hides:
-
-| Assert | Guards against |
-|---|---|
-| the native SQLite binding loads and takes a write | a tree built for the wrong platform |
-| the listener is on the address the role configured | a process listening somewhere else |
-| `/v1/chat/completions` answers 401 without a key | an inference plane any device on the network can spend |
-| `/api/providers` answers 401 | a dashboard serving an anonymous caller |
-| the unit is enabled | a service that does not come back after a reboot |
-
-See [`apps/omniroute/`](apps/omniroute/) for the role, and
-[apps/omniroute/docs/BUILDING-FROM-SOURCE.md](apps/omniroute/docs/BUILDING-FROM-SOURCE.md)
-for what building it taught — the failures, and why each one looked like
-something else.
 
 ### `builder` — the build host
 
@@ -389,28 +438,19 @@ The same list as a map, for when you want to go straight to the file.
 
 | Feature | What it gives you | Where |
 |---|---|---|
-| **Declarative application manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | `app.yaml` |
-| **Agent-written application roles** | A scaffold, a contract and a checklist, so an agent can write a new role that matches the others. | `.agents/skills/deployflow-add-app/` |
-| **Reproducible artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one. | `appctl build` |
-| **Application-level verification** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. | `apps/<app>/tasks/` |
-| **Idempotency check** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | `appctl install` |
-| **Secrets out of the repository** | Secrets live in a gitignored file, reach the run in a mode-0600 file, and never appear in `argv` or in the logs. | `appctl secrets` |
-| **Pluggable destinations** | A target interface separates "what the application is" from "where it runs". One target ships today. | `src/appctl/targets/` |
-| **Fails before side effects** | An unsupported destination or a missing secret stops the run before anything is built, downloaded or started. | `appctl install` |
-| **Run evidence** | Every run keeps its commands, log, recap and errors, so a failure is a file to read rather than a scrollback to search. | `tmp/runs/` |
-| **Build hosts as applications** | A guest whose purpose is to build other applications is a `toolchain` source: it installs no service, and its role asserts the machine can build rather than that an install succeeded. | `apps/builder/` |
-| **Applications that work, not just illustrate** | Two shipped applications cover the two hard shapes: a service built from a source checkout, and the build host that builds it. | `apps/omniroute/`, `apps/builder/` |
+| **Deterministic flow** | `appctl` drives the same order every run — validate, check secrets, render, then play — and exits non-zero on failure. | [`src/appctl/cli.py`](src/appctl/cli.py) |
+| **Agentic skill** | The contract, the scaffold and the checklist, so an agent writes a role that matches the others. | [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md) |
+| **App manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | [`app.example.yaml`](app.example.yaml) |
+| **Pinned artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one. | [`src/appctl/build.py`](src/appctl/build.py) |
+| **Application-level checks** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. | [`apps/omniroute/tasks/main.yml`](apps/omniroute/tasks/main.yml) |
+| **Idempotency** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | [`src/appctl/install.py`](src/appctl/install.py) |
+| **Secrets management** | `appctl secrets` keeps them in a gitignored `.env`; the run reads them from a mode-0600 file, so they never reach `argv` or a log. | [`src/appctl/secrets.py`](src/appctl/secrets.py) |
+| **Pluggable targets** | A target interface separates "what the application is" from "where it runs". One target ships today. | [`src/appctl/targets/base.py`](src/appctl/targets/base.py) |
+| **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
+| **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
+| **Two working applications** | Two shipped applications cover the two hard shapes: a service built from a source checkout, and the build host that builds it. | [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/) |
 
 ## Requirements
-
-### To use the workflow with an agent
-
-| Requirement | Why |
-|---|---|
-| A coding agent that can read a repository and write files | The agent writes the manifest and the role. |
-| An agent that follows the repository's instructions | `AGENTS.md` and `.agents/skills/deployflow-add-app/` hold the contract and the checklist. |
-| A git repository per deployment | The manifest and the roles are the source of truth and the review surface. |
-| A place to keep secrets | A `.env` file, gitignored. The agent never needs to read a secret value. |
 
 ### To run a delivery on the current target
 
@@ -433,10 +473,6 @@ installing a release:
 | The build host provisioned | `appctl install builder`. The build cannot run on the controller and must not run emulated. |
 | 24 GB of RAM on the Proxmox host | The build's webpack process reaches 11.5 GB RSS. The builder role asserts this and refuses a host that is too small. |
 
-The first guest also needs a bridge and storage on the Proxmox host, and a
-network path from the controller to the guest. The role discovers the guest's
-address over DHCP, so you do not configure one.
-
 SSH access means whatever your SSH setup already provides. The framework
 does not read `~/.ssh/config` by name, and it does not need one. If you keep
 your hosts in an SSH config, name the host in the inventory and the alias
@@ -451,15 +487,6 @@ all:
           ansible_host: pve.example.net   # a Host block in ~/.ssh/config
           ansible_user: root
 ```
-
-### To add a new destination
-
-| Requirement | Detail |
-|---|---|
-| A target implementation | One file under `src/appctl/targets/`. See [docs/targets.md](docs/targets.md). |
-| The target's own prerequisites | It validates them before the run starts. |
-| Checks that fit the destination | The application's own checks still apply; the target adds its own. |
-| An acceptance test on a real host | The same application, installed twice, with one deliberate failure caught by a check. |
 
 ## Documentation
 
@@ -476,14 +503,6 @@ all:
 | [apps/builder/](apps/builder/) | A working build host: the `toolchain` application |
 | [AGENTS.md](AGENTS.md) | The rules for changing this repository |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and what a change must preserve |
-
-## Status
-
-Early. The Proxmox LXC destination is implemented and tested against one host.
-Two more destinations are interfaces only: they are named, so a manifest can
-ask for them and get a clear answer, and they fail before anything is built.
-See [docs/targets.md](docs/targets.md) for what each would have to prove before
-it could be called supported.
 
 ## License
 
