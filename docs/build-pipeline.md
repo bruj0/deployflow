@@ -165,7 +165,7 @@ appctl install omniroute                      # ship it
 Three things about that path are worth knowing, because each one is a rule
 the framework could not have taught an agent by itself:
 
-**The build host clones the fork itself.** A transferred tree has no `.git`,
+**The build host clones the repository itself.** A transferred tree has no `.git`,
 so `git rev-parse --short HEAD` does not resolve and the artifact carries no
 provenance. And a tar of a macOS checkout carries AppleDouble sidecars
 (`._aliasConfig.ts` and hundreds like it) that esbuild reads as source files

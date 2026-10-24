@@ -297,8 +297,8 @@ nothing about what actually collided.
 
 The second kind of shipped tree is one the controller **builds** rather than
 installs: a fork, a development branch, or any tree with no published
-artifact. `apps/omniroute/` is the worked example — OmniRoute from a fork's
-`main` branch, built on the controller and served from a guest.
+artifact. `apps/omniroute/` is the worked example — OmniRoute from `main`,
+built on a build host and served from a guest.
 
 This is the shape the rest of this section assumes, with three differences.
 

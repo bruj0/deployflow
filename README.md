@@ -91,8 +91,8 @@ Or run one of the two shipped applications end to end. `builder` first, because
 ```bash
 appctl install builder                       # the build host
 
-# OmniRoute needs a checkout of the fork on this controller, and its secrets.
-git clone https://github.com/bruj0/OmniRoute.git
+# OmniRoute needs a checkout on this controller, and its secrets.
+git clone https://github.com/cheaper-inference/OmniRoute.git
 CHECKOUT=../OmniRoute                          # wherever you put it
 
 # Point the role at your checkout. The default is the path it was developed
@@ -113,35 +113,6 @@ appctl install omniroute                         # must be changed=0
 The build takes about half an hour because it compiles a 2 GB JavaScript tree
 on the guest's platform. That is the cost of not shipping a darwin binary to
 a linux server.
-
-## What it gives you
-
-- **A manifest an agent can read.** One file says where the code comes from,
-  what configuration it takes, which secrets it needs and where it runs.
-  Unknown keys are an error, so a typo fails loudly instead of silently
-  changing nothing.
-- **A role per application, written against a contract.** The agent does the
-  writing; the contract in `AGENTS.md` and the `deployflow-add-app` skill say
-  what a role owes the framework. You review a diff, not a wall of generated
-  YAML.
-- **Checks that belong to the application.** Only the application knows what
-  "working" means for it, so each role carries its own: the import that has
-  to succeed, the port that has to be bound, the endpoint that has to answer,
-  and the request that has to be refused.
-- **A second run that changes nothing.** `changed=0` is the proof that the
-  run is repeatable rather than reinstalling itself. A role that reports a
-  change every time is telling you nothing about its own state.
-- **Secrets that stay out of the repository and out of the logs.** They live
-  in a gitignored `.env`, reach the run in a mode-0600 file, and never appear
-  in `argv` where `ps` would show them.
-- **A destination behind an interface.** The manifest names a target and the
-  target owns everything about it. One ships today; two more are named so a
-  manifest can ask for them and get a clear answer.
-- **A failure before any side effect.** An unimplemented destination or a
-  missing secret stops the run before anything is built, downloaded or
-  started.
-- **Evidence on disk.** Every run keeps its commands, log, recap and errors,
-  so a failure is a file to read rather than a scrollback to search.
 
 ## How it works
 
@@ -339,13 +310,13 @@ between them they cover the two shapes that are hard to get right.
 
 ### `omniroute` — an application built from a source checkout
 
-[OmniRoute](https://github.com/bruj0/OmniRoute) is a Next.js server with a
-native SQLite binding, built from a fork's `main` branch and served by one
-systemd unit on one guest.
+[OmniRoute](https://github.com/cheaper-inference/OmniRoute) is a Next.js
+server with a native SQLite binding, built from the upstream `main` branch and
+served by one systemd unit on one guest.
 
 | | |
 |---|---|
-| Source | `bruj0/OmniRoute` at `main`, resolved to a commit |
+| Source | `cheaper-inference/OmniRoute` at `main`, resolved to a commit |
 | Build | on a native x86_64 build host — never on the controller, never emulated |
 | Runtime | Node 24.14.1, pinned and checksummed |
 | Ports | 20128 — dashboard, `/v1` proxy, MCP/A2A and management API; 20132 — the live dashboard WebSocket |
@@ -458,7 +429,7 @@ installing a release:
 
 | Requirement | Why |
 |---|---|
-| A checkout of the fork on the controller | The role ships a tree; it does not fetch one. The build host clones it for itself, so it needs to be reachable from the guest. |
+| A checkout of OmniRoute on the controller | The role ships a tree; it does not fetch one. The build host clones it for itself, so it needs to be reachable from the guest. |
 | The build host provisioned | `appctl install builder`. The build cannot run on the controller and must not run emulated. |
 | 24 GB of RAM on the Proxmox host | The build's webpack process reaches 11.5 GB RSS. The builder role asserts this and refuses a host that is too small. |
 

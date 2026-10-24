@@ -19,7 +19,7 @@ than rebuild one.
 | | |
 |---|---|
 | Guest | `omniroute-src`, CT 122 |
-| Source | `bruj0/OmniRoute` at `main`, resolved to a commit |
+| Source | `cheaper-inference/OmniRoute` at `main`, resolved to a commit |
 | Build | Linux amd64, on the `builder` guest — never on the controller, never emulated |
 | Runtime | Node 24.14.1, pinned and checksummed, under `app_home/node` |
 | Unit | `omniroute.service` |
@@ -79,7 +79,7 @@ and a build that reaches 11.5 GB of RSS and writes 16 GB to `/root` is a build
 that can take the node with it. So the build host is a guest now, provisioned
 like any other application.
 
-### Why the build host clones the fork
+### Why the build host clones the repository
 
 The build host runs `git clone` itself rather than receiving a transferred
 tree, for two measured reasons:

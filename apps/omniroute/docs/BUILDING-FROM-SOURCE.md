@@ -1,7 +1,7 @@
 # Building OmniRoute from source
 
-What it takes to build `bruj0/OmniRoute` at `main` into an artifact that runs
-on an x86_64 Linux guest, and what fails on the way there.
+What it takes to build `cheaper-inference/OmniRoute` at `main` into an
+artifact that runs on an x86_64 Linux guest, and what fails on the way there.
 
 This is written from the measurements, not from the theory. Every failure
 listed here happened, and the symptom is what was actually observed — not what
@@ -13,8 +13,7 @@ would be expected.
 |---|---|
 | Controller | arm64 macOS (Apple Silicon), 48 GB |
 | Guest | x86_64 Linux, Proxmox LXC |
-| Upstream | `cheaper-inference/OmniRoute` |
-| Fork | `bruj0/OmniRoute`, branch `main`, version `3.8.52` |
+| Upstream | `cheaper-inference/OmniRoute`, branch `main`, version `3.8.52` |
 | Commit built | `edab7c3a59bf7d6f040d581dbda3a46adbee0d57` |
 | Runtime | Node `>=22.22.2 <23 \|\| >=24.0.0 <27` — pinned to 24.14.1 |
 | Build recipe | `npm run build:release` |
@@ -214,10 +213,10 @@ an error that names a memory limit rather than the guest.*
 
 ### The clone is pinned to a commit, not to a branch
 
-The build host clones the fork itself (see the next section for why), and the
-first version of the script cloned `--branch main`. `main` moves: a push
-between the controller reading `HEAD` and the builder cloning produces an
-artifact built from a commit the receipt does not name.
+The build host clones the repository itself (see the next section for why),
+and the first version of the script cloned `--branch main`. `main` moves: a
+push between the controller reading `HEAD` and the builder cloning produces
+an artifact built from a commit the receipt does not name.
 
 The receipt is the role's provenance check — the role refuses a tree whose
 receipt does not match the checkout's `HEAD` — so a receipt that is wrong
@@ -295,8 +294,8 @@ src/mitm/._childExitCleanup.ts:1:0: ERROR: Unexpected "\x00"
 Error: Build failed with 77 errors
 ```
 
-So the build host runs `git clone` itself. The fork is public, so it needs no
-credential. A private fork needs a token the host already holds.
+So the build host runs `git clone` itself. The repository is public, so it
+needs no credential. A private one needs a token the host already holds.
 
 ## The dependency tree is not a graph you can walk
 
