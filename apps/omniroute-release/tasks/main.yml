@@ -1,0 +1,1096 @@
+---
+# OmniRoute, a published npm release served from a guest.
+#
+# This role installs nothing from a git checkout and builds nothing. What it
+# installs is a released artifact that already contains the Next.js standalone
+# bundle the server runs, plus the one native module that has to be compiled for
+# the guest's own runtime. There is no controller artifact to validate and no
+# receipt to check, so the guards here are the installer's own answers: the
+# pinned runtime reports its version, the installed release reports its version,
+# and the native binding proves it loads.
+#
+# Everything the application writes lives under app_state_dir, which
+# common/python creates once and neither role touches again. Redeploying
+# therefore never discards a stored provider key and never invalidates the
+# encryption that guards it.
+#
+# This role assumes common/python has already run for the same application.
+
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+#
+# First, before anything is downloaded. The release is 546 MB unpacked and its
+# install runs for minutes; discovering afterwards that a secret was never set
+# means the operator waits through all of it to be told what they already knew.
+
+- name: Fail when a credential is empty
+  # Empty here means `appctl install` was run with a secret the application
+  # declares and the role could not see. Naming the key is the whole point: the
+  # server starts without most of these and fails later, in a place that does not
+  # name the missing variable.
+  ansible.builtin.fail:
+    msg: >-
+      {{ item.name }} is empty. Set it with
+      `appctl secrets set {{ item.name }}` and re-run.
+  loop:
+    - { name: omniroute_jwt_secret }
+    - { name: omniroute_api_key_secret }
+    - { name: omniroute_storage_encryption_key }
+    - { name: omniroute_initial_password }
+    - { name: omniroute_ws_bridge_secret }
+  loop_control:
+    label: "{{ item.name }}"
+  when: (vars[item.name] | default('') | string) == ''
+
+- name: Fail when the dashboard password is too short to be accepted
+  # omniroute setup rejects a password under 8 characters. Asserting it here
+  # names the cause; letting setup fail would report it against a one-time
+  # bootstrap that the next play would not retry.
+  ansible.builtin.fail:
+    msg: >-
+      omniroute_initial_password is shorter than the 8 characters
+      `omniroute setup` requires. Re-generate it with
+      `appctl secrets set omniroute_initial_password --generate`.
+  no_log: true
+  when: (omniroute_initial_password | string | length) < 8
+
+- name: Fail when a credential cannot be written to an EnvironmentFile
+  # A newline ends a line in the format systemd parses, so a value containing
+  # one would be silently truncated into a different credential rather than
+  # rejected. No supported secret format here produces one.
+  ansible.builtin.fail:
+    msg: "{{ item.name }} contains a newline, which an EnvironmentFile cannot carry."
+  loop:
+    - { name: omniroute_jwt_secret }
+    - { name: omniroute_api_key_secret }
+    - { name: omniroute_storage_encryption_key }
+    - { name: omniroute_initial_password }
+    - { name: omniroute_ws_bridge_secret }
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  when: >-
+    '\n' in (vars[item.name] | default(''))
+    or '\r' in (vars[item.name] | default(''))
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+
+- name: Read the Node release that is installed
+  # The binary's own answer, not a stamp file beside it. A stamp can disagree
+  # with the directory it describes — a half-finished unpack, a directory left
+  # behind by an interrupted play — and then every task that trusts it skips the
+  # install that would have repaired it.
+  ansible.builtin.command:
+    argv: ["{{ omr_node }}", --version]
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  register: omr_node_installed
+
+- name: Work out whether Node has to be unpacked
+  # One decision, read once, so no later task can disagree with another about
+  # whether the install still has to happen.
+  ansible.builtin.set_fact:
+    omr_node_needs_install: >-
+      {{
+        omr_node_installed.rc != 0
+        or omr_node_installed.stdout | default('') | trim != 'v' ~ omr_node_version
+      }}
+
+- name: Fetch the pinned Node release
+  # `checksum` is sha256:<value>, which get_url verifies before keeping the file
+  # and only re-downloads when it is absent or wrong. The value is the one
+  # nodejs.org publishes in the release's SHASUMS256.txt.
+  ansible.builtin.get_url:
+    url: >-
+      https://nodejs.org/dist/v{{ omr_node_version }}/node-v{{ omr_node_version }}-linux-x64.tar.xz
+    dest: "{{ app_home }}/node-v{{ omr_node_version }}-linux-x64.tar.xz"
+    checksum: "sha256:{{ omr_node_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  become_user: root
+  when: omr_node_needs_install | bool
+
+- name: Create the Node directory
+  # unarchive with remote_src extracts on the guest and refuses a destination
+  # that does not exist yet. Without this the failure is "dest must be an
+  # existing dir", which names a missing directory rather than the unpack that
+  # wanted it.
+  ansible.builtin.file:
+    path: "{{ omr_node_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  become_user: root
+  when: omr_node_needs_install | bool
+
+- name: Unpack Node
+  # remote_src, because the tarball is already on the guest: get_url put it
+  # there. Without it the module looks for the path on the controller and fails
+  # with "Could not find or access ... on the Ansible Controller" while the file
+  # sits on the guest, which reads as a failed download.
+  ansible.builtin.unarchive:
+    src: "{{ app_home }}/node-v{{ omr_node_version }}-linux-x64.tar.xz"
+    dest: "{{ omr_node_dir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    owner: root
+    group: root
+  become: true
+  become_user: root
+  when: omr_node_needs_install | bool
+
+- name: Read back the Node release that is now installed
+  ansible.builtin.command:
+    argv: ["{{ omr_node }}", --version]
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  register: omr_node_verified
+
+- name: Fail when the pinned Node is not the one on disk
+  # The unpack succeeded and the binary still answers with something else. This
+  # application's own gate refuses to run outside its supported range, and its
+  # better-sqlite3 binding is ABI-locked to the Node major that installed it, so
+  # a guest on another major fails at the first import rather than at start-up,
+  # which is the worst place to find out.
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_node }} reports v{{ omr_node_verified.stdout | default('nothing') | trim }},
+      but this role pins v{{ omr_node_version }}. Remove {{ omr_node_dir }} and re-run.
+  when: omr_node_verified.rc != 0 or omr_node_verified.stdout | trim != 'v' ~ omr_node_version
+
+- name: Read the npm this runtime ships with
+  # npm's JS entry through the pinned interpreter. Its bin shim is
+  # `#!/usr/bin/env node`, and nothing under app_home is on PATH here, so the
+  # shim cannot run at all — which a first run of this role mistook for "npm too
+  # old" and refused the install over.
+  ansible.builtin.command:
+    argv: ["{{ omr_node }}", "{{ omr_npm_cli }}", --version]
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  register: omr_npm_version
+
+- name: Fail when the bundled npm cannot allow install scripts
+  # npm 11 and later block package lifecycle scripts by default. That is exactly
+  # the script this deployment depends on: the package's postinstall copies the
+  # host-compiled better-sqlite3 binding into the standalone bundle. An older npm
+  # is not fatal on its own, but it is not the environment this install was
+  # written for, and it would not accept the --allow-scripts flag below.
+  #
+  # omr_node_version is the only thing that changes it, and the failure is named
+  # rather than left to surface as an unknown npm option mid-install.
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_node }} {{ omr_npm_cli }} reports
+      {{ omr_npm_version.stdout | default('nothing') | trim }},
+      and this role's install needs npm 11 or later for --allow-scripts. Change
+      omr_node_version in apps/omniroute-release/defaults/main.yml to a Node
+      release whose tarball bundles a supported npm.
+  when: >-
+    omr_npm_version.rc != 0
+    or omr_npm_version.stdout | trim is not version('11.0', '>=')
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+- name: Create the service home directory
+  # Owned by the service account: it is HOME for the unit, and the CLI writes
+  # caches and plugin directories under it.
+  ansible.builtin.file:
+    path: "{{ omr_home }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0700"
+  become: true
+  become_user: root
+
+- name: Create the npm cache directory
+  # root-owned, unlike every other state directory: only the install writes here,
+  # and the install runs as root.
+  ansible.builtin.file:
+    path: "{{ omr_npm_cache }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  become_user: root
+
+- name: Create the credentials directory
+  # root-owned, unlike every other state directory: the file systemd reads from
+  # here must not be writable by the account the application runs as.
+  #
+  # The GROUP is the service account and the mode is 0750, not 0700. The
+  # directory has to be traversable by the account, because the operator
+  # wrapper below reads the credentials file from it — and a 0700 root-owned
+  # directory makes that read fail even when the file inside it is readable.
+  #
+  # Measured on CT 120: `omniroute doctor` reported "Encrypted credentials
+  # exist but STORAGE_ENCRYPTION_KEY is missing" while the running server was
+  # perfectly healthy. The cause was exactly this — the wrapper ran as the
+  # service account, could not open the credentials file, and so never put
+  # STORAGE_ENCRYPTION_KEY in the environment. The server had the key because
+  # systemd read the file as PID 1; the diagnostic did not, because it did not
+  # go through systemd.
+  ansible.builtin.file:
+    path: "{{ omr_secrets_dir }}"
+    state: directory
+    owner: root
+    group: "{{ app_user }}"
+    mode: "0750"
+  become: true
+  become_user: root
+
+- name: Install the omniroute command
+  # Installed before the checks below, because they assert through it: what the
+  # operator types is what has to work, not the path the unit happens to use.
+  # A wrapper rather than a symlink to npm's own bin entry, because that shim
+  # runs `#!/usr/bin/env node` and nothing under app_home is on PATH.
+  ansible.builtin.template:
+    src: omniroute-cli.sh.j2
+    dest: "{{ omr_cli }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  become_user: root
+
+# ---------------------------------------------------------------------------
+# The release
+# ---------------------------------------------------------------------------
+
+- name: Read the OmniRoute release that is installed
+  # `--version` is a fast path that prints the package version and exits before
+  # the CLI touches the data directory, so it is safe to ask before anything
+  # else exists. It also runs the runtime gate, so a Node outside the supported
+  # range fails here with the application's own diagnostic.
+  #
+  # Through the wrapper, by absolute interpreter path: npm's bin symlink would
+  # run whatever `node` PATH finds, which on this guest is nothing.
+  ansible.builtin.command:
+    argv: ["{{ omr_cli }}", --version]
+  args:
+    chdir: "{{ omr_data_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_installed
+
+- name: Work out whether the release has to be installed
+  # An exact version comparison, never `'{{ omr_version }}' in stdout`: that
+  # substring test matches a version string that merely contains the wanted one
+  # and is one of the sentinels that shipped green and reported changed forever.
+  #
+  # Anything other than the pinned version re-enters the install, including an
+  # install that never finished and a release someone bumped by hand.
+  ansible.builtin.set_fact:
+    omr_needs_install: >-
+      {{ omr_installed.rc != 0 or omr_installed.stdout | default('') | trim != omr_version }}
+
+- name: Install the compile toolchain when the release has to be compiled
+  # Off by default: better-sqlite3 ships a prebuild for linux-x64 at this Node.
+  # Here for a platform that needs one, or after a version bump whose prebuild
+  # does not cover the pinned runtime.
+  ansible.builtin.apt:
+    name:
+      - make
+      - g++
+    state: present
+  become: true
+  become_user: root
+  when:
+    - omr_needs_install | bool
+    - omr_install_build_toolchain | bool
+
+- name: Install the pinned OmniRoute release
+  # argv, never a shell string: the allow-list contains commas and @scoped names
+  # that a shell would have opinions about.
+  #
+  # npm's JS entry through the pinned interpreter, not its bin shim, for the
+  # reason the version check above does.
+  #
+  # --allow-scripts is what lets `omniroute` and `better-sqlite3` run their
+  # install scripts. Without it the install succeeds and produces a bundle whose
+  # native binding was never copied in, and the server then falls back to a
+  # WASM SQLite driver with WAL disabled — a degraded service that passes every
+  # port assertion. The task below is what catches it.
+  #
+  # PATH still carries the Node directory, and it is set through `env` rather
+  # than the task's `environment` key: ansible.builtin.command rejects that key
+  # outright ("Unsupported parameters ... environment"), and without the PATH the
+  # install scripts npm spawns run `sh -c node scripts/build-from-source.js` and
+  # die with "node: not found". `env VAR=value … cmd` is argv, not a shell, so
+  # the allow-list's commas and @scoped names are still never re-parsed.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - "PATH={{ omr_node_dir }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      - npm_config_audit=false
+      - npm_config_fund=false
+      - npm_config_update_notifier=false
+      - "{{ omr_node }}"
+      - "{{ omr_npm_cli }}"
+      - install
+      - --global
+      - --prefix
+      - "{{ omr_prefix }}"
+      - --cache
+      - "{{ omr_npm_cache }}"
+      - "--allow-scripts={{ omr_allow_scripts }}"
+      - "omniroute@{{ omr_version }}"
+  args:
+    chdir: "{{ omr_home }}"
+  become: true
+  become_user: root
+  register: omr_npm_install
+  when: omr_needs_install | bool
+
+- name: Read back the OmniRoute release that is now installed
+  ansible.builtin.command:
+    argv: ["{{ omr_cli }}", --version]
+  args:
+    chdir: "{{ omr_data_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_installed_verified
+
+- name: Fail when the pinned release is not the one on disk
+  # The install reported success and the release still answers with something
+  # else. Every postcondition below would otherwise pass against whatever is
+  # actually running.
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_cli }} reports {{ omr_installed_verified.stdout | default('nothing') | trim }},
+      but this role pins {{ omr_version }}. {{ omr_npm_install.stderr | default('') | trim }}
+      Remove {{ omr_prefix }} and re-run.
+  when: omr_installed_verified.rc != 0 or omr_installed_verified.stdout | trim != omr_version
+
+- name: Remove the environment file the install leaves inside the package
+  # `npm install` seeds <ROOT>/.env from the package's own .env.example, and the
+  # CLI reads it as its last env source. Measured on the first real install: the
+  # application logged "Loaded env from
+  # <app_dir>/npm/lib/node_modules/omniroute/.env" and `doctor` warned that it
+  # "lives inside the installed package: updating OmniRoute replaces it".
+  #
+  # Removing it is what the application itself advises, and it is safe here
+  # because every value this deployment needs is already in two places the
+  # install never touches: {{ omr_env_file }} for settings and
+  # {{ omr_secrets_file }} for credentials. Anything else already has a code
+  # default, which is the shipped behaviour.
+  #
+  # Idempotent and self-healing: a version bump that regenerates it has it
+  # removed again on the next play, before anything reads it.
+  ansible.builtin.file:
+    path: "{{ omr_package }}/.env"
+    state: absent
+  become: true
+  become_user: root
+
+- name: Fail when the package environment file could not be removed
+  # A writable install root is what this depends on. Without the removal the
+  # file survives, and an operator who edits it loses the edit on the next
+  # version bump — silently, because the play stays green.
+  ansible.builtin.stat:
+    path: "{{ omr_package }}/.env"
+  become: true
+  become_user: root
+  changed_when: false
+  register: omr_package_env
+
+- name: Read whether the package environment file is gone
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_package }}/.env still exists. It ships inside the install root, so
+      every version bump replaces it and any value set there is lost without a
+      warning. {{ omr_prefix }} must be writable by root for this role to manage.
+  when: omr_package_env.stat.exists
+
+# ---------------------------------------------------------------------------
+# Install-root ownership
+# ---------------------------------------------------------------------------
+#
+# npm writes the whole install root as root; the service runs as app_user. Two
+# paths inside that root are written at runtime rather than at install time, and
+# both fail with EACCES until ownership is handed back. Neither fails loudly,
+# which is the reason they are fixed here rather than left as accepted warnings.
+
+- name: Read whether the embedding library is present
+  # Registered before the task that consumes it, and that task reads it with
+  # `default()`, so an install shipping no transformers.js skips the chown
+  # instead of failing on a path that was never created. A future release may
+  # inline the embedder or drop the local backend entirely.
+  ansible.builtin.stat:
+    path: "{{ omr_transformers_dir }}"
+  become: true
+  become_user: root
+  changed_when: false
+  register: omr_transformers_stat
+
+- name: Make the embedding library writable by the service user
+  # transformers.js caches downloaded models in a `.cache` directory beside its
+  # OWN installed location — `path.join(dirname__, '/.cache/')` in its env
+  # module — and no environment variable redirects it. Measured on CT 120:
+  # the service ran as the app user, npm wrote the library as root, and every
+  # embedding attempt failed with `model_load_failed / EACCES: permission
+  # denied, mkdir '.../@huggingface/transformers/.cache'`.
+  #
+  # This does not surface as an error. Health reports `working: true`, keyword
+  # search keeps working over FTS5, and only the vector store stays empty:
+  # engine-status shows `rowCount: 0, needsReindex: N` while hybrid retrieval
+  # degrades to `tier: "fts5"` with a null vector score. A guest can therefore
+  # hold a full memory table and pass every other check while doing no semantic
+  # search at all — which is exactly what CT 120 did before this task existed.
+  #
+  # Only the embedding library is touched. The rest of the install root stays
+  # root-owned on purpose: it is the tree a version bump replaces, and the role
+  # manages exactly two things inside it — the package .env it removes, and the
+  # bundled better_sqlite3.node the postinstall writes.
+  #
+  # Idempotent: a bump reinstalls the library as root, and the next play hands
+  # it back before the server starts.
+  ansible.builtin.file:
+    path: "{{ omr_transformers_dir }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    recurse: true
+  become: true
+  become_user: root
+  when: omr_transformers_stat.stat.exists
+
+- name: Read whether the standalone bundle is present
+  ansible.builtin.stat:
+    path: "{{ omr_package }}/dist"
+  become: true
+  become_user: root
+  changed_when: false
+  register: omr_standalone_stat
+
+- name: Make the standalone bundle writable by the service user
+  # The same root-owned-install-tree problem, second instance. Next.js writes
+  # its prerender cache to `dist/.build/next/cache`, measured on CT 120 as
+  # `Failed to update prerender cache for <sha> EACCES: permission denied,
+  # mkdir '<package>/dist/.build/next/cache'` — recurring on every request that
+  # touches a cached route, so it is worth the same correction rather than an
+  # accepted permanent error in the log.
+  ansible.builtin.file:
+    path: "{{ omr_package }}/dist"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    recurse: true
+  become: true
+  become_user: root
+  when: omr_standalone_stat.stat.exists
+
+- name: Assert the native SQLite binding loads
+  # Resolved the way the server resolves it: from the standalone bundle's own
+  # directory, which is the copy the package's postinstall put there. Loading the
+  # top-level copy instead would pass while the bundle carries no binding at all.
+  #
+  # This is the assertion the rest of the role cannot make for itself. Without a
+  # native binding the server does not fail — it falls through node:sqlite to
+  # sql.js, answers every request, binds every port, and reports itself healthy
+  # with SQLite WAL disabled and the memory and disk-sync overhead that implies.
+  ansible.builtin.command:
+    argv:
+      - "{{ omr_node }}"
+      - --input-type=module
+      - -e
+      - |
+        import { createRequire } from "node:module";
+        const req = createRequire("{{ omr_package }}/dist/server.js");
+        const Database = req("better-sqlite3");
+        const db = new Database(":memory:");
+        db.exec("CREATE TABLE probe(a INTEGER)");
+        db.prepare("INSERT INTO probe VALUES (?)").run(1);
+        if (db.prepare("SELECT count(*) AS c FROM probe").get().c !== 1) process.exit(1);
+        db.close();
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_native_binding
+
+- name: Fail when the standalone bundle cannot load its SQLite driver
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_package }}/dist cannot load better-sqlite3
+      ({{ omr_native_binding.stderr | default('') | trim | default('no output', true) }}).
+      The server would start anyway on the WASM fallback with WAL disabled. Run
+      `cd {{ omr_package }}/dist && {{ omr_node }} {{ omr_npm_cli }} rebuild
+      better-sqlite3`, or set omr_install_build_toolchain: true in
+      apps/omniroute-release/defaults/main.yml and re-run.
+  when: omr_native_binding.rc != 0
+
+- name: Run the release's own diagnostic
+  # `doctor` is the application's answer about its native bindings and runtime,
+  # and it is the check that would have caught the blocked-postinstall case
+  # before the binding assertion above had to be written.
+  #
+  # --no-liveness: the server is not running yet at this point in the play.
+  ansible.builtin.command:
+    argv: ["{{ omr_cli }}", doctor, --no-liveness]
+  args:
+    chdir: "{{ omr_data_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_doctor
+
+- name: Fail when the release reports an unhealthy install
+  ansible.builtin.fail:
+    msg: >-
+      `omniroute doctor` reported a problem:
+      {{ omr_doctor.stdout | default('') | trim | default('no output', true) }}
+  when: omr_doctor.rc != 0
+
+# ---------------------------------------------------------------------------
+# Credentials on the guest
+# ---------------------------------------------------------------------------
+
+- name: Write the credentials file
+  # systemd reads this as PID 1 before it drops to the service account, so it can
+  # stay root-owned and unreadable by the account the application runs as. No
+  # value passes in argv, where ps on the guest would show it, and none lands in
+  # the shipped tree or in the rendered configuration.
+  #
+  # The GROUP is the service account and the mode is 0640, not 0600. The
+  # service account needs to READ this file: the operator wrapper in
+  # /usr/local/bin reads it and exports what it finds, and the role's own
+  # `doctor` check runs through that wrapper as the service account.
+  #
+  # Read-only, deliberately. The service account can read the credentials and
+  # cannot change them — the file stays root-owned and unwritable by the
+  # process it belongs to, so a compromised application cannot rewrite the key
+  # that encrypts its own store.
+  #
+  # Measured on CT 120: with mode 0600 and group root, `omniroute doctor`
+  # reported "Encrypted credentials exist but STORAGE_ENCRYPTION_KEY is
+  # missing" and the role failed on a guest whose server was healthy. The
+  # server had the key because systemd read the file as PID 1; the diagnostic
+  # did not, because it did not go through systemd.
+  ansible.builtin.template:
+    src: omniroute-secrets.env.j2
+    dest: "{{ omr_secrets_file }}"
+    owner: root
+    group: "{{ app_user }}"
+    mode: "0640"
+  become: true
+  become_user: root
+  no_log: true
+  register: omr_secrets_written
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+- name: Write the application environment file
+  # Role-owned and rewritten on every play, so it is stable at changed=0. Not a
+  # credential file: a process environment key wins over an .env key, so the
+  # secrets above do not need to be here and cannot be overwritten from here.
+  ansible.builtin.template:
+    src: omniroute.env.j2
+    dest: "{{ omr_env_file }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0600"
+  become: true
+  become_user: root
+  register: omr_env_written
+
+# ---------------------------------------------------------------------------
+# The service
+# ---------------------------------------------------------------------------
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: omniroute.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  become_user: root
+  register: omr_unit
+
+- name: Reload systemd when the unit changed
+  # Only then. Reloading on every play would report changed on every play.
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  become_user: root
+  when: omr_unit.changed | default(false)
+
+- name: Start OmniRoute and make it survive a reboot
+  # Enabled as well as started: a unit that is active and disabled comes back
+  # stopped after a reboot, which looks exactly like a crash loop on the next
+  # visit.
+  #
+  # Restarted rather than started only when a rendered file actually changed.
+  # Both templates are byte-identical on a settled play, which is what keeps the
+  # steady state at changed=0 instead of bouncing the service every run.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (omr_secrets_written.changed | default(false)
+             or omr_env_written.changed | default(false)
+             or omr_unit.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+  become: true
+  become_user: root
+
+- name: Read the address the guest is reachable on
+  # The same expression used to compute the address the process is asked to bind,
+  # so the two cannot disagree about which address "the LAN address" means. The
+  # guest has no fixed address: Proxmox leases one.
+  ansible.builtin.shell:
+    cmd: "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1"
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  register: omr_guest_address
+
+- name: Work out the address the controller can reach this guest on
+  # The controller can only assert what a network peer can reach, which a
+  # loopback bind denies by design. Everything the postconditions say about
+  # reachability is gated on this, so a lockdown is reported as a lockdown and not
+  # as a broken service.
+  ansible.builtin.set_fact:
+    omr_lan_address: "{{ omr_guest_address.stdout | default('') | trim }}"
+    omr_reachable_from_controller: >-
+      {{ app_bind_host in ['0.0.0.0', '::']
+         and (omr_guest_address.stdout | default('') | trim | length > 0) }}
+
+- name: Wait for the dashboard port to accept connections
+  # systemd returns from `start` the moment it accepts the job, which is seconds
+  # before migrations have run and the server has bound. Everything below reads
+  # state that only exists after that point, so it waits here rather than each
+  # task racing the boot on its own.
+  ansible.builtin.wait_for:
+    host: "{{ omr_guest_address.stdout | default('') | trim }}"
+    port: "{{ app_port }}"
+    state: started
+    timeout: 300
+  become: true
+  become_user: root
+  when: omr_reachable_from_controller | bool
+
+- name: Wait for the live dashboard socket to accept connections
+  ansible.builtin.wait_for:
+    host: "{{ omr_guest_address.stdout | default('') | trim }}"
+    port: "{{ omr_live_ws_port }}"
+    state: started
+    timeout: 120
+  become: true
+  become_user: root
+  when:
+    - omr_reachable_from_controller | bool
+    - omr_live_ws_host in ['0.0.0.0', '::']
+
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
+
+- name: Wait for the server to report itself ready
+  # /healthz answers 200 "ok" only when the application is ready and 503
+  # "starting" while it is not, so this is the wait that a port check cannot be.
+  # Runs from inside the guest: the application's own readiness, not its
+  # reachability from the controller.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/healthz"
+    method: GET
+    status_code: 200
+  # No chdir: ansible.builtin.uri rejects it, the same way command rejects
+  # `environment`. The URL is absolute, so there is nothing for a working
+  # directory to influence — and a module parameter it does not accept makes the
+  # task fail identically on every retry, which is what a 30-retry wait looks
+  # like when the thing it is waiting for has already happened.
+  become: true
+  become_user: "{{ app_user }}"
+  register: omr_healthz
+  until: omr_healthz.status | default(0) == 200
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Check whether the dashboard password has been applied
+  ansible.builtin.stat:
+    path: "{{ omr_bootstrap_stamp }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  # Registered under a name of its own, never the variable it tests: a register
+  # shadows the variable it shares a name with, so `omr_bootstrap_stamp` would
+  # become this dict and the `dest` below would template to a dict — which the
+  # copy action plugin dies on with "'dict' object has no attribute 'endswith'".
+  register: omr_bootstrap_stamp_stat
+
+- name: Apply the dashboard password once
+  # Gated on a marker in the state tree, so it runs on the first deploy and never
+  # again. A role task that recreated the administrator on every play would be
+  # both wrong and the reason a green play could not be trusted.
+  #
+  # --non-interactive reads INITIAL_PASSWORD from the environment, which the
+  # wrapper takes from the root-owned credentials file — so the password never
+  # passes in argv, where ps on the guest would show it. There is no --force
+  # here on purpose: a forced init leaves half-written state and refuses to run
+  # again.
+  #
+  # chdir is the state directory because bin/omniroute.mjs reads process.cwd()/.env
+  # as one of its env sources.
+  ansible.builtin.command:
+    argv: ["{{ omr_cli }}", setup, --non-interactive]
+  args:
+    chdir: "{{ omr_data_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_setup
+  when: not omr_bootstrap_stamp_stat.stat.exists
+
+- name: Record that the dashboard password has been applied
+  ansible.builtin.copy:
+    dest: "{{ omr_bootstrap_stamp }}"
+    content: |
+      # Written by the omniroute-release role once `omniroute setup
+      # --non-interactive` has applied omniroute_initial_password. Delete this to
+      # re-run the bootstrap on the next install.
+      applied_at: "{{ ansible_date_time.iso8601 | default('unknown') }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0600"
+  become: true
+  become_user: root
+  when:
+    - not omr_bootstrap_stamp_stat.stat.exists
+    # Never after a failed bootstrap: a marker written over a failure is the one
+    # thing that would make the next play skip the task that has to be retried.
+    - omr_setup is not skipped
+    - omr_setup.rc | default(1) == 0
+
+- name: Fail when the dashboard password could not be applied
+  ansible.builtin.fail:
+    msg: >-
+      `omniroute setup --non-interactive` exited {{ omr_setup.rc | default('?') }},
+      so the dashboard still has no administrator password and serves
+      anonymously: {{ omr_setup.stdout | default('') | trim }}
+      {{ omr_setup.stderr | default('') | trim }}
+      Read the unit's output with `journalctl -u {{ app_service_name }} -n 50`
+      on the guest.
+  when:
+    - not omr_bootstrap_stamp_stat.stat.exists
+    - omr_setup is defined and omr_setup is not skipped
+    - omr_setup.rc | default(0) != 0
+
+# ---------------------------------------------------------------------------
+# Postconditions
+# ---------------------------------------------------------------------------
+
+- name: Assert the application wrote its own store
+  # A running server with an empty store is the failure a listener cannot see:
+  # nothing to log in to, no providers, no history. Non-empty rather than merely
+  # present, because a zero-byte file is what an interrupted migration leaves.
+  ansible.builtin.stat:
+    path: "{{ omr_data_dir }}/storage.sqlite"
+  become: true
+  become_user: root
+  changed_when: false
+  register: omr_database
+
+- name: Fail when the application wrote no store
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_service_name }} is running but
+      {{ omr_data_dir }}/storage.sqlite is missing or empty. Read the unit's
+      output with `journalctl -u {{ app_service_name }} -n 50` on the guest.
+  when: not omr_database.stat.exists or omr_database.stat.size | int == 0
+
+- name: Assert the store is using write-ahead logging
+  # Opened through the same bundled driver the server used, and read-only in
+  # effect: journal_mode is a query here, not a set. A WASM fallback or an
+  # in-memory store reports something else, and WAL is what makes a single-writer
+  # SQLite service survive a crash without losing the last transactions.
+  ansible.builtin.command:
+    argv:
+      - "{{ omr_node }}"
+      - --input-type=module
+      - -e
+      - |
+        import { createRequire } from "node:module";
+        const req = createRequire("{{ omr_package }}/dist/server.js");
+        const Database = req("better-sqlite3");
+        const db = new Database("{{ omr_data_dir }}/storage.sqlite", { readonly: true });
+        const mode = db.pragma("journal_mode", { simple: true });
+        db.close();
+        if (String(mode).toLowerCase() !== "wal") {
+          console.log(mode);
+          process.exit(1);
+        }
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: omr_wal
+
+- name: Fail when the store is not in WAL mode
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_data_dir }}/storage.sqlite reports journal_mode
+      {{ omr_wal.stdout | default('unknown') | trim }}, not wal. The server is
+      running on a SQLite driver that cannot do write-ahead logging. Check
+      `{{ omr_cli }} doctor` output on the guest.
+  when: omr_wal.rc != 0
+
+# ---------------------------------------------------------------------------
+# Memory subsystem
+# ---------------------------------------------------------------------------
+#
+# The one subsystem that can be completely non-functional while every other
+# assertion in this role passes. Memory itself is optional and may be switched
+# off, so nothing here asserts that it is enabled — only that the path it writes
+# to is writable, which is what makes the difference between "keyword search
+# only" and a working vector store.
+
+- name: Assert the embedding library is writable by the service user
+  # The ownership fix above is the preventive half. This is the detective half,
+  # and it is deliberately a direct filesystem check rather than a query of
+  # engine-status: the symptom the operator actually sees is a rowCount of 0,
+  # which is also what a correctly-working store reports on an empty database.
+  # Reading the mode answers the cause, and cannot be satisfied by an empty
+  # table.
+  #
+  # Skipped when the library is absent, because a release that does not ship it
+  # has nothing to write to. Failing here would break the play for a guest that
+  # is working exactly as designed.
+  ansible.builtin.stat:
+    path: "{{ omr_transformers_dir }}/.cache"
+    get_checksum: false
+  become: true
+  become_user: root
+  changed_when: false
+  register: omr_transformers_cache
+
+- name: Fail when the embedding library cannot be written by the service user
+  # Anything other than the app user owning it means the next embedding call
+  # fails with EACCES, which the application logs as a warning and then keeps
+  # serving without. Measured on CT 120 before this task existed:
+  # `memory.reindex.batch.complete {"processed":0,"errors":1}` with health still
+  # reporting `working: true`.
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_transformers_dir }} is owned by
+      {{ omr_transformers_cache.stat.pw_name | default('unknown') }}, not
+      {{ app_user }}. transformers.js caches embedding models inside that
+      directory and no environment variable redirects it, so the memory
+      subsystem will keep answering from FTS5 only while reporting itself
+      healthy. Re-run `appctl install {{ app_name }}` to restore ownership.
+  when:
+    - omr_transformers_stat.stat.exists
+    - omr_transformers_cache.stat.exists
+    - omr_transformers_cache.stat.pw_name != app_user
+
+- name: Read the addresses the process is actually listening on
+  # The ground truth, for both published ports.
+  #
+  # No drift restart follows, and that is a deliberate difference from the roles
+  # that bind one resolved address. Those processes capture the lease they were
+  # given and can be stranded on an address the guest no longer has, so they
+  # compare and restart. This one binds the wildcard and keeps no address of its
+  # own, so a lease change cannot strand it and there is nothing to repair.
+  #
+  # Only the host part is compared, because ss renders a wildcard differently
+  # depending on the socket: 0.0.0.0, * or ::.
+  ansible.builtin.shell:
+    cmd: "ss -H -ltn 'sport = :{{ item }}' | awk '{print $4}' | head -1"
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  loop:
+    - "{{ app_port }}"
+    - "{{ omr_live_ws_port }}"
+  register: omr_listeners
+
+- name: Fail when a listener is not on the address this role configured
+  # Reporting it is the difference between "the service is on the LAN" and "the
+  # variables say it should be". A wildcard bind is asserted as a wildcard:
+  # comparing it to the guest's own address would fail every correct deployment.
+  ansible.builtin.fail:
+    msg: >-
+      port {{ item.item }} is listening on
+      {{ item.stdout | default('nothing') | trim }}, but this role configured
+      {{ 'a wildcard address' if app_bind_host in ['0.0.0.0', '::']
+         else app_bind_host }}. Check OMNIROUTE_SERVER_HOST
+      {% if item.item == omr_live_ws_port %}and LIVE_WS_HOST{% endif %}
+      in {{ omr_env_file }} on the guest, and re-run.
+  loop: "{{ omr_listeners.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.stdout | default('') | trim | length > 0
+    - >-
+      (item.stdout | trim).split(':')[0] | default('')
+      not in (['0.0.0.0', '*', '::'] if app_bind_host in ['0.0.0.0', '::']
+              else [app_bind_host])
+
+- name: Assert the inference plane refuses a caller with no credential
+  # Run from the controller against the guest's LAN address, not from inside the
+  # guest: the question is what a peer on the network can reach.
+  #
+  # failed_when: false and no status_code, because the point is to read whatever
+  # came back. A constrained status_code would fail this task on a wrong answer
+  # and the fail task below would never run — a check that cannot fail is not a
+  # check.
+  #
+  # The status alone would not be enough either: a 500 from a malformed body is
+  # also a refusal. AUTH_002 with this message is the client-API policy refusing
+  # an anonymous request, and nothing else produces it.
+  #
+  # The substring is 'AUTH_002' with single quotes as the Jinja delimiter, so the
+  # value searched for has no quotes of its own. Written as "'AUTH_002'" it
+  # searches for a literal 'AUTH_002' including apostrophes, which a JSON body
+  # never contains — the check then fails on a refusal that was exactly right.
+  ansible.builtin.uri:
+    url: "http://{{ omr_lan_address }}:{{ app_port }}/v1/chat/completions"
+    method: POST
+    body_format: json
+    body:
+      model: probe
+      messages: [{ role: user, content: probe }]
+    # return_content, because the assertion below reads the response body.
+    # Without it `content` is absent, the comparison reads an empty string, and
+    # the check fails on a service that answered exactly as it should. It has to
+    # sit inside the module: one level out it is a second action statement and the
+    # play stops with "conflicting action statements".
+    return_content: true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: omr_v1_anonymous
+  when: omr_reachable_from_controller | bool
+
+- name: Fail when the inference plane served an unauthenticated caller
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_lan_address }}:{{ app_port }} answered an unauthenticated
+      /v1/chat/completions with {{ omr_v1_anonymous.status | default('no answer') }}
+      instead of 401. Anyone who can reach this guest can spend the operator's
+      provider quotas. Check REQUIRE_API_KEY in {{ omr_env_file }}.
+  when:
+    - omr_reachable_from_controller | bool
+    - omr_v1_anonymous is not skipped
+    - >-
+      (omr_v1_anonymous.status | default(401)) != 401
+      or 'AUTH_002' not in (omr_v1_anonymous.content | default(''))
+
+- name: Assert the key gate is what refused it
+  # A syntactically valid but unknown key. With REQUIRE_API_KEY off, the policy
+  # deliberately lets an invalid key through as anonymous traffic, so this is the
+  # assertion that fails when the flag is off even though anonymous requests
+  # happen to be refused by something else — and "Invalid API key" is the exact
+  # message the policy emits only when it is on.
+  ansible.builtin.uri:
+    url: "http://{{ omr_lan_address }}:{{ app_port }}/v1/chat/completions"
+    method: POST
+    headers:
+      Authorization: "Bearer om-role-probe-not-a-real-key"
+    body_format: json
+    body:
+      model: probe
+      messages: [{ role: user, content: probe }]
+    return_content: true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: omr_v1_bad_key
+  when: omr_reachable_from_controller | bool
+
+- name: Fail when the key gate is not the thing refusing traffic
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_lan_address }}:{{ app_port }} answered a request carrying an invalid
+      key with {{ omr_v1_bad_key.status | default('no answer') }} instead of 401.
+      With REQUIRE_API_KEY off this application accepts invalid keys as anonymous
+      traffic. Check REQUIRE_API_KEY in {{ omr_env_file }}.
+  when:
+    - omr_reachable_from_controller | bool
+    - omr_v1_bad_key is not skipped
+    - >-
+      (omr_v1_bad_key.status | default(401)) != 401
+      or 'Invalid API key' not in (omr_v1_bad_key.content | default(''))
+
+- name: Assert the dashboard demands a login
+  # A management route, from the controller. Inside the guest this would prove
+  # nothing: the management policy has a loopback branch, so a request over
+  # loopback can be answered differently from the same request over the network.
+  #
+  # AUTH_001 is the management policy's rejection. If the dashboard had no
+  # administrator password, isAuthRequired() is false and the route is served
+  # anonymously — which is what this catches.
+  ansible.builtin.uri:
+    url: "http://{{ omr_lan_address }}:{{ app_port }}/api/providers"
+    method: GET
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: omr_management_anonymous
+  when: omr_reachable_from_controller | bool
+
+- name: Fail when the dashboard serves an anonymous caller
+  ansible.builtin.fail:
+    msg: >-
+      {{ omr_lan_address }}:{{ app_port }}/api/providers answered an
+      unauthenticated caller with
+      {{ omr_management_anonymous.status | default('no answer') }} instead of 401,
+      so the dashboard has no administrator password. Delete
+      {{ omr_bootstrap_stamp }} on the guest and re-run, or set
+      omniroute_initial_password and re-run.
+  when:
+    - omr_reachable_from_controller | bool
+    - omr_management_anonymous is not skipped
+    - (omr_management_anonymous.status | default(401)) != 401
+
+- name: Assert the unit is enabled for the next boot
+  # Active and disabled is the failure this catches: the service looks healthy
+  # until the next reboot, and then it looks like a crash loop.
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, "{{ app_service_name }}"]
+  become: true
+  become_user: root
+  changed_when: false
+  failed_when: false
+  register: omr_unit_enabled
+
+- name: Fail when the unit is not enabled for the next boot
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_service_name }} reports "{{ omr_unit_enabled.stdout | default('unknown') | trim }}",
+      so it will not come back after a reboot. Run `systemctl enable
+      {{ app_service_name }}` on the guest and re-run.
+  when: omr_unit_enabled.rc != 0 or omr_unit_enabled.stdout | trim != 'enabled'

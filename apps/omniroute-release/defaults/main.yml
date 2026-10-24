@@ -1,0 +1,232 @@
+---
+# omniroute-release, a published npm release installed on the guest and served
+# by systemd.
+#
+# This is the release shape. The other OmniRoute role in this repository
+# builds a tree from a source checkout on a build guest; this one installs a
+# released artifact that already contains the Next.js standalone bundle the
+# server runs, plus the one native module that has to be compiled for the
+# guest's own runtime. There is no controller artifact to validate and no
+# receipt to check, so the guards here are the installer's own answers: the
+# pinned runtime reports its version, the installed release reports its
+# version, and the native binding proves it loads.
+#
+# `app_name` is `omniroute`, NOT `omniroute-release`.
+#
+# That is deliberate and load-bearing. Everything under this repository's
+# contract is derived from `app_name`: the service account, the install root,
+# the state directory, the unit name. A second name would mean a second
+# service account, a second install root and a second state directory — and
+# therefore an empty database, because the state is where the application's
+# stored provider keys and conversation history live.
+#
+# The role directory is named `omniroute-release` because two roles cannot
+# share a name, and one of them already owns `omniroute`. The role name is
+# what the inventory and `appctl` refer to; `app_name` is what the guest
+# sees. They are allowed to differ, and here they must.
+#
+# Everything the application writes lives under `app_state_dir`, which
+# common/python creates once and neither role touches again. Redeploying
+# therefore never discards a stored provider key and never invalidates the
+# encryption that guards it.
+#
+# This role assumes common/python has already run for the same application.
+
+app_name: omniroute
+app_service_name: omniroute
+
+# The one port OmniRoute serves: dashboard, /v1 proxy, MCP/A2A and the
+# management API all share it. src/lib/runtime/ports.ts reads PORT and defaults
+# it to 20128; this guest has no API_PORT/DASHBOARD_PORT, so both inherit it and
+# the split-port mode is not used.
+app_port: 20128
+
+# Published on the LAN. There is no host firewall on these guests, so a wildcard
+# bind is LAN-wide reachability — which is exactly why om_require_api_key below
+# is not optional and why the role asserts the key gate after every start.
+#
+# 127.0.0.1 here instead is a supported configuration: the role then skips the
+# reachability assertions, because a loopback bind is unreachable by design and
+# failing on it would report a correct lockdown as a broken service.
+app_bind_host: 0.0.0.0
+
+# ---------------------------------------------------------------------------
+# The release
+# ---------------------------------------------------------------------------
+
+# The newest release on npm. Pinned, never `latest`: a floating tag makes two
+# plays of the same role install different code, which is the opposite of what a
+# pinned role is for.
+#
+# This is a release, not a build. Nothing OmniRoute-related runs on the
+# controller — no checkout is read, no bundle is produced, and the controller's
+# own Node is below this application's floor. The published package ships the
+# prebuilt Next.js standalone bundle the server process runs (dist/server.js),
+# so there is no compile step to own.
+omr_version: "3.8.51"
+
+# Where `npm install --global --prefix` puts it, and where the package itself
+# lands inside that prefix. Under app_dir rather than a system npm prefix: the
+# whole installation is then one directory that can be backed up, diffed or
+# replaced as a unit, beside the inert venv.
+omr_prefix: "{{ app_dir }}/npm"
+omr_package: "{{ omr_prefix }}/lib/node_modules/omniroute"
+omr_package_cli: "{{ omr_package }}/bin/omniroute.mjs"
+
+# The embedding library the memory subsystem loads locally when no embedding
+# provider is configured. transformers.js writes its model cache into a `.cache`
+# directory beside its own installed location — hardcoded, with no environment
+# variable to redirect it — so this exact path has to be writable by the service
+# user or every embedding fails with EACCES. The role stats it before touching
+# it, so a release that drops or inlines it is skipped rather than failed.
+omr_transformers_dir: "{{ omr_package }}/node_modules/@huggingface/transformers"
+
+# Lifecycle scripts npm 11+ blocks by default. `omniroute` and `better-sqlite3`
+# are the two that matter: the first copies the host-compiled native binding into
+# the standalone bundle, the second produces it.
+#
+# onnxruntime-node is deliberately absent. Its script downloads ~300 MB of CUDA
+# assets and it is not needed to run.
+omr_allow_scripts: omniroute,better-sqlite3,keytar,@parcel/watcher,@swc/core,protobufjs,esbuild
+
+# The npm download cache, kept on the guest rather than in root's home so a
+# version bump does not re-download ~500 MB of package.
+omr_npm_cache: "{{ app_home }}/npm-cache"
+
+# Compile toolchain for better-sqlite3, off by default. It ships a prebuild for
+# linux-x64 at this Node, so a compiling guest is the exception; the role asserts
+# the binding loads and, if it does not, fails with the exact remedy rather than
+# carrying a C++ compiler on every guest. common/python already installed python3
+# and gcc; this adds the two node-gyp also wants.
+omr_install_build_toolchain: false
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+
+# Pinned to an exact version and checksummed, not taken from apt.
+#
+# Two things force the pin. OmniRoute refuses to start on a runtime outside
+# `>=22.22.2 <23 || >=24.0.0 <27` — bin/omniroute.mjs exits non-zero before doing
+# any work — and its better-sqlite3 binding is ABI-locked to the Node major that
+# installed it, so a guest on another major fails at the first import rather than
+# at start-up. 24.14.1 is the release the project itself recommends.
+#
+# The checksum is the one nodejs.org publishes in the release's SHASUMS256.txt.
+omr_node_version: 24.14.1
+omr_node_sha256: 84d38715d449447117d05c3e71acd78daa49d5b1bfa8aacf610303920c3322be
+omr_node_dir: "{{ app_home }}/node"
+omr_node: "{{ omr_node_dir }}/bin/node"
+
+# npm's JS entry, not its bin shim. The shim runs `#!/usr/bin/env node`, and
+# nothing under app_home is on PATH on a stock guest, so it dies with
+# "env: 'node': No such file or directory" before npm starts. Measured on this
+# role's first run: the version check read that failure as "npm too old" and
+# refused to install. Same trap the deepseek-harness role documents for
+# corepack's shims.
+omr_npm_cli: "{{ omr_node_dir }}/lib/node_modules/npm/bin/npm-cli.js"
+
+# The operator-facing command, in /usr/local/bin because nothing under app_home
+# is on anyone's PATH. A wrapper, not a symlink to npm's own bin entry: that shim
+# runs `#!/usr/bin/env node`, which on this guest resolves to nothing at all.
+omr_cli: /usr/local/bin/omniroute
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+# No `app_config_target`: appctl render emits exactly one JSON document and
+# cannot produce a dotenv file, which is what OmniRoute reads. Both files below
+# are role templates instead.
+#
+# The split is load-bearing, not stylistic. bin/omniroute.mjs writes an .env key
+# into process.env only when it is undefined, so the process environment always
+# wins over this file — which is what lets the credentials live in a root-owned
+# EnvironmentFile instead of here.
+omr_env_file: "{{ app_state_dir }}/.env"
+
+# Root-owned 0600, read by systemd as PID 1 before it drops to the service
+# account. The only file on the guest that holds a credential.
+omr_secrets_dir: "{{ app_state_dir }}/secrets"
+omr_secrets_file: "{{ omr_secrets_dir }}/env"
+
+# Records that the one-time password bootstrap has run. In the state tree, not a
+# temp dir: it has to outlive a reinstall and a failed run for the gate below to
+# mean anything.
+omr_bootstrap_stamp: "{{ app_state_dir }}/.bootstrap-complete"
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+# The key gate on /v1/*. The shipped default is off while the bind is the
+# wildcard, which is the combination OmniRoute's own startup warning describes as
+# an inference plane any device on the network can spend. The role asserts it is
+# in force after every start rather than trusting the variable.
+omr_require_api_key: true
+
+# The realtime dashboard WebSocket. It binds loopback independently of
+# OMNIROUTE_SERVER_HOST (src/server/ws/liveServer.ts), so a published dashboard
+# whose live view cannot reach the browser fails silently — degraded, not
+# broken. Set this to app_bind_host because the dashboard is published.
+omr_live_ws_port: 20132
+omr_live_ws_host: "{{ app_bind_host }}"
+
+omr_log_level: info
+
+# A V8 heap ceiling, not a memory limit; native buffers sit outside it. Unset,
+# the CLI calibrates about 35% of RAM and clamps to [512, 4096]. 2048 is the
+# floor the project's own self-host bundle ships for a single user running
+# coding agents; raise it if a fan-out model runs concurrently.
+omr_memory_mb: 2048
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+# DATA_DIR. Left unset, bin/cli/data-dir.mjs resolves ~/.omniroute — a second
+# data directory outside the framework's state boundary, which a reinstall would
+# not preserve and a backup would not capture.
+#
+# HOME for the service account, for the same reason: the CLI resolves plugin
+# directories and CLI-local caches from os.homedir().
+omr_data_dir: "{{ app_state_dir }}"
+omr_home: "{{ app_state_dir }}/home"
+
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+
+# Delivered by appctl through a temporary extra-vars file, never argv, and
+# written to the guest as a root-owned 0600 EnvironmentFile. Nothing here is ever
+# interpolated into a task name, a message or a diff.
+#
+# Every one of these is declared required, and appctl requires all of them
+# because this application publishes a wildcard bind.
+
+# Signs dashboard session cookies. Auto-generated and persisted when absent —
+# which is exactly what makes an explicit value necessary: a wiped state
+# directory would otherwise silently rotate it and sign every operator out.
+omniroute_jwt_secret: ""
+
+# Encrypts stored provider API keys at rest. Same auto-generation, same risk,
+# and worse: a rotated value leaves every stored credential undecryptable.
+omniroute_api_key_secret: ""
+
+# Encrypts the database itself. It is set here rather than left to the
+# application because OmniRoute generates one on first run and appends it to
+# <DATA_DIR>/.env — a file this role owns and rewrites. Left unset, the next play
+# would render that file without the key and leave a database nothing can
+# decrypt.
+omniroute_storage_encryption_key: ""
+
+# The dashboard administrator password, applied once by the bootstrap task
+# below. Leaving it unset does not fail boot: it leaves the dashboard to the
+# onboarding wizard, and skipping that wizard turns dashboard login off
+# altogether, which REQUIRE_API_KEY does not compensate for. Note that
+# .env.example ships the literal CHANGEME, which npm install seeds on first run.
+omniroute_initial_password: ""
+
+# Required in production but not persisted anywhere, so it is ephemeral per
+# boot: unset, every WebSocket bridge request is rejected.
+omniroute_ws_bridge_secret: ""

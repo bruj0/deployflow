@@ -1,0 +1,53 @@
+#!/bin/sh
+# The omniroute command for this guest.
+#
+# Three things this wrapper exists to get right, none of which npm's own bin
+# entry does on a guest like this one:
+#
+#   1. The interpreter. The bin entry this package installs runs
+#      `#!/usr/bin/env node`, and nothing under app_home is on PATH on a stock
+#      guest, so it dies with "env: 'node': No such file or directory" before
+#      the application starts. The pinned interpreter is named by path.
+#   2. The state directory. DATA_DIR is the whole data boundary; left unset,
+#      bin/cli/data-dir.mjs resolves ~/.omniroute, which a reinstall would not
+#      preserve and a backup would not capture. HOME is inside it for the same
+#      reason: the CLI resolves plugin directories and caches from os.homedir().
+#   3. The credentials. Read from the root-owned EnvironmentFile rather than
+#      taken as arguments, because ps on the guest is world-readable. The file
+#      is root-owned and group-readable by this account, so it can be read but
+#      not written: a compromised application cannot rewrite the key that
+#      encrypts its own store.
+#
+# A variable already present in the caller's environment wins over the file, so
+# an operator can override any of them for a single run.
+#
+# The caller's working directory is deliberately left alone — bin/omniroute.mjs
+# reads process.cwd()/.env as one of its env sources, and the unit already pins
+# that to the state directory. Pinning it here too would silently change what a
+# command run from an arbitrary directory reads.
+set -eu
+
+OMR_SECRETS_FILE='{{ omr_secrets_file }}'
+
+HOME='{{ omr_home }}'
+DATA_DIR='{{ omr_data_dir }}'
+PATH='{{ omr_node_dir }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+export HOME DATA_DIR PATH
+
+if [ -r "$OMR_SECRETS_FILE" ]; then
+  while IFS= read -r omr_line || [ -n "$omr_line" ]; do
+    case "$omr_line" in
+      '' | '#'*) continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    omr_key=${omr_line%%=*}
+    omr_value=${omr_line#*=}
+    # `eval` on the name is what makes an indirect assignment work in POSIX sh;
+    # it is safe here because omr_key is only ever a NAME= line read from a
+    # root-owned file this role wrote.
+    eval "[ \"\${$omr_key:-}\" ] || export $omr_key=\"\$omr_value\""
+  done < "$OMR_SECRETS_FILE"
+fi
+
+exec '{{ omr_node }}' '{{ omr_package_cli }}' "$@"

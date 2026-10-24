@@ -1,0 +1,65 @@
+---
+# What this guest runs.
+#
+# One list is the entire declaration. Every path, the account and the install
+# root are derived from the name by common/python/defaults/main.yml, and the
+# application's own defaults supply its ports, unit names, pinned Node and
+# release pin.
+#
+# The role is `omniroute-release` and the guest is `omniroute`: the role
+# installs a published npm release, and the guest's name is what the service
+# account, the install root and the unit are derived from. See
+# apps/omniroute-release/defaults/main.yml for why `app_name` stays
+# `omniroute` rather than following the role name.
+
+app_roles:
+  - omniroute-release
+
+# Guest size. Larger than the defaults because the unpacked release alone is
+# 546 MB, before SQLite, call logs and the pre-migration snapshots the
+# application writes on every schema change.
+#
+# The heap figure matters more than the total: the project's own sizing note is
+# that coding agents abort V8 near 12 GiB old-space under two overlapping long
+# contexts, and omr_memory_mb caps the heap well below RAM. 2048 is the floor
+# its self-host bundle ships for a single user. These are starting allocations,
+# not measured minima — raise lxc_memory and omr_memory_mb together if a
+# fan-out model is used concurrently.
+lxc_cores: 4
+lxc_memory: 8192
+lxc_swap: 1024
+lxc_rootfs_gb: 30
+
+# The listener is published on the LAN. These guests run no host firewall, so a
+# wildcard bind is LAN-wide reachability — not "reachable from the trusted
+# subnet", which is the assumption that makes this a common accident.
+#
+# Three things have to be true together for that to be safe, and the role
+# asserts all three after every start rather than trusting the variables:
+#
+#   REQUIRE_API_KEY=true   /v1/* needs a key. Off with a wildcard bind is the
+#                          combination the application itself warns about at
+#                          start-up: an inference plane any device on the
+#                          network can spend, billed to the operator's providers.
+#   a dashboard password   set once from omniroute_initial_password. Without one
+#                          the management API answers anonymous callers.
+#   AUTH_COOKIE_SECURE     false, because this is plain HTTP. A secure cookie
+#                          over http:// is never sent back, so setting it here
+#                          would stop the dashboard logging in at all. Turn it on
+#                          only with TLS terminated in front.
+#
+# These guests run plain HTTP, so API keys cross the network in cleartext. The
+# trust boundary is the network itself: publish on a LAN you control, or put an
+# authenticating TLS proxy in front of a loopback bind instead
+# (app_bind_host: 127.0.0.1 in the role's defaults).
+app_bind_host: 0.0.0.0
+
+# ── non-secret settings ──────────────────────────────────────────────────────
+#
+# Left in the role's defaults rather than here: every one of them has a value
+# that is right everywhere, and an operator override in group_vars is the place
+# a value gets set once and forgotten.
+#
+# omr_log_level: debug      more detail in journalctl -u omniroute
+# omr_memory_mb: 4096       raise alongside lxc_memory for concurrent fan-out
+# omr_live_ws_port: 20132   the realtime dashboard socket, published to match
