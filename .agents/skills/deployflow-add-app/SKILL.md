@@ -1,5 +1,5 @@
 ---
-name: add-app
+name: deployflow-add-app
 description: >-
   Use when adding, porting or wiring up a new application to this repository,
   or when asked "add an app", "new application", "deploy X with ansible",
@@ -15,7 +15,7 @@ description: >-
   repository.
 ---
 
-# Add an application
+# Add an application to DeployFlow
 
 An application is **one directory** under `apps/`. Nothing in `common/` and
 nothing in `playbooks/site.yml` changes when you add one. If your change touches
@@ -292,6 +292,63 @@ override.
 **Never run two installs against one guest.** They share apt and dpkg, and the
 second fails on `Could not get lock /var/lib/dpkg/lock-frontend`, which names
 nothing about what actually collided.
+
+## An application built from a source checkout
+
+The second kind of shipped tree is one the controller **builds** rather than
+installs: a fork, a development branch, or any tree with no published
+artifact. `apps/omniroute/` is the worked example — OmniRoute from a fork's
+`main` branch, built on the controller and served from a guest.
+
+This is the shape the rest of this section assumes, with three differences.
+
+**The version is a commit, not a tag.** A published release pins
+`omniroute@3.8.51`; a source build pins the **sha** the controller built from.
+Never pin a branch name: `main` moves, and a play that builds `main` twice
+reports two different artifacts. Read the sha out of the checkout and write it
+into the build receipt, so the guest can be asked what it is actually running.
+
+**The build must produce something the guest can run, and the role must prove
+it.** A source tree usually has a `dist/` that is gitignored, so a checkout
+alone is not deployable — the build is part of the artifact. The receipt
+therefore records the sha **and** the artifact it produced, and the role
+refuses to ship a tree whose receipt is missing, stale, or does not match the
+sha it was asked for.
+
+**The dependency tree is part of the artifact, not of the install.** A published
+npm release brings its own dependencies. A source build has to `npm ci` before
+it can run at all, and the `node_modules` that results is what gets shipped.
+That tree is large, symlink-based, and must be transferred with the flags
+`ansible.posix.synchronize` needs (`--links`, `--times`) or it arrives broken
+or is re-transferred forever.
+
+**The role's job is to refuse, not to build.** Rebuilding on every play cannot
+tell "no changes" from "rebuilt", so the build is an operator act on the
+controller and the role's job is to refuse to ship a tree that is older than
+its sources. Fail with the exact command to run.
+
+The receipt is what makes the second run reach `changed=0`. Without it the role
+has nothing to compare and either reinstalls every time or trusts a mtime.
+
+```yaml
+- name: Read the build receipt
+  ansible.builtin.stat:
+    path: "{{ om_build_receipt }}"
+  delegate_to: localhost
+  become: false
+  register: om_receipt_stat
+
+- name: Refuse to ship a tree that was not built from the requested commit
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_build_receipt }} is missing or does not name
+      {{ om_source_ref }}. Build it on the controller:
+      cd {{ om_local_source }} && git checkout {{ om_source_ref }} &&
+      npm ci && npm run build:release
+  when: >-
+    not om_receipt_stat.stat.exists or
+    (om_receipt_stat.stat.content | from_json).commit != om_source_sha
+```
 
 ## Postconditions: non-negotiable
 

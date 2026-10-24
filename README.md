@@ -192,7 +192,7 @@ declarative and reviewable.
 | Feature | What it gives you | Where |
 |---|---|---|
 | **Declarative application manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | `app.yaml` |
-| **Agent-written application roles** | A scaffold, a contract and a checklist, so an agent can write a new role that matches the others. | `.agents/skills/add-app/` |
+| **Agent-written application roles** | A scaffold, a contract and a checklist, so an agent can write a new role that matches the others. | `.agents/skills/deployflow-add-app/` |
 | **Reproducible artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one. | `appctl build` |
 | **Application-level verification** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. | `apps/<app>/tasks/` |
 | **Idempotency check** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | `appctl install` |
@@ -208,7 +208,7 @@ declarative and reviewable.
 | Requirement | Why |
 |---|---|
 | A coding agent that can read a repository and write files | The agent writes the manifest and the role. |
-| An agent that follows the repository's instructions | `AGENTS.md` and `.agents/skills/add-app/` hold the contract and the checklist. |
+| An agent that follows the repository's instructions | `AGENTS.md` and `.agents/skills/deployflow-add-app/` hold the contract and the checklist. |
 | A git repository per deployment | The manifest and the roles are the source of truth and the review surface. |
 | A place to keep secrets | A `.env` file, gitignored. The agent never needs to read a secret value. |
 
@@ -260,8 +260,8 @@ cd deployflow
 
 Then tell your agent:
 
-> Read AGENTS.md and .agents/skills/add-app/SKILL.md, then add support for
-> <your application>. Use the add-app skill. Show me the diff before you run
+> Read AGENTS.md and .agents/skills/deployflow-add-app/SKILL.md, then add support for
+> <your application>. Use the deployflow-add-app skill. Show me the diff before you run
 > anything.
 
 The skill covers the manifest, the role, the pinned lockfile, the checks, and

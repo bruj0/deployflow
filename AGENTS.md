@@ -85,7 +85,7 @@ precedence over this file for anything about the tool:
 
 ## Adding an application
 
-Read [`.agents/skills/add-lxc-app/SKILL.md`](.agents/skills/add-lxc-app/SKILL.md)
+Read [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md)
 first. It has the full process, the postconditions a role must carry, and the
 sentinel traps.
 
