@@ -61,14 +61,19 @@ class WebUI:
 class Source:
     """Where an application's code comes from.
 
-    Two kinds exist because two genuinely different things are being described:
+    Three kinds exist because three genuinely different things are being
+    described:
 
-      package  a version on PyPI. Reproducible to the wheel.
-      repo     a commit in a git checkout. Reproducible to the commit, and the
-               wheel has to be built here because PyPI lags the fork.
+      package   a version on PyPI. Reproducible to the wheel.
+      repo      a commit in a git checkout. Reproducible to the commit, and the
+                wheel has to be built here because PyPI lags the fork.
+      toolchain nothing is installed from anywhere. The application's own role
+                assembles the environment another application needs — a build
+                guest, a toolchain server. It has no artifact, so there is
+                nothing to build and nothing to fetch.
 
-    A `repo` source requires `build`. A `package` source does not: there is
-    nothing to build.
+    A `repo` source requires `build`. The other two do not: there is nothing to
+    build.
     """
 
     kind: str = "package"
@@ -78,6 +83,21 @@ class Source:
     python: str | None = None               # e.g. "3.14"
     webui: WebUI | None = None
     output: str = "dist"                    # relative to files/, not committed
+
+    @property
+    def label(self) -> str:
+        """A one-line description of where this application comes from.
+
+        Used by `appctl list` and by the build command's messages. The point of
+        it is that each kind gets a sentence that is true of it, instead of one
+        generic phrase that is true of none: a toolchain has no package and no
+        repository, and printing `None` for either would look like a bug.
+        """
+        if self.kind == "package":
+            return self.package or ""
+        if self.kind == "repo":
+            return f"repo@{self.ref}"
+        return self.kind
 
 
 @dataclass(frozen=True)
@@ -163,7 +183,9 @@ class Application:
         """True when this application has artifacts to produce before install.
 
         A repo source always does. A package source does not: the wheel already
-        exists on PyPI.
+        exists on PyPI. A toolchain source does not either: the guest assembles
+        the toolchain itself, so there is no artifact to produce on the
+        controller.
         """
         return self.source.kind == "repo"
 
@@ -282,10 +304,12 @@ def _source(data: Any, where: str) -> Source:
     block = _require_mapping(data, where)
     _reject_unknown(block, _SOURCE, where)
     kind = block.get("kind", "package")
-    if kind not in ("package", "repo"):
+    if kind not in ("package", "repo", "toolchain"):
         raise ConfigError(
-            f"{where}.kind must be 'package' or 'repo', got {kind!r}",
-            hint="use kind: package for something published on PyPI, kind: repo to build from a checkout",
+            f"{where}.kind must be 'package', 'repo' or 'toolchain', got {kind!r}",
+            hint="use kind: package for something published on PyPI, "
+                 "kind: repo to build from a checkout, "
+                 "kind: toolchain for a guest that exists to host a toolchain",
         )
     if kind == "package" and not block.get("package"):
         raise ConfigError(f"{where}.package is required when kind is 'package'")
@@ -512,9 +536,12 @@ def dump(config: Config) -> str:
         source: dict[str, Any] = {"kind": app.source.kind}
         if app.source.kind == "package":
             source["package"] = app.source.package
-        else:
+        elif app.source.kind == "repo":
             source["repo"] = app.source.repo
             source["ref"] = app.source.ref
+        # A toolchain source has nothing to record: there is no package and no
+        # repository. The kind alone says where it comes from, which is the
+        # whole truth about it.
         if app.source.webui:
             source["webui"] = {
                 "path": app.source.webui.path,
@@ -617,6 +644,11 @@ def deployed_apps(config: Config) -> dict[str, str]:
     `lxc` group's host names; anything richer is not something this repository
     uses, and a partial parse that fails loudly beats a full one that silently
     disagrees with the play.
+
+    The scan is RECURSIVE, because Ansible's group_vars are per-group
+    directories: `group_vars/<group>/main.yml`. A flat glob finds nothing here,
+    every application reads as "not on any guest", and the install refuses with
+    a message that points at the wrong file.
     """
     inventory = config.root / "inventory"
     group_vars = inventory / "group_vars"
@@ -624,7 +656,7 @@ def deployed_apps(config: Config) -> dict[str, str]:
         return {}
 
     found: dict[str, str] = {}
-    for path in sorted(group_vars.glob("*.yml")):
+    for path in sorted(group_vars.rglob("*.yml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
@@ -634,7 +666,10 @@ def deployed_apps(config: Config) -> dict[str, str]:
         roles = data.get("app_roles")
         if not isinstance(roles, list):
             continue
+        # The group is the directory the file is in: `group_vars/omrsrc/main.yml`
+        # belongs to the group `omrsrc`, not to a group called `main`.
+        group = path.parent.name
         for role in roles:
             if isinstance(role, str):
-                found.setdefault(role, path.stem)
+                found.setdefault(role, group)
     return found

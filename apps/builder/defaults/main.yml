@@ -1,0 +1,111 @@
+---
+# builder — a guest whose purpose is to build other applications.
+#
+# This is the one application in this repository that installs no service and
+# listens on no port. It prepares a machine that other applications are built
+# on, and then it stops.
+#
+# It deliberately does NOT depend on common/python. That dependency is what
+# asserts `app_port is defined`, and a builder has no port: it serves nothing.
+# A role with no meta dependency still runs under play 2's include_role loop,
+# so nothing in playbooks/site.yml changes.
+#
+# What it does instead:
+#
+#   - installs the toolchain a build needs (git, a compiler, the archiver)
+#   - installs a pinned Node, checksummed and asserted
+#   - creates the workspace the build runs in
+#   - asserts the properties the build depends on, and refuses a guest that
+#     does not have them
+#   - writes the endpoint file the build script reads to find this guest
+#
+# Every name below follows from `app_name`, the same contract the rest of the
+# repository uses.
+
+app_name: builder
+
+# ---------------------------------------------------------------------------
+# The toolchain
+# ---------------------------------------------------------------------------
+
+# A pinned Node, fetched and checksummed.
+#
+# The pin is the point. A guest that installs "whatever apt has" gets a
+# different runtime after every apt upgrade, and a tree built against one
+# runtime can fail to run on another — which reads as an application bug and
+# is not one.
+builder_node_version: 24.14.1
+builder_node_sha256: 84d38715d449447117d05c3e71acd78daa49d5b1bfa8aacf610303920c3322be
+builder_node_dir: "/opt/{{ app_name }}/node"
+
+# Where the pinned runtime is downloaded to. The tarball stays here after it
+# is unpacked: `get_url` skips the download when the file on disk already
+# hashes to the expected value, so keeping it is what makes the download task
+# idempotent.
+builder_cache_dir: "/opt/{{ app_name }}/cache"
+builder_node: "{{ builder_node_dir }}/bin/node"
+
+# npm's JS entry, not its bin shim. The shim runs `#!/usr/bin/env node`, and
+# nothing under /opt is on PATH on a stock guest, so it dies with
+# "env: 'node': No such file or directory" before npm starts.
+builder_npm_cli: "{{ builder_node_dir }}/lib/node_modules/npm/bin/npm-cli.js"
+
+# The apt packages a build needs. `build-essential` is not optional: a
+# dependency with no prebuilt binary for this platform is compiled during
+# install, and without a compiler npm treats that optional dependency as
+# skippable and it is silently absent from the tree.
+builder_apt_packages:
+  - build-essential
+  - git
+  - ca-certificates
+  - xz-utils
+  - rsync
+
+# ---------------------------------------------------------------------------
+# The workspace
+# ---------------------------------------------------------------------------
+
+# Where builds run. On the root filesystem, in a directory the build account
+# owns, so a build that writes gigabytes does not need a second filesystem and
+# does not need root to write.
+builder_work_dir: "/var/lib/{{ app_name }}/work"
+
+# ---------------------------------------------------------------------------
+# The endpoint file
+# ---------------------------------------------------------------------------
+
+# Where this guest's address is published for the build script to read.
+#
+# It is a runtime artifact, not a source file: the address is a DHCP lease and
+# changes when the guest is rebuilt. It lives under tmp/ so it is never
+# committed, and it is rewritten by every play so it is never stale.
+#
+# The build script resolves this path from the repository root, so the two
+# sides agree without either of them hard-coding an absolute path.
+builder_endpoint_file: "{{ builder_repo_root }}/tmp/builders/{{ app_name }}.endpoint"
+
+# The repository root, for the one path this role writes on the controller.
+# `lxc_repo_root` comes from group_vars/all; `playbook_dir` is the fallback so
+# the role still works in an inventory that does not define it.
+builder_repo_root: "{{ lxc_repo_root | default(playbook_dir ~ '/..') }}"
+
+# ---------------------------------------------------------------------------
+# The properties a build depends on
+# ---------------------------------------------------------------------------
+
+# The minimums below are asserted, not assumed. A builder that is too small
+# does not fail at install — it fails hours later, during a build, with an
+# error that names a memory limit or a disk full rather than the guest.
+
+# The webpack build of a Next.js tree caps its heap at 10 GB and the process
+# reaches about 11.5 GB RSS before the build finishes. A 12 GB guest thrashes
+# on that — measured, not assumed: the build spun with 96 MB free and the
+# guest stopped answering SSH. 24 GB clears the heap with room for the native
+# build workers and the page cache.
+builder_min_memory_mb: 24576
+builder_min_cores: 6
+
+# The filesystem the workspace sits on must have this much free. Measured: the
+# checkout is 16 GB, of which 7.4 GB is the build cache that never travels and
+# 4.3 GB is node_modules. 40 GB is the floor, not the target.
+builder_work_min_free_gb: 40

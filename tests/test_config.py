@@ -86,6 +86,81 @@ def test_target_options_are_kept(tmp_path):
     assert cfg.app("example-app").target.options["vmid"] == 121
 
 
+TOOLCHAIN = """
+    version: 1
+    applications:
+      builder:
+        description: the build host
+        target:
+          kind: proxmox_lxc
+          options:
+            hostname: builder
+        source:
+          kind: toolchain
+"""
+
+
+class TestToolchainSource:
+    """The third source kind.
+
+    A toolchain application installs nothing from anywhere: it IS the
+    environment another application is built in. These tests cover the three
+    things that distinguish it from the other two kinds.
+    """
+
+    def test_a_toolchain_loads_without_a_package_or_a_repo(self, tmp_path):
+        cfg = load(write(tmp_path, TOOLCHAIN))
+        app = cfg.app("builder")
+        assert app.source.kind == "toolchain"
+        assert app.source.package is None
+        assert app.source.repo is None
+
+    def test_a_toolchain_needs_no_build_block(self, tmp_path):
+        # The other kind that installs nothing — a package — also needs no
+        # build block, so this is the case that would break if the schema
+        # ever started requiring one for every source.
+        cfg = load(write(tmp_path, TOOLCHAIN))
+        assert cfg.app("builder").build is None
+
+    def test_a_toolchain_needs_no_build(self, tmp_path):
+        assert load(write(tmp_path, TOOLCHAIN)).app("builder").needs_build is False
+
+    def test_a_toolchain_reports_its_kind_as_its_label(self, tmp_path):
+        # The label is what `appctl list` prints. A toolchain has no package
+        # and no repo, so printing either would look like a missing value
+        # rather than a category.
+        cfg = load(write(tmp_path, TOOLCHAIN))
+        assert cfg.app("builder").source.label == "toolchain"
+
+    def test_an_unknown_kind_names_the_known_ones(self, tmp_path):
+        body = TOOLCHAIN.replace("kind: toolchain", "kind: toolbox")
+        with pytest.raises(ConfigError) as excinfo:
+            load(write(tmp_path, body))
+        message = str(excinfo.value)
+        assert "toolchain" in message
+        assert "package" in message
+        assert "repo" in message
+
+    def test_a_repo_source_still_needs_a_build_block(self, tmp_path):
+        # The toolchain kind must not have loosened this for everybody.
+        body = """
+            version: 1
+            applications:
+              from-source:
+                description: sample
+                target:
+                  kind: proxmox_lxc
+                  options:
+                    hostname: sample
+                source:
+                  kind: repo
+                  repo: /tmp/checkout
+        """
+        with pytest.raises(ConfigError) as excinfo:
+            load(write(tmp_path, body))
+        assert "build" in str(excinfo.value)
+
+
 class TestRegistry:
     def test_proxmox_lxc_is_implemented(self):
         assert "proxmox_lxc" in registry.available_targets()

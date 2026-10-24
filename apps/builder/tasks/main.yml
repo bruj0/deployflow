@@ -1,0 +1,270 @@
+---
+# Prepare a guest to build other applications.
+#
+# Nothing here installs an application or starts a service. The role's whole
+# job is to make a machine that satisfies a build's requirements, and then to
+# prove that it does.
+
+# ---------------------------------------------------------------------------
+# The toolchain
+# ---------------------------------------------------------------------------
+
+- name: Refresh the apt cache
+  # `cache_valid_time` keeps the play from hitting the mirror on every run.
+  # Without it this task reports `changed` every time and the play never
+  # settles at changed=0.
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: builder_apt_packages is defined and builder_apt_packages | length > 0
+
+- name: Install the build toolchain
+  # `build-essential` is load-bearing, not decoration. A dependency with no
+  # prebuilt binary for this platform is compiled during `npm ci`, and
+  # without a compiler npm treats that optional dependency as skippable — so
+  # the package is silently absent from the tree and fails at runtime rather
+  # than at install.
+  ansible.builtin.apt:
+    name: "{{ builder_apt_packages }}"
+    state: present
+    update_cache: false
+
+# ---------------------------------------------------------------------------
+# The pinned Node
+# ---------------------------------------------------------------------------
+
+- name: Create the Node directory
+  ansible.builtin.file:
+    path: "{{ builder_node_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Create the download cache
+  # The tarball stays here. `get_url` skips the download when the file on disk
+  # already hashes to the expected value, so keeping it is what makes this
+  # task idempotent: deleting the tarball after unpacking it makes every run
+  # re-fetch 31 MB and report `changed` forever.
+  ansible.builtin.file:
+    path: "{{ builder_cache_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Download the pinned Node
+  # The checksum is the pin. `get_url` compares it against the file already
+  # there, so this task is idempotent and refuses a tampered or truncated
+  # download without a separate check.
+  ansible.builtin.get_url:
+    url: >-
+      https://nodejs.org/dist/v{{ builder_node_version }}/node-v{{ builder_node_version }}-linux-x64.tar.xz
+    dest: "{{ builder_cache_dir }}/node-v{{ builder_node_version }}-linux-x64.tar.xz"
+    checksum: "sha256:{{ builder_node_sha256 }}"
+    mode: "0644"
+
+- name: Unpack the pinned Node
+  # `remote_src: true` because the tarball was fetched onto the guest, not
+  # onto the controller. Without it the module looks for the path on the
+  # controller and fails with "Could not find or access … on the Ansible
+  # Controller" while the file sits right there on the guest.
+  #
+  # `creates` is what makes this idempotent: unpacking the same tree twice
+  # reports `changed` forever otherwise.
+  #
+  # `--strip-components=1` removes the `node-v24.14.1-linux-x64` directory the
+  # tarball is rooted at, so the tree lands at `builder_node_dir` directly
+  # instead of one level deeper.
+  ansible.builtin.unarchive:
+    src: "{{ builder_cache_dir }}/node-v{{ builder_node_version }}-linux-x64.tar.xz"
+    dest: "{{ builder_node_dir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    creates: "{{ builder_node_dir }}/bin/node"
+
+# ---------------------------------------------------------------------------
+# The workspace
+# ---------------------------------------------------------------------------
+
+- name: Create the build workspace
+  ansible.builtin.file:
+    path: "{{ builder_work_dir }}"
+    state: directory
+    mode: "0755"
+
+# ---------------------------------------------------------------------------
+# Postconditions
+# ---------------------------------------------------------------------------
+
+# Every assertion below states a property a build depends on. They are the
+# difference between "the role went green" and "the guest can build this".
+
+- name: Read the guest's architecture
+  ansible.builtin.command:
+    cmd: uname -m
+  register: builder_uname
+  changed_when: false
+
+- name: Refuse a guest that is not native x86_64
+  # This is not a style preference. esbuild is a Go binary and the Go runtime
+  # faults under emulation with "fatal error: receive on synctest channel from
+  # outside bubble" → SIGSEGV, which no amount of memory or disk fixes. The
+  # build has to run on the architecture it targets.
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} is {{ builder_uname.stdout }} but must be x86_64.
+      A build that runs under emulation faults in the Go runtime of its own
+      toolchain, so the builder has to be the target architecture.
+  when: builder_uname.stdout != "x86_64"
+
+- name: Read the installed Node version
+  ansible.builtin.command:
+    cmd: "{{ builder_node }} --version"
+  register: builder_node_version_out
+  changed_when: false
+
+- name: Refuse a Node that is not the pinned one
+  # The runtime that built the tree has to be the runtime that runs it. A
+  # guest that installs "whatever apt has" gets a different Node after every
+  # apt upgrade, and the mismatch surfaces as an application bug at use.
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} has Node {{ builder_node_version_out.stdout | trim }}
+      but {{ builder_node_version }} is pinned.
+  when: builder_node_version_out.stdout | trim != "v" + builder_node_version
+
+- name: Check that npm is present
+  # Not the bin shim: `bin/npm` runs `#!/usr/bin/env node`, and nothing under
+  # /opt is on PATH on a stock guest, so it dies with
+  # "env: 'node': No such file or directory" before npm starts. The JS entry
+  # names its interpreter directly.
+  ansible.builtin.stat:
+    path: "{{ builder_npm_cli }}"
+  register: builder_npm_stat
+
+- name: Refuse a Node without npm
+  ansible.builtin.fail:
+    msg: >-
+      {{ builder_npm_cli }} is missing, so {{ app_name }} has no npm.
+      The pinned Node tarball ships it; this means the tree is not what it
+      claims to be.
+  when: not builder_npm_stat.stat.exists
+
+- name: Read the guest's memory
+  # awk rather than grep: the value has to arrive as a bare number, because it
+  # is compared against a floor and a parse of "MemTotal:  12582912 kB" in
+  # Jinja is a regex whose escaping has to survive two layers of quoting.
+  # `df` and `awk` both print one integer and nothing else.
+  ansible.builtin.command:
+    cmd: awk '/^MemTotal:/ {print $2}' /proc/meminfo
+  register: builder_mem_kb
+  changed_when: false
+
+- name: Read the guest's core count
+  ansible.builtin.command:
+    cmd: nproc
+  register: builder_nproc
+  changed_when: false
+
+- name: Read the free space on the workspace filesystem
+  # `df --output` prints a header row above the value, so the value is the
+  # last line of stdout rather than the whole of it.
+  #
+  # No shell here: the `command` module execs the argv directly and never
+  # interprets a pipe, so `df … | tail -1` would arrive as two arguments
+  # named "|" and "tail" and fail. The header is dropped in the set_fact
+  # below instead.
+  # `-B1` gives plain bytes with no unit suffix. `-BM` appends an "M" to the
+  # number, and `| int` on "55579M" is 0 — a silent zero that reads as "the
+  # disk is full" and fails the assertion for the wrong reason.
+  ansible.builtin.command:
+    cmd: df --output=avail -B1 "{{ builder_work_dir }}"
+  register: builder_df
+  changed_when: false
+
+- name: Work out the guest's size in comparable numbers
+  # Parsed here rather than inside the `when` below, because a `when` clause
+  # that has to do arithmetic and a regex reads as one line of shell and
+  # cannot be checked by eye.
+  #
+  # /proc/meminfo reports kibibytes and `df -BM` reports mebibytes. Both are
+  # converted to megabytes so the floor below is in the same unit as the
+  # requirement.
+  ansible.builtin.set_fact:
+    builder_cores: "{{ builder_nproc.stdout | trim | int }}"
+    builder_mem_mb: "{{ builder_mem_kb.stdout | trim | int // 1024 }}"
+    builder_free_gb: "{{ (builder_df.stdout_lines | last | trim | int) // 1073741824 }}"
+
+- name: Refuse a guest too small for the build
+  # Asserted at install time, not discovered at build time. A builder that is
+  # too small fails hours later with an error that names a memory limit or a
+  # full disk, and neither names the guest as the cause.
+  #
+  # The memory floor is the webpack heap: a Next.js tree needs about 10 GB of
+  # heap and the heap cap is set below that. The disk floor is measured: the
+  # checkout is 16 GB, of which 7.4 GB is a build cache that never travels.
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} is too small for the build.
+      It has {{ builder_cores }} cores, {{ builder_mem_mb }} MB of RAM and
+      {{ builder_free_gb }} GB free on {{ builder_work_dir }}.
+      It needs at least {{ builder_min_cores }} cores,
+      {{ builder_min_memory_mb }} MB of RAM and
+      {{ builder_work_min_free_gb }} GB free.
+  when: >-
+    builder_cores | int < builder_min_cores | int or
+    builder_mem_mb | int < builder_min_memory_mb | int or
+    builder_free_gb | int < (builder_work_min_free_gb | int)
+
+- name: Check that the guest can reach the package registry
+  # A build that cannot reach the registry fails at `npm ci` with a network
+  # error that looks like a registry outage.
+  ansible.builtin.uri:
+    url: https://registry.npmjs.org/
+    method: HEAD
+    status_code: 200
+    timeout: 30
+  register: builder_registry
+
+- name: Refuse a guest that cannot reach the registry
+  ansible.builtin.fail:
+    msg: >-
+      {{ app_name }} cannot reach registry.npmjs.org
+      ({{ builder_registry.status | default('no response') }}).
+      A build would fail at npm ci with a network error that reads like a
+      registry outage.
+  when: builder_registry.status | default(0) != 200
+
+# ---------------------------------------------------------------------------
+# The endpoint file
+# ---------------------------------------------------------------------------
+
+- name: Create the endpoint directory on the controller
+  # A runtime artifact: a DHCP lease changes when the guest is rebuilt.
+  # It lives under tmp/, which is gitignored, so it is never committed and
+  # never stale in the repository.
+  ansible.builtin.file:
+    path: "{{ builder_endpoint_file | dirname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Publish this builder's endpoint
+  # The build script needs to find this guest. Guest hostnames are not
+  # resolvable from the controller — Proxmox's resolver is not the
+  # controller's — so the address has to be published somewhere both sides can
+  # read. The `lxc` role discovered it with `pct exec <vmid> hostname -I` and
+  # set `ansible_host` from it; this writes that same address down.
+  #
+  # KEY=VALUE lines, so the script that reads it needs nothing but `grep`.
+  ansible.builtin.copy:
+    dest: "{{ builder_endpoint_file }}"
+    mode: "0644"
+    content: |
+      # Written by the builder role. Do not edit.
+      # Regenerated by every `appctl install builder`.
+      host={{ ansible_host }}
+      user=root
+      node_dir={{ builder_node_dir }}
+      work={{ builder_work_dir }}
+  delegate_to: localhost
+  become: false

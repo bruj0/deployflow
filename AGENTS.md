@@ -20,6 +20,7 @@ common/         framework. Names no application, anywhere.
   python/       toolchain, service account, venv — the contract
 apps/           one directory per application
   example-app/  the sample used by the quickstart
+  builder/      a toolchain: a guest that exists to build other applications
 src/appctl/     the appctl package
   targets/      where an application runs; proxmox_lxc is the only one built
 ```
@@ -37,6 +38,17 @@ template, the storage, the bridge and the guest network live in
 `src/appctl/targets/proxmox_lxc.py`. A module outside `targets/` that mentions
 one of them is in the wrong place. A new target is a new file under
 `targets/`, and it does not change `config.py`.
+
+**A role that installs no service does not depend on `common/python`.** That
+dependency is what asserts `app_port` is defined, and a toolchain serves
+nothing. A role with no dependency still runs — play 2 loops over each host's
+`app_roles` and `include_role`s it — so no playbook changes. See
+`apps/builder/meta/main.yml`.
+
+**A toolchain's product is a machine that can build, so its role asserts the
+machine.** Not the exit code of the install commands. A guest that is too
+small does not fail at install — it fails hours later, during a build, with
+an error that names a memory limit rather than the guest.
 
 ## Commands
 

@@ -174,6 +174,16 @@ def build(config: Config, app_name: str, *, ref: str | None = None, fetch: bool 
     """
     app = config.app(app_name)
     if not app.needs_build:
+        # The message has to fit the kind it is talking about. A package source
+        # names the version; a toolchain source has no version and no
+        # repository, and saying "installed from None" would be a true-looking
+        # sentence about nothing.
+        if app.source.kind == "toolchain":
+            raise BuildError(
+                f"{app.name} is a toolchain guest, so there is nothing to build",
+                hint=f"its role assembles the environment itself; "
+                     f"run `appctl install {app.name}` to provision it",
+            )
         raise BuildError(
             f"{app.name} is installed from {app.source.package}, so there is nothing to build",
             hint=f"to change the version, edit source.package in {config.path.name} and re-run `appctl install`",

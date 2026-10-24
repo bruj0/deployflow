@@ -33,15 +33,71 @@ builds need `sharp-linux-x64`.
 loads on the guest even from a macOS build. `sharp` and `esbuild` do not, and
 they fail much later as an unrelated error deep in a request handler.
 
-So the build runs in a Linux amd64 container:
+So the build runs on a **native x86_64 build host**. That host is a guest this
+repository provisions for the purpose: `apps/builder/`, a `toolchain`
+application with 6 cores, 24 GB of RAM and a pinned Node.
 
 ```bash
-apps/omniroute/build/omr-build-linux.sh /Users/bruj0/Projects/Omniroute main
+appctl install builder        # the build host; CT 123
+
+apps/omniroute/build/omr-build-linux.sh \
+  /Users/bruj0/Projects/Omniroute main
 ```
+
+The build script finds the host itself, by reading
+`tmp/builders/builder.endpoint` — the file the builder role writes. There is
+no host argument: a guest address is a DHCP lease and a host argument would
+be a value that goes stale.
 
 The settings match the project's own CI recipe
 (`.github/workflows/build.yml`): `ONNXRUNTIME_NODE_INSTALL=skip`,
 `OMNIROUTE_USE_TURBOPACK=0`, and a 10 GB heap cap.
+
+### Why not a container on the controller
+
+A container with `--platform linux/amd64` on an arm64 host gets the
+architecture right and then falls over, in two separate ways:
+
+| Failure | Cause |
+|---|---|
+| `Next.js build worker exited with code: null and signal: SIGKILL` at ~5.6 GB | the emulated process sees the VM's memory, not the container's limit. Raising the VM to 20 GB fixes this one. |
+| `fatal error: receive on synctest channel from outside bubble` / `SIGSEGV` | esbuild is a **Go** binary, and the Go runtime faults under qemu. No amount of memory fixes this. |
+
+The second one is the real reason. Emulation is not reliable for this build,
+so the build host is native.
+
+It was the Proxmox node at first, because that machine was already x86_64 and
+already there. That is the wrong shape: the node is shared infrastructure,
+and a build that reaches 11.5 GB of RSS and writes 16 GB to `/root` is a build
+that can take the node with it. So the build host is a guest now, provisioned
+like any other application.
+
+### Why the build host clones the fork
+
+The build host runs `git clone` itself rather than receiving a transferred
+tree, for two measured reasons:
+
+- **`git rev-parse --short HEAD` has to resolve.** The build reads the sha
+  from git, and a transferred tree has no `.git`, so the artifact carries no
+  provenance at all.
+- **A tar of the controller's checkout carries macOS AppleDouble sidecars**
+  (`._aliasConfig.ts` and hundreds like it). esbuild reads them as source
+  files and the build fails with 77 errors:
+  `src/mitm/._aliasConfig.ts:1:0: ERROR: Unexpected "\x00"`.
+
+### Why the dependency tree is not reconstructed
+
+The CLI's dependency closure was first computed by walking the CLI's imports.
+That is fragile in three ways, and each one only showed up on the guest:
+
+| Miss | Symptom on the guest |
+|---|---|
+| `await import("tsx/esm")` — a dynamic import | `Cannot find package 'tsx'` |
+| the loader resolves from `src/` and `open-sse/`, not just `bin/` | `Cannot find package 'ws'` |
+| `@esbuild/linux-x64` is an *optional* dependency chosen by an install script | `The package "@esbuild/linux-x64" could not be found, and is needed by esbuild` |
+
+So the tree `npm ci` produced is shipped as-is. It is correct by
+construction.
 
 ## The receipt
 
@@ -55,7 +111,7 @@ The build writes `.deployflow-build.json` into the checkout:
   "ref": "main",
   "platform": "linux-amd64",
   "node": "24",
-  "builtAt": "2026-10-24T15:19:00Z"
+  "builtAt": "2026-10-24T15:35:29Z"
 }
 ```
 
@@ -107,14 +163,18 @@ The guest takes a DHCP lease, so its address moves. `appctl install` prints
 it.
 
 ```bash
-# Build it for the guest's platform. This is the slow part.
-apps/omniroute/build/omr-build-linux.sh /Users/bruj0/Projects/Omniroute main
+# The build host. A guest, provisioned like any other application.
+appctl install builder
+
+# Build it for the guest's platform, on that host. This is the slow part.
+apps/omniroute/build/omr-build-linux.sh \
+  /Users/bruj0/Projects/Omniroute main
 
 # Deploy it.
-appctl install omniroute-src
+appctl install omniroute
 
 # Second run must be changed=0.
-appctl install omniroute-src
+appctl install omniroute
 ```
 
 Then:

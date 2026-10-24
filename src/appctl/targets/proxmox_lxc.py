@@ -117,7 +117,10 @@ class ProxmoxLxcTarget(Target):
         try:
             result = installer.run(
                 list(context.extra_args) + ["--tags", ",".join(["lxc", app_name])],
-                secret_values=dict(context.secret_values or {}),
+                # The context calls them secret_values; the installer calls
+                # them secret_vars. They are the same mapping, and the rename is
+                # at this boundary so neither name leaks into the other.
+                secret_vars=dict(context.secret_values or {}),
                 rendered=rendered,
                 label=app_name,
             )

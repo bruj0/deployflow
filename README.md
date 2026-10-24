@@ -200,6 +200,7 @@ declarative and reviewable.
 | **Pluggable destinations** | A target interface separates "what the application is" from "where it runs". One target ships today. | `src/appctl/targets/` |
 | **Fails before side effects** | An unsupported destination or a missing secret stops the run before anything is built, downloaded or started. | `appctl install` |
 | **Run evidence** | Every run keeps its commands, log, recap and errors, so a failure is a file to read rather than a scrollback to search. | `tmp/runs/` |
+| **Build hosts as applications** | A guest whose purpose is to build other applications is a `toolchain` source: it installs no service, and its role asserts the machine can build rather than that an install succeeded. | `apps/builder/` |
 
 ## Requirements
 

@@ -9,6 +9,7 @@
 | [rendering.md](rendering.md) | YAML → config on the guest |
 | [secrets.md](secrets.md) | `.env`, and the three ways a secret leaks |
 | [build-pipeline.md](build-pipeline.md) | wheel and lockfile from a checkout |
+| [../apps/builder/README.md](../apps/builder/README.md) | a guest that exists to build other applications |
 
 Start with [overview.md](overview.md) for the current implementation and
 [architecture.md](architecture.md) for the rules that hold it together. For what

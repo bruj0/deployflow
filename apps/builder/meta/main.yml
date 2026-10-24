@@ -1,0 +1,16 @@
+---
+# No dependencies. Deliberately.
+#
+# `common/python` asserts that `app_port` is defined. A builder serves
+# nothing, so it has no port, and the assertion would fail on a guest that is
+# otherwise perfectly correct.
+#
+# A role with no dependency still runs: play 2 of playbooks/site.yml loops
+# over each host's `app_roles` and `include_role`s it. The dependency list is
+# what pulls in the shared contract, and a builder needs none of it — no
+# venv, no service account, no lockfile.
+#
+# The consequence to keep in mind: a builder does not get the framework's
+# `app_home`, `app_dir` or `app_venv` variables, and it does not get the
+# recursive chown in the play's post_tasks. It has to define what it needs.
+dependencies: []

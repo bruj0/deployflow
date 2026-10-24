@@ -76,7 +76,7 @@ Verified on a live container.
 
 ### `source`
 
-Two kinds, because they describe genuinely different things.
+Three kinds, because they describe genuinely different things.
 
 ```yaml
 # published on PyPI — nothing to build
@@ -91,11 +91,46 @@ source:
   ref: HEAD                           # default HEAD
   output: dist                        # default dist, relative to files/
   webui: {...}                        # optional, see below
+
+# nothing is installed from anywhere — the application IS the environment
+source:
+  kind: toolchain                     # required
 ```
 
 `appctl build <name>` on a `package` source exits non-zero and says there is
 nothing to build. That is deliberate: silently succeeding would hide a
 misconfiguration.
+
+#### `kind: toolchain`
+
+A toolchain application installs no service and publishes no port. Its role
+assembles the environment another application is built in — a compiler, a
+pinned runtime, a workspace — and then stops.
+
+It exists because the alternative is to describe that environment as one of
+the other two kinds, and both are lies:
+
+- `package` claims something is installed from a registry. Nothing is.
+- `repo` claims there is a checkout to build. There is not one; and the schema
+  requires a `build:` block for a `repo` source, so the manifest would carry a
+  block that does nothing.
+
+So a toolchain source has no `package`, no `repo` and no `build:` block, and
+`appctl build` on it says there is nothing to build for the same reason a
+`package` does.
+
+The role for a toolchain has **no dependency on `common/python`**, and that is
+load-bearing rather than a style choice: `common/python` asserts that
+`app_port` is defined, and a builder serves nothing. A role with no dependency
+still runs — play 2 of `playbooks/site.yml` loops over each host's
+`app_roles` and `include_role`s it — so nothing in the playbook changes.
+
+The builder application in this repository is the worked example. Its
+postconditions assert the properties a build depends on rather than the exit
+codes of the install commands, and it publishes its address to
+`tmp/builders/<name>.endpoint` so the build script can find it: guest
+hostnames do not resolve from the controller, because Proxmox's resolver is
+not the controller's.
 
 ### `source.webui`
 

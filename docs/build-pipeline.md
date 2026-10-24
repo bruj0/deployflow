@@ -118,3 +118,16 @@ error: example-app is installed from example-app==1.0.0, so there is nothing to 
 
 That is deliberate. Silently succeeding would hide a misconfiguration where
 someone expected a build and the version was never pinned.
+
+A `toolchain` source says the same thing for a third reason. It installs
+nothing from anywhere — it *is* the environment another application is built
+in — so there is no artifact to produce and nothing to fetch:
+
+```
+error: builder is a toolchain guest, so there is nothing to build
+
+its role assembles the environment itself; run `appctl install builder` to provision it
+```
+
+See [configuration.md](configuration.md#kind-toolchain) for what a toolchain
+source is and why it is not one of the other two kinds.

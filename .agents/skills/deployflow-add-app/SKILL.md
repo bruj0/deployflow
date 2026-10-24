@@ -350,6 +350,89 @@ has nothing to compare and either reinstalls every time or trusts a mtime.
     (om_receipt_stat.stat.content | from_json).commit != om_source_sha
 ```
 
+## An application whose purpose is to build another application
+
+The third kind of application is a **toolchain**: a guest that installs no
+service, publishes no port, and exists so other applications can be compiled
+on it. `apps/builder/` is the worked example.
+
+It is worth writing because the alternative is to describe that guest as one
+of the two kinds that exist for shipped applications, and both are lies. A
+`package` source claims something comes from a registry — nothing does. A
+`repo` source claims there is a checkout to build — there is not one, and the
+schema demands a `build:` block that would do nothing.
+
+So there is a third source kind, and it says exactly what it is:
+
+```yaml
+builder:
+  description: the guest other applications are built on
+  target:
+    kind: proxmox_lxc
+    options:
+      hostname: builder
+      vmid: 123
+      bind_host: 127.0.0.1
+  source:
+    kind: toolchain
+  secrets: []
+```
+
+**The role must not depend on `common/python`.** That dependency is what
+asserts `app_port is defined`, and a toolchain serves nothing. A role with
+no dependency still runs — play 2 loops over each host's `app_roles` and
+`include_role`s it — so no playbook changes. Write `dependencies: []` and say
+why in a comment, because an empty list in a role that otherwise has one
+looks like an oversight.
+
+**The postconditions are the whole role.** A toolchain's product is a machine
+that can build something, so every assertion is about the machine rather than
+about an install:
+
+| Assertion | What it catches |
+|---|---|
+| `uname -m` is `x86_64` | a builder running under emulation, where esbuild's Go runtime faults |
+| the runtime reports the pinned version | a runtime the tree was not built against |
+| ≥ 24 GB of RAM | a guest that thrashes during the build |
+| ≥ 40 GB free on the workspace | a build that fails on "No space left on device" |
+| the package registry is reachable | a build that fails at `npm ci` |
+
+**Assert the minimums, not the current values.** A toolchain that is too small
+does not fail at install — it fails hours later, during a build, with an error
+that names a memory limit rather than the guest. Measured: a 12 GB builder
+ran a build to 11.5 GB RSS, stopped answering SSH entirely, and left
+`pct exec` failing with "Cannot allocate memory - Failed to clone attached
+process". The play that launched it was green.
+
+**Publish the address; do not name the guest.** Guest hostnames do not resolve
+from the controller — Proxmox's resolver is not the controller's — so a script
+that needs to reach the guest has to read the lease from somewhere. The
+`lxc` role already discovers it with `pct exec <vmid> -- hostname -I`; the
+toolchain role writes it to a file under `tmp/`, which is gitignored because
+the address is a DHCP lease and changes when the guest is rebuilt.
+
+```
+tmp/builders/builder.endpoint
+```
+
+```
+host=10.0.0.80
+user=root
+node_dir=/opt/builder/node
+work=/var/lib/builder/work
+```
+
+**Put the user in the file, not in the script.** A build script that reads
+`host` and leaves the user out gets `$USER` from ssh, which is not `root` on
+the controller, and the connection fails with "Too many authentication
+failures" — an error that looks like a credential problem and is not one.
+
+**A toolchain's runtime is pinned in one place.** If the build script also
+installs the runtime, there are two copies of the version and they drift. The
+role installs it, checksummed, and the build script *asserts* it is there and
+fails with a named error. That is the difference between an environment that
+is provisioned and one that is whatever `apt-get` returned that day.
+
 ## Postconditions: non-negotiable
 
 Every role must assert the result, not the exit code. These four caught real
@@ -496,6 +579,26 @@ to equal an untrimmed expectation. Check both sides.
 - **A host with no fixed address cannot be asserted by name.** Assert the address
   the process reports it bound, not a configured one, or the assertion tests the
   inventory rather than the service.
+- **`df --output=avail -B M` prints a unit suffix, and `| int` on `55579M` is 0.**
+  A disk assertion that reads 0 MB free fails for the wrong reason, and the
+  message says "too small" when the disk is full of room. Use `-B1` and divide,
+  or strip the suffix.
+- **`df --output` prints a header row above the value.** The value is the last
+  line of stdout, not the whole of it.
+- **The `command` module never runs a shell.** `df … | tail -1` arrives as
+  two arguments named `|` and `tail` and fails with a non-zero exit. Pipe in
+  Jinja, or make the command print one value and nothing else.
+- **A regex inside a YAML string inside a Jinja expression needs four layers
+  of escaping**, and it fails as `NoneType has no attribute group` rather
+  than as a syntax error. When a value has to be parsed, make the command
+  print a bare number: `awk '/^MemTotal:/ {print $2}' /proc/meminfo` beats a
+  `regex_search` on `grep MemTotal /proc/meminfo`.
+- **`get_url` is only idempotent if the file stays.** A task that downloads a
+  tarball, unpacks it and then deletes the tarball re-downloads 31 MB on every
+  run and reports `changed` forever. Keep the download in a cache directory.
+- **A `set_fact` whose value is a plain integer string fails the play** with
+  "Conditional result (True) was derived from value of type 'str'". Pipe it
+  through `| bool` or compare against a typed value.
 
 ## Adding a guest, not an app
 

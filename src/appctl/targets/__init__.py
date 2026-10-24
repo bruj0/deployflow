@@ -28,7 +28,7 @@ The registry below is the whole of what this version supports.
 
 from __future__ import annotations
 
-from .base import Target, TargetError, TargetResult
+from .base import Target, TargetContext, TargetError, TargetResult
 from .registry import (
     available_targets,
     is_implemented,
@@ -43,6 +43,7 @@ from . import proxmox_lxc as _proxmox_lxc  # noqa: E402,F401
 
 __all__ = [
     "Target",
+    "TargetContext",
     "TargetError",
     "TargetResult",
     "available_targets",

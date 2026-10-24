@@ -1,0 +1,16 @@
+---
+# Handlers run at the END of the play, not where they are defined.
+#
+# This one exists because a unit that changed has to be restarted for the
+# change to take effect. `state: started` on an already-running service is a
+# no-op, so without a restart the guest keeps serving the OLD unit until it
+# is rebooted — and the play reports success the whole time.
+#
+# The name is a template so it matches the `notify:` in tasks/main.yml.
+# Ansible templates handler names, and a notify that matches no handler is
+# ignored silently, so the two spellings must match exactly.
+- name: Restart {{ app_service_name }}
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    state: restarted
+    daemon_reload: true

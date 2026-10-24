@@ -121,11 +121,15 @@ def cmd_list(args) -> int:
     # truncated column here hides exactly the thing the operator came to read.
     rows: list[tuple[str, str, str, str, str, str, str]] = []
     for name, app in sorted(cfg.applications.items()):
-        if app.source.kind == "package":
-            source = app.source.package or ""
-        else:
+        if app.source.kind == "repo":
             ref = (app.build.ref if app.build and app.build.ref else app.source.ref) or ""
             source = f"repo@{ref}"
+        else:
+            # `package` prints the version, `toolchain` prints the kind. Both
+            # are one short token, and both are true: a toolchain has no
+            # version and no repository, and printing an empty column for it
+            # would read as a missing value rather than as a category.
+            source = app.source.label
         missing = secrets_mod.missing(cfg.root, app.secrets)
         if not app.secrets:
             state = "-"

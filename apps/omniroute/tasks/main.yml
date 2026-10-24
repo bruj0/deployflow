@@ -151,10 +151,17 @@
 - name: Work out whether Node has to be unpacked
   # An exact compare, not a substring: "v24.14.1" is contained in
   # "v24.14.10", and a substring test would keep the old runtime forever.
+  #
+  # The result is a BOOL, not a string. A YAML folded scalar (`>-`) yields a
+  # string, and Ansible refuses a string in a `when:` that is not already a
+  # boolean:
+  #   Conditional result (True) was derived from value of type 'str'
+  # which reads like a broken expression rather than a wrong type. The
+  # `| bool` filter is what makes the intent explicit.
   ansible.builtin.set_fact:
     om_node_needs_install: >-
-      om_node_installed.rc != 0 or
-      om_node_installed.stdout | trim != 'v' ~ om_node_version
+      {{ ((om_node_installed.rc != 0) or
+          (om_node_installed.stdout | trim != 'v' ~ om_node_version)) | bool }}
 
 - name: Fetch the pinned Node release
   ansible.builtin.get_url:
@@ -258,6 +265,21 @@
   # and transfers all of it again, reporting changed forever.
   #
   # delete: true so the guest cannot keep a file the controller dropped.
+  #
+  # There is NO `--chown` here, and that is deliberate. The controller is
+  # macOS, whose rsync is openrsync — a compatible reimplementation that does
+  # not implement `--chown`:
+  #   rsync: unrecognized option `--chown=omniroute:omniroute'
+  # The task fails outright, so this is not a silent difference.
+  #
+  # There is NO `--owner --group` either, and that one is a loop rather than a
+  # failure. Those flags make rsync set each file's owner to the CONTROLLER's
+  # uid — 501 on macOS, which is nobody on the guest — and the chown task
+  # below then sets it back to the service account. The next run repeats
+  # both, and the role reports changed forever on a tree that did not change:
+  #   ok=54  changed=2   (every run, on an unchanged tree)
+  # Without the flags rsync leaves the ownership of existing files alone, the
+  # chown below settles the new ones once, and the second run is changed=0.
   ansible.posix.synchronize:
     src: "{{ om_local_source }}/"
     dest: "{{ om_source_dir }}/"
@@ -266,10 +288,26 @@
     archive: false
     delete: true
     rsync_opts: >-
-      --links --times --owner --group --chown={{ app_user }}:{{ app_user }}
+      --links --times
       {{ om_sync_excludes | map('regex_replace', '^', '--exclude=') | join(' ') }}
   delegate_to: localhost
   become: false
+
+- name: Hand the shipped tree to the service account
+  # The tree arrives owned by whoever ran rsync on the controller — the
+  # operator, on macOS. The service account has to own it: the server writes
+  # its database and its caches under the state directory, and the unit runs
+  # as this account.
+  #
+  # `recurse` is what makes this one task rather than thousands. It is also why
+  # this runs AFTER the transfer: chowning before the copy would leave the
+  # copied files owned by the controller's user again.
+  ansible.builtin.file:
+    path: "{{ om_source_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    recurse: true
 
 - name: Assert the server bundle reached the guest
   # The transfer is the part most likely to fail quietly. The file is what the
@@ -364,7 +402,12 @@
     owner: root
     group: root
     mode: "0600"
-    no_log: true
+  # `no_log` is a TASK keyword, not a module parameter. Inside the module
+  # block Ansible rejects it outright:
+  #   Unsupported parameters for (ansible.legacy.copy) module: no_log
+  # and the task never runs. At task level it suppresses the template's
+  # rendered content, which is the only place the secrets appear.
+  no_log: true
   register: om_secrets_written
 
 - name: Write the application environment file
