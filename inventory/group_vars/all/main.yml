@@ -8,8 +8,8 @@
 #
 # Replace this with your own key before running anything.
 lxc_ssh_public_key: >-
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIReplaceThisWithYourOwnKey
-  you@example
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAehCKabzXnclJf1J8xKbuimS0m3L5zedOqgtPQf5Zb
+  bruj0@workstation
 
 # The repository root, for roles that read a build artifact from the controller.
 #

@@ -1,0 +1,31 @@
+---
+# What this guest runs.
+#
+# The list names roles under apps/. Each role declares its dependency on
+# common/python through its meta/main.yml, so adding an application never
+# edits a playbook.
+app_roles:
+  - omniroute
+
+# The checkout the role ships from. This is a controller path: the role reads
+# it with delegate_to: localhost, never on the guest.
+#
+# The role's defaults already name this, and they are set here anyway so that
+# the value that matters is visible next to the guest that uses it. Change it
+# in both places if the checkout moves — the role's default is what the role
+# reads, and this one documents the intent.
+om_local_source: /Users/bruj0/Projects/Omniroute
+
+# The branch that was asked for. `main` is a development branch: it moves.
+# The role resolves it to a commit and refuses a tree built from a different
+# one, so a stale build is a refusal rather than a silent deployment.
+om_source_ref: main
+
+# The guest is bigger than the framework default. The application is a
+# Next.js server with a 2 GB dependency tree, and the CI build that produces
+# it caps the heap at 10 GB; a 2 GB guest runs out of memory during the
+# install rather than during the build.
+lxc_cores: 4
+lxc_memory: 8192
+lxc_swap: 1024
+lxc_rootfs_gb: 40

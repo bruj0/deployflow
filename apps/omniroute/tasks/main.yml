@@ -1,0 +1,604 @@
+---
+# OmniRoute, built from a source checkout on the controller and served from a
+# guest.
+#
+# This is the from-source shape. A published npm release is one pinned version
+# that `npm install` fetches; a source build has no such artifact, so the
+# controller builds it and the role ships it. The role's job is to refuse to
+# ship a tree that is not the one that was asked for — never to build, because
+# a role that rebuilds on every play cannot tell "no changes" from "rebuilt".
+#
+# The checks at the end are the point of this role. A play that ends green
+# proves that Ansible ran, not that the application is usable. Each check below
+# stands in for a failure that a green play would otherwise hide:
+#
+#   the build receipt matches   the guest runs a tree nobody asked for
+#   the tree is on disk          the transfer silently stopped half way
+#   the native module loads      a darwin binary on a linux guest
+#   the unit is active           systemd accepted the unit but the service died
+#   the port is listening        the process is up but bound somewhere else
+#   the endpoint answers         the service listens but does not serve
+#   the key gate refuses         an inference plane any device can spend
+
+# ---------------------------------------------------------------------------
+# The source checkout
+# ---------------------------------------------------------------------------
+
+- name: Refuse to install without the application name and port
+  # app_name and app_port have no defaults on purpose: an undefined variable
+  # deep inside a templated path is harder to read than one clear message.
+  ansible.builtin.assert:
+    that:
+      - app_name is defined
+      - app_name | length > 0
+      - app_port is defined
+      - om_local_source is defined
+    fail_msg: >-
+      app_name, app_port and om_local_source must be set in
+      apps/omniroute/defaults/main.yml.
+    quiet: true
+    success_msg: "installing {{ app_name }} from source"
+
+- name: Check that the source checkout is on the controller
+  # A controller path, never a guest path: the role reads the checkout with
+  # delegate_to: localhost and the guest never sees it.
+  ansible.builtin.stat:
+    path: "{{ om_local_source }}/package.json"
+  delegate_to: localhost
+  become: false
+  register: om_source_checkout
+
+- name: Fail when the source checkout is not on the controller
+  ansible.builtin.fail:
+    msg: >-
+      No checkout at {{ om_local_source }} on the controller.
+      Clone the fork there before deploying: this role ships a tree, it does
+      not fetch one.
+  when: not om_source_checkout.stat.exists
+
+- name: Read the commit the checkout is at
+  # The sha, not the branch name. `main` moves, and two plays that both build
+  # `main` produce two different artifacts.
+  ansible.builtin.command:
+    argv: [git, -C, "{{ om_local_source }}", rev-parse, HEAD]
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: om_source_head
+
+- name: Check that the checkout is on the requested ref
+  ansible.builtin.command:
+    argv: [git, -C, "{{ om_local_source }}", rev-parse, "{{ om_source_ref }}"]
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: om_source_ref_sha
+
+- name: Fail when the checkout is not on the requested ref
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_local_source }} is at {{ om_source_head.stdout | trim }}, which is
+      not {{ om_source_ref }} ({{ om_source_ref_sha.stdout | trim }}).
+      Check out the ref first.
+  when: om_source_head.stdout | trim != om_source_ref_sha.stdout | trim
+
+- name: Read the build receipt
+  # The receipt is what the build writes. It records the sha the tree was
+  # built from, so the role can refuse a tree that is not the one asked for.
+  ansible.builtin.stat:
+    path: "{{ om_build_receipt }}"
+  delegate_to: localhost
+  become: false
+  register: om_receipt_stat
+
+- name: Read the receipt
+  # `slurp` + `from_json` rather than reading the file directly: the receipt is
+  # JSON written by a build step, and a missing or malformed one must fail
+  # with a message that names the problem, not a parse error.
+  ansible.builtin.slurp:
+    src: "{{ om_build_receipt }}"
+  delegate_to: localhost
+  become: false
+  register: om_receipt_raw
+  when: om_receipt_stat.stat.exists
+
+- name: Fail when the tree was not built from the requested commit
+  # The refusal, stated in full. A tree built from another commit is not a
+  # stale tree, it is a different application, and shipping it silently is
+  # the one failure this role cannot have.
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_build_receipt }} does not name the commit that was asked for.
+      The checkout is at {{ om_source_head.stdout | trim }}, and the receipt
+      says {{ (om_receipt_raw.content | b64decode | from_json).commit | default('nothing') }}.
+      Build it on the controller:
+        cd {{ om_local_source }} && git checkout {{ om_source_ref }} && npm ci && npm run build:release
+  when:
+    - not om_receipt_stat.stat.exists
+    - or: >-
+        (om_receipt_raw.content | b64decode | from_json).commit | default('')
+        != om_source_head.stdout | trim
+
+- name: Fail when the build produced no server bundle
+  # A checkout without a build looks exactly like a build that failed: both
+  # are a tree with no dist/server.js. The receipt can exist and the artifact
+  # still be missing, so both are checked.
+  ansible.builtin.stat:
+    path: "{{ om_local_source }}/dist/server.js"
+  delegate_to: localhost
+  become: false
+  register: om_dist_stat
+
+- name: Fail when the build produced no server bundle
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_local_source }}/dist/server.js does not exist, so the tree was
+      never built. Run this on the controller:
+        cd {{ om_local_source }} && npm ci && npm run build:release
+  when: not om_dist_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# The runtime
+# ---------------------------------------------------------------------------
+
+- name: Read the Node release that is installed
+  ansible.builtin.command:
+    argv: ["{{ om_node }}", --version]
+  changed_when: false
+  failed_when: false
+  register: om_node_installed
+
+- name: Work out whether Node has to be unpacked
+  # An exact compare, not a substring: "v24.14.1" is contained in
+  # "v24.14.10", and a substring test would keep the old runtime forever.
+  ansible.builtin.set_fact:
+    om_node_needs_install: >-
+      om_node_installed.rc != 0 or
+      om_node_installed.stdout | trim != 'v' ~ om_node_version
+
+- name: Fetch the pinned Node release
+  ansible.builtin.get_url:
+    url: "https://nodejs.org/dist/v{{ om_node_version }}/node-v{{ om_node_version }}-linux-x64.tar.xz"
+    dest: "{{ app_home }}/node-v{{ om_node_version }}-linux-x64.tar.xz"
+    checksum: "sha256:{{ om_node_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: om_node_needs_install
+
+- name: Create the Node directory
+  ansible.builtin.file:
+    path: "{{ om_node_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: om_node_needs_install
+
+- name: Unpack Node
+  ansible.builtin.unarchive:
+    src: "{{ app_home }}/node-v{{ om_node_version }}-linux-x64.tar.xz"
+    dest: "{{ om_node_dir }}"
+    remote_src: true
+    # strip-components=1 removes the top directory the tarball wraps
+    # everything in, so the binary lands at <dir>/bin/node and not
+    # <dir>/node-v<version>-linux-x64/bin/node.
+    extra_opts: [--strip-components=1]
+    owner: root
+    group: root
+  when: om_node_needs_install
+
+- name: Read back the Node release that is now installed
+  ansible.builtin.command:
+    argv: ["{{ om_node }}", --version]
+  changed_when: false
+  failed_when: false
+  register: om_node_verified
+
+- name: Fail when the pinned Node is not the one on disk
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_node }} reports v{{ om_node_verified.stdout | default('nothing') | trim }},
+      but the pinned release is v{{ om_node_version }}.
+  when: om_node_verified.rc != 0 or om_node_verified.stdout | trim != 'v' ~ om_node_version
+
+# ---------------------------------------------------------------------------
+# State directories
+# ---------------------------------------------------------------------------
+
+- name: Create the service home directory
+  ansible.builtin.file:
+    path: "{{ om_home }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0700"
+
+- name: Create the npm cache directory
+  ansible.builtin.file:
+    path: "{{ om_npm_cache }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the credentials directory
+  ansible.builtin.file:
+    path: "{{ om_secrets_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the omniroute command
+  # A wrapper, not a symlink to the package's own bin entry: that shim runs
+  # `#!/usr/bin/env node`, and nothing under app_home is on PATH on a stock
+  # guest, so it dies before the application starts.
+  ansible.builtin.template:
+    src: omniroute-cli.sh.j2
+    dest: "{{ om_cli }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+# ---------------------------------------------------------------------------
+# The tree
+# ---------------------------------------------------------------------------
+
+- name: Ship the built tree to the guest
+  # One synchronize from the controller. The tree is the artifact: it was built
+  # on the controller, and the guest runs it as it was built.
+  #
+  # --links and --times are load-bearing and each failure is silent. Without
+  # --links a symlinked node_modules arrives with its packages but empty
+  # subdirectories, and every entry point fails with ERR_MODULE_NOT_FOUND for
+  # a package that is present. Without --times, synchronize's own
+  # --delay-updates staging renames every file at the end of the run, which
+  # gives it a fresh mtime — so the next run sees the whole tree as different
+  # and transfers all of it again, reporting changed forever.
+  #
+  # delete: true so the guest cannot keep a file the controller dropped.
+  ansible.posix.synchronize:
+    src: "{{ om_local_source }}/"
+    dest: "{{ om_source_dir }}/"
+    recursive: true
+    compress: true
+    archive: false
+    delete: true
+    rsync_opts: >-
+      --links --times --owner --group --chown={{ app_user }}:{{ app_user }}
+      {{ om_sync_excludes | map('regex_replace', '^', '--exclude=') | join(' ') }}
+  delegate_to: localhost
+  become: false
+
+- name: Assert the server bundle reached the guest
+  # The transfer is the part most likely to fail quietly. The file is what the
+  # unit starts, so its absence is the failure that matters.
+  ansible.builtin.stat:
+    path: "{{ om_package_cli }}"
+  register: om_cli_stat
+
+- name: Fail when the tree did not arrive
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_package_cli }} is not on the guest. The tree was not transferred
+      completely. Check the synchronize task above.
+  when: not om_cli_stat.stat.exists
+
+- name: Assert the server bundle reached the guest
+  ansible.builtin.stat:
+    path: "{{ om_dist_dir }}/server.js"
+  register: om_server_stat
+
+- name: Fail when the server bundle did not arrive
+  ansible.builtin.fail:
+    msg: >-
+      {{ om_dist_dir }}/server.js is not on the guest. The tree arrived
+      without its build output.
+  when: not om_server_stat.stat.exists
+
+- name: Assert the native SQLite binding loads
+  # The one postcondition that catches the platform mistake this shape invites.
+  # A tree built on an arm64 macOS controller carries darwin binaries, and the
+  # guest is x86_64 Linux: better-sqlite3 has a prebuild for every platform,
+  # so it loads, but the sharp and esbuild bindings do not, and the failure
+  # surfaces much later as an unrelated error.
+  #
+  # Resolved through the shipped tree's own package.json, so the require
+  # resolves the way the application resolves it.
+  ansible.builtin.command:
+    argv:
+      - "{{ om_node }}"
+      - --input-type=module
+      - -e
+      - >-
+        import { createRequire } from "node:module";
+        const require = createRequire("{{ om_source_dir }}/package.json");
+        const Database = require("better-sqlite3");
+        const db = new Database(":memory:");
+        db.exec("CREATE TABLE t (x INTEGER)");
+        db.prepare("INSERT INTO t VALUES (?)").run(42);
+        const n = db.prepare("SELECT count(*) c FROM t").get().c;
+        if (n !== 1) throw new Error("unexpected row count " + n);
+        console.log("sqlite ok");
+  changed_when: false
+  failed_when: false
+  register: om_native_binding
+
+- name: Fail when the native SQLite binding does not load
+  ansible.builtin.fail:
+    msg: >-
+      The shipped tree cannot load better-sqlite3:
+      {{ om_native_binding.stderr | default('no error output') | trim }}
+      A tree built on a different platform than the guest is the usual cause.
+  when: om_native_binding.rc != 0
+
+- name: Run the application's own diagnostic
+  # The application's own opinion of its health, rather than this role's.
+  ansible.builtin.command:
+    argv: ["{{ om_cli }}", doctor, --no-liveness]
+    chdir: "{{ om_data_dir }}"
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: om_doctor
+
+- name: Fail when the application reports an unhealthy install
+  ansible.builtin.fail:
+    msg: >-
+      The application reported an unhealthy install:
+      {{ om_doctor.stdout | default('') | trim }}
+      {{ om_doctor.stderr | default('') | trim }}
+  when: om_doctor.rc != 0
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+- name: Write the credentials file
+  # root:root 0600. systemd reads it as PID 1 before it drops to the service
+  # account, so the service account never needs to read it.
+  ansible.builtin.template:
+    src: omniroute-secrets.env.j2
+    dest: "{{ om_secrets_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+    no_log: true
+  register: om_secrets_written
+
+- name: Write the application environment file
+  ansible.builtin.template:
+    src: omniroute.env.j2
+    dest: "{{ om_env_file }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0600"
+  register: om_env_written
+
+# ---------------------------------------------------------------------------
+# The service
+# ---------------------------------------------------------------------------
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: omniroute.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: om_unit
+
+- name: Reload systemd when the unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: om_unit.changed
+
+- name: Start OmniRoute and make it survive a reboot
+  # A restart when the configuration or the unit changed, a plain start
+  # otherwise: a restart on every play would make the role report changed
+  # forever, and would drop live traffic on every install.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted' if
+         (om_secrets_written.changed or om_env_written.changed or om_unit.changed)
+         else 'started' }}
+    daemon_reload: true
+
+# ---------------------------------------------------------------------------
+# Postconditions
+# ---------------------------------------------------------------------------
+
+- name: Read the address the guest is reachable on
+  # A host with no fixed address cannot be asserted by name: Proxmox leases
+  # one and the address moves.
+  ansible.builtin.shell:
+    cmd: ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1
+  changed_when: false
+  register: om_guest_address
+
+- name: Work out the address the controller can reach this guest on
+  ansible.builtin.set_fact:
+    om_lan_address: "{{ om_guest_address.stdout | trim }}"
+    om_reachable_from_controller: >-
+      {{ app_bind_host in ['0.0.0.0', '::'] and (om_guest_address.stdout | trim) | length > 0 }}
+
+- name: Wait for the dashboard port to accept connections
+  # systemd returns from `start` when it accepts the job, which is seconds
+  # before a composed application binds. Without this wait the checks below
+  # fail against a service that simply has not finished starting.
+  ansible.builtin.wait_for:
+    host: "{{ om_guest_address.stdout | trim }}"
+    port: "{{ app_port }}"
+    state: started
+    timeout: 300
+  when: om_reachable_from_controller
+
+- name: Wait for the live dashboard socket to accept connections
+  ansible.builtin.wait_for:
+    host: "{{ om_guest_address.stdout | trim }}"
+    port: "{{ om_live_ws_port }}"
+    state: started
+    timeout: 120
+  when:
+    - om_reachable_from_controller
+    - om_live_ws_host in ['0.0.0.0', '::']
+
+- name: Wait for the server to report itself ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/healthz"
+    method: GET
+    status_code: 200
+  become_user: "{{ app_user }}"
+  register: om_healthz
+  until: om_healthz.status | default(0) == 200
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Assert the application wrote its own store
+  # A running server with nothing to log in to.
+  ansible.builtin.stat:
+    path: "{{ om_data_dir }}/storage.sqlite"
+  register: om_database
+
+- name: Fail when the application wrote no store
+  ansible.builtin.fail:
+    msg: >-
+      The server is running but wrote no store at
+      {{ om_data_dir }}/storage.sqlite.
+  when: not om_database.stat.exists or om_database.stat.size | int == 0
+
+- name: Read the addresses the process is actually listening on
+  # `ss` reports the address the process bound, which is not the one the role
+  # asked for. A service that came up on 127.0.0.1 when the role configured
+  # 0.0.0.0 passes an is-active check and is unreachable from the LAN.
+  ansible.builtin.shell:
+    cmd: ss -H -ltn 'sport = :{{ item }}' | awk '{print $4}' | head -1
+  changed_when: false
+  loop:
+    - "{{ app_port }}"
+    - "{{ om_live_ws_port }}"
+  register: om_listeners
+
+- name: Fail when a listener is not on the address this role configured
+  ansible.builtin.fail:
+    msg: >-
+      Port {{ item.item }} is listening on {{ item.stdout | default('nothing') | trim }},
+      not on {{ app_bind_host }}.
+  loop: "{{ om_listeners.results }}"
+  when:
+    - item.stdout is defined
+    - item.stdout | length > 0
+    - item.stdout | trim | regex_replace(':\d+$', '') not in (['0.0.0.0', '*', '::'] if app_bind_host in ['0.0.0.0', '::'] else [app_bind_host])
+
+- name: Assert the inference plane refuses a caller with no credential
+  # The strongest postcondition this application has. A server that serves
+  # /v1 without a key is spending the operator's provider credentials for
+  # anyone on the network, and nothing else in the play would notice.
+  ansible.builtin.uri:
+    url: "http://{{ om_lan_address }}:{{ app_port }}/v1/chat/completions"
+    method: POST
+    body_format: json
+    body:
+      model: probe
+      messages:
+        - role: user
+          content: probe
+    return_content: true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: om_v1_anonymous
+  when: om_reachable_from_controller
+
+- name: Fail when the inference plane served an unauthenticated caller
+  ansible.builtin.fail:
+    msg: >-
+      /v1/chat/completions answered an unauthenticated caller with
+      {{ om_v1_anonymous.status | default('no response') }}.
+      REQUIRE_API_KEY is {{ om_require_api_key }}.
+  when:
+    - om_reachable_from_controller
+    - om_v1_anonymous is not skipped
+    - om_v1_anonymous.status | default(0) != 401
+
+- name: Assert the key gate is what refused it
+  # The status code alone is not enough: a proxy in front of the service can
+  # also answer 401. The body names the gate.
+  ansible.builtin.uri:
+    url: "http://{{ om_lan_address }}:{{ app_port }}/v1/chat/completions"
+    method: POST
+    body_format: json
+    body:
+      model: probe
+      messages:
+        - role: user
+          content: probe
+    headers:
+      Authorization: "******"
+    return_content: true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: om_v1_bad_key
+  when: om_reachable_from_controller
+
+- name: Fail when the key gate is not the thing refusing traffic
+  ansible.builtin.fail:
+    msg: >-
+      /v1/chat/completions answered a bad key with
+      {{ om_v1_bad_key.status | default('no response') }}, and the body does
+      not name the key gate.
+  when:
+    - om_reachable_from_controller
+    - om_v1_bad_key is not skipped
+    - om_v1_bad_key.status | default(0) != 401
+
+- name: Assert the dashboard demands a login
+  ansible.builtin.uri:
+    url: "http://{{ om_lan_address }}:{{ app_port }}/api/providers"
+    method: GET
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  register: om_management_anonymous
+  when: om_reachable_from_controller
+
+- name: Fail when the dashboard serves an anonymous caller
+  ansible.builtin.fail:
+    msg: >-
+      /api/providers answered an anonymous caller with
+      {{ om_management_anonymous.status | default('no response') }}.
+  when:
+    - om_reachable_from_controller
+    - om_management_anonymous is not skipped
+    - om_management_anonymous.status | default(0) != 401
+
+- name: Assert the unit is enabled for the next boot
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, "{{ app_service_name }}"]
+  changed_when: false
+  register: om_unit_enabled
+
+- name: Fail when the unit is not enabled for the next boot
+  ansible.builtin.fail:
+    msg: >-
+      The unit is {{ om_unit_enabled.stdout | default('unknown') | trim }},
+      so the service does not come back after a reboot.
+  when: om_unit_enabled.stdout | trim != 'enabled'
+
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is built from source and serving on port {{ app_port }}"
+      - "commit: {{ om_source_head.stdout | trim }}"
+      - "unit {{ app_service_name }}: active and enabled"
+      - "listener on {{ app_port }}: {{ om_listeners.results[0].stdout | default('unknown') | trim }}"
+      - "store: {{ om_data_dir }}/storage.sqlite"
+      - "key gate: refuses an unauthenticated caller"

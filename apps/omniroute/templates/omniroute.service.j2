@@ -1,0 +1,58 @@
+[Unit]
+Description=OmniRoute AI proxy router (built from source)
+Documentation=https://github.com/bruj0/OmniRoute
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The server emits sd_notify and pings a watchdog. It does so from a child the
+# CLI spawns detached, which is why NotifyAccess is `all`: the process that
+# notifies is not the main PID. If a future release stops notifying, this unit
+# fails at TimeoutStartSec with "Timeout waiting for READY=1" — set Type=simple
+# and OMNIROUTE_DISABLE_SD_NOTIFY=1 rather than raising the timeout.
+Type=notify
+NotifyAccess=all
+# The server pings every 60 s. Never below 120 (docs/ops/MONITORING_GUIDE.md).
+WatchdogSec=180
+TimeoutStartSec=300
+# SQLite closes its store on SIGTERM; give it room to finish a write rather than
+# letting systemd escalate to SIGKILL into a half-written database.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+User={{ app_user }}
+Group={{ app_user }}
+
+# The state directory, not the install root. bin/omniroute.mjs reads
+# process.cwd()/.env as one of its env sources, so the working directory is a
+# place a stray .env can silently inject settings. Here it also means any
+# accidental write lands somewhere the backup already covers.
+WorkingDirectory={{ om_data_dir }}
+Environment=HOME={{ om_home }}
+Environment=DATA_DIR={{ om_data_dir }}
+Environment=PATH={{ om_node_dir }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Written by this role, root-owned 0600. The leading dash keeps the unit
+# startable on a guest whose secrets are not set yet; the role's own credential
+# assertion is what refuses that state.
+EnvironmentFile=-{{ om_secrets_file }}
+
+# Foreground. --daemon detaches the supervisor and breaks the notify handshake.
+# --no-open because there is no browser; --no-tray because Commander defaults
+# tray to true and there is no desktop session to put an icon in.
+ExecStart={{ om_node }} {{ om_package_cli }} serve --no-open --no-tray
+
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+# `full`, not `strict`. OmniRoute runs bundled provider CLIs, and a read-only /
+# or /usr turns a first-run provider install into a failure this role has no way
+# to reach to prove otherwise. Tighten it once the provider set is known.
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

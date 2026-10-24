@@ -1,0 +1,8 @@
+---
+# Declare the dependency, not the playbook.
+#
+# Ansible runs a role's dependencies before its own tasks, so common/python
+# prepares the guest first. This is what lets a new application avoid editing
+# any playbook.
+dependencies:
+  - role: python

@@ -1,0 +1,158 @@
+---
+# omniroute, built from a source checkout on the controller and served by one
+# systemd unit on one guest.
+#
+# This is the from-source shape, not the published-release shape. A published
+# npm release is one pinned version and `npm install` fetches it; a source
+# build has no such artifact. The controller builds the tree, the role ships
+# it, and the role refuses to ship a tree that is not the one that was asked
+# for.
+#
+# The install shape — account, paths, state directory, port, bind address,
+# service name — comes from common/python/defaults/main.yml and is derived from
+# `app_name` alone. What is left here is what is specific to an application
+# that is a Node tree with one native module, built from a git checkout.
+
+app_name: omniroute
+app_service_name: omniroute
+
+# The port carries the dashboard, the /v1 proxy, the MCP/A2A endpoints and the
+# management API together.
+app_port: 20128
+
+# The dashboard is published, so the bind is a wildcard. The controller can
+# then assert reachability, which a loopback bind cannot offer.
+app_bind_host: 0.0.0.0
+
+# The realtime dashboard WebSocket binds loopback on its own, so it is set
+# explicitly to match the published bind. Left at loopback, a dashboard
+# reached over the LAN loses its live view and nothing reports it.
+om_live_ws_port: 20132
+om_live_ws_host: "{{ app_bind_host }}"
+
+# ---------------------------------------------------------------------------
+# The source checkout
+# ---------------------------------------------------------------------------
+
+# Where the checkout lives on the controller. This is a controller path: the
+# role reads it with delegate_to: localhost and never on the guest.
+om_local_source: "/Users/bruj0/Projects/Omniroute"
+
+# The branch or ref that was asked for. `main` is a development branch: it
+# moves, and two plays that both build `main` produce two different
+# artifacts. The role resolves it to a sha and compares against the receipt.
+om_source_ref: main
+
+# The sha the artifact was built from. Resolved on the controller at run time
+# and compared against the build receipt; a mismatch is a refusal, not a
+# warning.
+om_source_sha: ""
+
+# The receipt the build writes. It records the sha, the version and the
+# artifact, so the guest can be asked what it is actually running.
+#
+# It lives inside the checkout because it describes the checkout, and the role
+# reads it there with delegate_to: localhost.
+om_build_receipt: "{{ om_local_source }}/.deployflow-build.json"
+
+# The shipped tree. Under app_dir because that is the install root and
+# common/python's venv already lives there; `src` keeps the two from
+# colliding.
+om_source_dir: "{{ app_dir }}/src"
+
+# ---------------------------------------------------------------------------
+# The runtime
+# ---------------------------------------------------------------------------
+
+# A pinned Node release, fetched and checksummed. The tree is built with one
+# and must run on one: the engines field allows a range, and a runtime outside
+# it fails at import rather than at install.
+#
+# The checksum is the one nodejs.org publishes in the release's SHASUMS256.txt.
+om_node_version: 24.14.1
+om_node_sha256: 84d38715d449447117d05c3e71acd78daa49d5b1bfa8aacf610303920c3322be
+om_node_dir: "{{ app_home }}/node"
+om_node: "{{ om_node_dir }}/bin/node"
+
+# npm's JS entry, not its bin shim. The shim runs `#!/usr/bin/env node`, and
+# nothing under app_home is on PATH on a stock guest, so it dies with
+# "env: 'node': No such file or directory" before npm starts.
+om_npm_cli: "{{ om_node_dir }}/lib/node_modules/npm/bin/npm-cli.js"
+
+# The npm cache, kept on the guest rather than in root's home so a root cache
+# purge cannot break a later install.
+om_npm_cache: "{{ app_home }}/npm-cache"
+
+# The operator-facing command, in /usr/local/bin because nothing under
+# app_home is on anyone's PATH. A wrapper, not a symlink to the package's own
+# bin entry: that shim runs `#!/usr/bin/env node`, which on this guest
+# resolves to nothing at all.
+om_cli: /usr/local/bin/omniroute
+
+# ---------------------------------------------------------------------------
+# The application
+# ---------------------------------------------------------------------------
+
+# The CLI entry inside the shipped tree. The package's own `files` list ships
+# `bin/`, so the entry is in the tree rather than in a node_modules prefix.
+om_package_cli: "{{ om_source_dir }}/bin/omniroute.mjs"
+
+# The server bundle the CLI loads. The build writes it into dist/; the role
+# asserts it exists, because a checkout without a build looks identical to a
+# build that failed.
+om_dist_dir: "{{ om_source_dir }}/dist"
+
+# The build recipe, as the package's own scripts name it. `build:release`
+# cleans, builds the server, builds the CLI and writes the build sha.
+om_build_script: build:release
+
+# The dependency tree. It is part of the artifact: a source build has to
+# `npm ci` before it can run at all.
+om_sync_excludes:
+  - .git
+  - .github
+  - .agents
+  - docs
+  - "**/tests"
+  - "**/__tests__"
+  - "**/node_modules/.cache"
+  - .env
+
+# ---------------------------------------------------------------------------
+# State and configuration
+# ---------------------------------------------------------------------------
+
+# The state directory. Everything writable lives under it, so a reinstall
+# never touches it.
+om_data_dir: "{{ app_state_dir }}"
+om_home: "{{ app_state_dir }}/home"
+
+# The application environment file. Role-owned: the next play rewrites it.
+om_env_file: "{{ app_state_dir }}/.env"
+
+# The credentials directory and file. Root-owned 0600, read by systemd as PID
+# 1 before it drops to the service account.
+om_secrets_dir: "{{ app_state_dir }}/secrets"
+om_secrets_file: "{{ om_secrets_dir }}/env"
+
+# The stamp that records the dashboard password was applied. Without it the
+# role would re-apply it on every play, which locks the operator out.
+om_bootstrap_stamp: "{{ app_state_dir }}/.bootstrap-complete"
+
+# ---------------------------------------------------------------------------
+# Behaviour
+# ---------------------------------------------------------------------------
+
+# The key gate on /v1/*. Off with a wildcard bind is the combination
+# OmniRoute's own startup warning calls out: an inference plane any device on
+# the network can spend, billed to the operator's providers.
+om_require_api_key: true
+
+# A log level, and a V8 heap ceiling. The ceiling is not a memory limit;
+# native buffers sit outside it.
+om_log_level: info
+om_memory_mb: 2048
+
+# Whether the role installs the compile toolchain. A native module that has
+# no prebuilt binary for the guest's platform has to be compiled on the guest.
+om_install_build_toolchain: false

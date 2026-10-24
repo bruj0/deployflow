@@ -9,3 +9,10 @@
 collections:
   - name: community.general
     version: ">=13.0.0"
+  # ansible.posix.synchronize ships the tree of an application that has no
+  # wheel. It is the only module that can move a directory tree with
+  # symlinks intact and preserve mtimes, and both of those are load-bearing:
+  # a node_modules tree arrives broken without --links, and without --times
+  # every run re-transfers the whole tree and reports changed forever.
+  - name: ansible.posix
+    version: ">=1.5.0"
