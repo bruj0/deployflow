@@ -8,6 +8,27 @@
 application. It writes the deployment, you review it, and the service is
 verified before anyone calls it done.**
 
+```mermaid
+flowchart TD
+    ASK["You ask the agent for an application"]
+    WRITE["The agent writes the manifest and the role"]
+    REVIEW["You review the diff"]
+    INSTALL["appctl install — the pinned artifact goes in"]
+    CHECK["The role's own checks run"]
+    OK["The service answers — done"]
+    REFUSE["The play refuses and says what to fix"]
+
+    ASK --> WRITE --> REVIEW --> INSTALL --> CHECK
+    CHECK -->|passes| OK
+    CHECK -->|fails| REFUSE
+    REFUSE --> WRITE
+
+    classDef fail fill:#fde8e8,stroke:#c0392b
+    classDef done fill:#eaf7ec,stroke:#2e7d32
+    class REFUSE fail
+    class OK done
+```
+
 DeployFlow is a workflow for delivering applications to servers. It defines
 what an application needs, how it should be installed, and how we know it
 actually works. The agent does the writing. The workflow does the proving.
@@ -40,6 +61,87 @@ DeployFlow turns that into a repository an agent can work inside:
 | **The workflow proves it works** | Each application carries its own checks, and they run after every install. |
 | **The steps are repeatable** | A second install on the same inputs changes nothing, and says so. |
 | **The knowledge is in the repo** | The next agent reads it instead of guessing. |
+
+## Try it
+
+```bash
+git clone https://github.com/bruj0/deployflow.git
+cd deployflow
+```
+
+Then tell your agent:
+
+> Read AGENTS.md and .agents/skills/deployflow-add-app/SKILL.md, then add support for
+> <your application>. Use the deployflow-add-app skill. Show me the diff before you run
+> anything.
+
+The skill covers the manifest, the role, the pinned lockfile, the checks, and
+the traps that make a run reinstall itself forever.
+
+To look around first:
+
+```bash
+appctl targets      # which destinations exist, and which are not built yet
+appctl list         # what this repository has configured
+```
+
+Or run one of the two shipped applications end to end. `builder` first, because
+`omniroute` builds on it:
+
+```bash
+appctl install builder                       # the build host
+
+# OmniRoute needs a checkout of the fork on this controller, and its secrets.
+git clone https://github.com/bruj0/OmniRoute.git
+CHECKOUT=../OmniRoute                          # wherever you put it
+
+# Point the role at your checkout. The default is the path it was developed
+# against, so change it.
+#   inventory/group_vars/omrsrc/main.yml -> om_local_source: <your path>
+
+appctl secrets set omniroute_jwt_secret            --generate
+appctl secrets set omniroute_api_key_secret        --generate
+appctl secrets set omniroute_storage_encryption_key --generate
+appctl secrets set omniroute_initial_password       --generate
+appctl secrets set omniroute_ws_bridge_secret      --generate
+
+apps/omniroute/build/omr-build-linux.sh "$CHECKOUT" main   # ~28 min
+appctl install omniroute                         # deploy and verify
+appctl install omniroute                         # must be changed=0
+```
+
+The build takes about half an hour because it compiles a 2 GB JavaScript tree
+on the guest's platform. That is the cost of not shipping a darwin binary to
+a linux server.
+
+## What it gives you
+
+- **A manifest an agent can read.** One file says where the code comes from,
+  what configuration it takes, which secrets it needs and where it runs.
+  Unknown keys are an error, so a typo fails loudly instead of silently
+  changing nothing.
+- **A role per application, written against a contract.** The agent does the
+  writing; the contract in `AGENTS.md` and the `deployflow-add-app` skill say
+  what a role owes the framework. You review a diff, not a wall of generated
+  YAML.
+- **Checks that belong to the application.** Only the application knows what
+  "working" means for it, so each role carries its own: the import that has
+  to succeed, the port that has to be bound, the endpoint that has to answer,
+  and the request that has to be refused.
+- **A second run that changes nothing.** `changed=0` is the proof that the
+  run is repeatable rather than reinstalling itself. A role that reports a
+  change every time is telling you nothing about its own state.
+- **Secrets that stay out of the repository and out of the logs.** They live
+  in a gitignored `.env`, reach the run in a mode-0600 file, and never appear
+  in `argv` where `ps` would show them.
+- **A destination behind an interface.** The manifest names a target and the
+  target owns everything about it. One ships today; two more are named so a
+  manifest can ask for them and get a clear answer.
+- **A failure before any side effect.** An unimplemented destination or a
+  missing secret stops the run before anything is built, downloaded or
+  started.
+- **Evidence on disk.** Every run keeps its commands, log, recap and errors,
+  so a failure is a file to read rather than a scrollback to search.
 
 ## How it works
 
@@ -310,7 +412,9 @@ A reviewer reading the diff sees the intent, not a wall of generated YAML:
 The agent's own reasoning stays in its session. What lands in the repository is
 declarative and reviewable.
 
-## Features
+## Where each feature lives
+
+The same list as a map, for when you want to go straight to the file.
 
 | Feature | What it gives you | Where |
 |---|---|---|
@@ -385,58 +489,6 @@ all:
 | The target's own prerequisites | It validates them before the run starts. |
 | Checks that fit the destination | The application's own checks still apply; the target adds its own. |
 | An acceptance test on a real host | The same application, installed twice, with one deliberate failure caught by a check. |
-
-## Try it
-
-```bash
-git clone https://github.com/bruj0/deployflow.git
-cd deployflow
-```
-
-Then tell your agent:
-
-> Read AGENTS.md and .agents/skills/deployflow-add-app/SKILL.md, then add support for
-> <your application>. Use the deployflow-add-app skill. Show me the diff before you run
-> anything.
-
-The skill covers the manifest, the role, the pinned lockfile, the checks, and
-the traps that make a run reinstall itself forever.
-
-To look around first:
-
-```bash
-appctl targets      # which destinations exist, and which are not built yet
-appctl list         # what this repository has configured
-```
-
-Or run one of the two shipped applications end to end. `builder` first, because
-`omniroute` builds on it:
-
-```bash
-appctl install builder                       # the build host
-
-# OmniRoute needs a checkout of the fork on this controller, and its secrets.
-git clone https://github.com/bruj0/OmniRoute.git
-CHECKOUT=../OmniRoute                          # wherever you put it
-
-# Point the role at your checkout. The default is the path it was developed
-# against, so change it.
-#   inventory/group_vars/omrsrc/main.yml -> om_local_source: <your path>
-
-appctl secrets set omniroute_jwt_secret            --generate
-appctl secrets set omniroute_api_key_secret        --generate
-appctl secrets set omniroute_storage_encryption_key --generate
-appctl secrets set omniroute_initial_password       --generate
-appctl secrets set omniroute_ws_bridge_secret      --generate
-
-apps/omniroute/build/omr-build-linux.sh "$CHECKOUT" main   # ~28 min
-appctl install omniroute                         # deploy and verify
-appctl install omniroute                         # must be changed=0
-```
-
-The build takes about half an hour because it compiles a 2 GB JavaScript tree
-on the guest's platform. That is the cost of not shipping a darwin binary to
-a linux server.
 
 ## Documentation
 
