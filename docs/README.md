@@ -8,8 +8,9 @@
 | [configuration.md](configuration.md) | every key in `app.yaml` |
 | [rendering.md](rendering.md) | YAML → config on the guest |
 | [secrets.md](secrets.md) | `.env`, and the three ways a secret leaks |
-| [build-pipeline.md](build-pipeline.md) | wheel and lockfile from a checkout |
-| [../apps/builder/README.md](../apps/builder/README.md) | a guest that exists to build other applications |
+| [build-pipeline.md](build-pipeline.md) | the two build paths: a wheel from a checkout, and a tree from a build host |
+| [../apps/omniroute/](../apps/omniroute/) | a working application built from a source checkout |
+| [../apps/builder/](../apps/builder/) | a working build host — the `toolchain` application |
 
 Start with [overview.md](overview.md) for the current implementation and
 [architecture.md](architecture.md) for the rules that hold it together. For what

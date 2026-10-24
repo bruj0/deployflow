@@ -8,21 +8,28 @@ produced there.
 This is the from-source shape. The published-release shape — one pinned npm
 version, `npm install` fetches it — is a different role and is not this one.
 
+This application works. It is not a sample: it deploys, it verifies, and a
+second install reports `changed=0`. It is also the harder of the two shipped
+shapes, because it is the one an agent is most likely to get wrong — the build
+cannot run where the agent is, and the role has to refuse a stale tree rather
+than rebuild one.
+
 ## What is deployed
 
 | | |
 |---|---|
 | Guest | `omniroute-src`, CT 122 |
 | Source | `bruj0/OmniRoute` at `main`, resolved to a commit |
-| Build | Linux amd64, on the controller, in a container |
+| Build | Linux amd64, on the `builder` guest — never on the controller, never emulated |
 | Runtime | Node 24.14.1, pinned and checksummed, under `app_home/node` |
 | Unit | `omniroute.service` |
 | Port | 20128 — dashboard, `/v1` proxy, MCP/A2A and management API together |
 | Port | 20132 — the realtime dashboard WebSocket, published to match |
 | State | `/opt/omniroute/state`, never touched by a reinstall |
 | Install root | `/opt/omniroute/app/src`, beside the inert Python venv |
+| Secrets | five, all generated, none ever in `argv` |
 
-## Why the build runs in a container
+## Why the build runs on its own guest
 
 The controller is arm64 macOS. The guest is x86_64 Linux. A tree built on the
 controller carries **darwin-only** native binaries — `sharp-darwin-arm64`,
@@ -84,6 +91,23 @@ tree, for two measured reasons:
   (`._aliasConfig.ts` and hundreds like it). esbuild reads them as source
   files and the build fails with 77 errors:
   `src/mitm/._aliasConfig.ts:1:0: ERROR: Unexpected "\x00"`.
+
+And it clones a **commit**, not a branch. `git clone --branch main` resolves
+`main` at clone time, and `main` moves: a push between the controller reading
+`HEAD` and the builder cloning produces an artifact built from a commit the
+receipt does not name — which defeats the provenance check the receipt exists
+to satisfy.
+
+```bash
+git clone --branch "$REF" "$REPO_URL" "$BUILD_DIR"
+git -C "$BUILD_DIR" fetch --quiet origin "$COMMIT"
+git -C "$BUILD_DIR" checkout --quiet --detach "$COMMIT"
+test "$(git -C "$BUILD_DIR" rev-parse HEAD)" = "$COMMIT"
+```
+
+The explicit fetch is needed because a shallow branch clone may not contain
+the commit once the branch has moved past it, and the final `test` is there so
+a wrong commit fails the build rather than shipping.
 
 ### Why the dependency tree is not reconstructed
 
@@ -166,7 +190,8 @@ it.
 # The build host. A guest, provisioned like any other application.
 appctl install builder
 
-# Build it for the guest's platform, on that host. This is the slow part.
+# Build it for the guest's platform, on that host. This is the slow part —
+# about 28 minutes for a 2 GB JavaScript tree.
 apps/omniroute/build/omr-build-linux.sh \
   /Users/bruj0/Projects/Omniroute main
 
@@ -176,6 +201,16 @@ appctl install omniroute
 # Second run must be changed=0.
 appctl install omniroute
 ```
+
+The checkout path above is the one this was developed against. Point the role
+at yours in `inventory/group_vars/omrsrc/main.yml`:
+
+```yaml
+om_local_source: /path/to/OmniRoute
+```
+
+The role ships a tree; it does not fetch one. A missing checkout is refused
+with a message saying so, not with a failed transfer.
 
 Then:
 

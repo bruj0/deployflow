@@ -86,14 +86,18 @@ and several produce a green play and a broken service.
 
 ## The tool
 
-`appctl` lives in `src/appctl/`. Its own documentation is there and takes
-precedence over this file for anything about the tool:
+The tool is `appctl` in `src/appctl/`. Its own documentation is in `docs/`, and
+it takes precedence over this file for anything about the tool:
 
 | | |
 |---|---|
-| [src/appctl/README.md](src/appctl/README.md) | why it is shaped this way |
-| [src/appctl/AGENTS.md](src/appctl/AGENTS.md) | the rules for changing it |
-| [src/appctl/docs/](src/appctl/docs/README.md) | architecture, configuration, rendering, secrets, build |
+| [docs/README.md](docs/README.md) | the index |
+| [docs/architecture.md](docs/architecture.md) | how it fits together, and where the target boundary is |
+| [docs/configuration.md](docs/configuration.md) | every key in `app.yaml` |
+| [docs/build-pipeline.md](docs/build-pipeline.md) | the two build paths |
+| [docs/rendering.md](docs/rendering.md) | how YAML becomes the configuration the guest reads |
+| [docs/secrets.md](docs/secrets.md) | how a secret reaches the guest |
+| [docs/targets.md](docs/targets.md) | the target interface, and how to add a target |
 
 ## Adding an application
 

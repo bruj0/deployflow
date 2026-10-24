@@ -58,7 +58,14 @@
 # tree that was not built from the commit it was asked for.
 set -eu
 
-CHECKOUT="${1:?usage: omr-build-linux.sh <checkout> [ref]}"
+if [ $# -lt 1 ]; then
+  echo "usage: omr-build-linux.sh <checkout> [ref]" >&2
+  echo "  <checkout>   a clone of the fork on the controller" >&2
+  echo "  [ref]        the branch to build; defaults to main" >&2
+  exit 1
+fi
+
+CHECKOUT="$1"
 REF="${2:-main}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$HERE/../../.." && pwd)

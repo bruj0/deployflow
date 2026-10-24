@@ -76,7 +76,15 @@ Verified on a live container.
 
 ### `source`
 
-Three kinds, because they describe genuinely different things.
+Three kinds, because they describe genuinely different things. What differs is
+not the value of `kind` but what has to happen before the application can be
+installed.
+
+| Kind | The code comes from | Has an artifact? | `appctl build` |
+|---|---|---|---|
+| `package` | a published version | yes — it already exists | exits non-zero: nothing to build |
+| `repo` | a commit in a checkout | no — it has to be built | builds it |
+| `toolchain` | nowhere — the application *is* the environment | no | exits non-zero: nothing to build |
 
 ```yaml
 # published on PyPI — nothing to build
@@ -100,6 +108,20 @@ source:
 `appctl build <name>` on a `package` source exits non-zero and says there is
 nothing to build. That is deliberate: silently succeeding would hide a
 misconfiguration.
+
+#### `kind: repo`
+
+The `build:` block is required for this kind and the tool rejects a `repo`
+source without one, naming the omission. It describes a **Python** build —
+a wheel plus a pinned lockfile — and that is what `appctl build` produces.
+
+An application built from a source checkout in another language does not use
+`appctl build`. It has its own build script, because the build has to run on
+the platform the artifact targets and the tree is far too large to move
+around. [`apps/omniroute/`](../apps/omniroute/) is the worked example: its
+`build:` block is deliberately inert, and the real build is
+`apps/omniroute/build/omr-build-linux.sh`. See
+[build-pipeline.md](build-pipeline.md#when-an-application-needs-no-build).
 
 #### `kind: toolchain`
 
@@ -131,6 +153,14 @@ codes of the install commands, and it publishes its address to
 `tmp/builders/<name>.endpoint` so the build script can find it: guest
 hostnames do not resolve from the controller, because Proxmox's resolver is
 not the controller's.
+
+The minimums are measured, not guessed. A builder sized at 12 GB passed every
+install check and then failed during a build, with an error that named a
+memory limit rather than the guest — and the guest stopped answering SSH
+entirely. The role asserts the floor it needs, so a guest resized by hand is
+checked at install time rather than discovered during a build.
+
+See [`apps/builder/`](../apps/builder/) for the working role.
 
 ### `source.webui`
 
@@ -251,7 +281,7 @@ silently.
 
 The file is edited as text, not loaded and re-dumped: `app.yaml` carries 18
 comment lines and a PyYAML round-trip destroys every one. Only the `state:`
-block is rewritten. See [../state.py](../state.py).
+block is rewritten. See [../src/appctl/state.py](../src/appctl/state.py).
 
 **The trade:** a timestamp in a committed file is a diff on every run. That is
 what a record is, but it is churn in review.

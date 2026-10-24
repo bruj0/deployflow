@@ -125,6 +125,11 @@ Dependencies flow one way. `cli` depends on everything. `install` and `render`
 depend on `config`. Nothing depends on `build` except `cli`. There is no import
 cycle and no module imports two others for convenience.
 
+`config.py` knows the three source kinds — `package`, `repo`, `toolchain` —
+because the schema has to accept all three. It knows nothing about any of
+them beyond whether they have an artifact, because a kind that had a
+per-application behaviour would put the application in the framework.
+
 ### Why `config.py` is the centre
 
 Every other module needs the same three things: which applications exist, where
@@ -142,7 +147,7 @@ common/   the framework — names no application
 apps/     one directory per application
 ```
 
-`src/lxc/` sits on the framework side. The boundary is not decorative: it is
+`src/appctl/` sits on the framework side. The boundary is not decorative: it is
 what makes adding an application safe.
 
 **The cost.** Some things that would be convenient are unavailable. The tool
@@ -174,8 +179,8 @@ Where a change belongs:
 | change how guests are created | `common/lxc/` |
 | support another delivery target | `src/appctl/targets/` — see [targets.md](targets.md) |
 | change the venv contract | `common/python/` |
-| add an application | `apps/<app>/` — see the `add-lxc-app` skill |
-| add a `appctl` command | `src/lxc/cli.py` plus a new module |
+| add an application | `apps/<app>/` — see the `deployflow-add-app` skill |
+| add a `appctl` command | `src/appctl/cli.py` plus a new module |
 | teach the tool an application name | **nowhere.** Put it in `apps/`. |
 
 ## Invariants
@@ -221,3 +226,16 @@ extra-vars file. Everything under `tmp/runs/` survives.
 **`appctl install X` also runs the `lxc` tag.** Play 1 is what discovers the DHCP lease.
 Without it play 2 cannot resolve the guest at all. It is guarded by a stat, so
 on an existing guest it costs a few no-op tasks.
+
+**A toolchain role declares no dependency on `common/python`.** That
+dependency asserts `app_port` is defined, and a build host serves nothing. A
+role with no dependency still runs, because play 2 loops over each host's
+`app_roles` and `include_role`s it — so the exemption costs no playbook
+change. What it does cost is the framework's derived paths: a toolchain
+defines what it needs.
+
+**A toolchain's role asserts the machine, not the install.** The minimums are
+measured. A builder sized at 12 GB passed every install check and then failed
+during a build with an error naming a memory limit rather than the guest — and
+the guest stopped answering SSH. A role that installs a compiler and reports
+success has not said anything about whether a build can run on it.

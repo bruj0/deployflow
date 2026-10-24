@@ -30,7 +30,7 @@ appctl secrets check               # are the required secrets set?
 
 A stock Ubuntu template goes in, Ansible configures it, and the application
 runs under systemd with a sha256-pinned dependency tree. No container image is
-built, so there is no tarball to store and no builder in the loop.
+built, so there is no tarball to store and no image registry in the loop.
 
 | | |
 |---|---|
@@ -38,6 +38,7 @@ built, so there is no tarball to store and no builder in the loop.
 | Reproducibility | the lockfile carries a hash for every dependency; the build refuses one that does not |
 | Verification | application-level checks after the install, not only a green playbook |
 | Secrets | in a gitignored `.env`, passed to Ansible in a mode-0600 file, never in `argv` |
+| Build hosts | a build host is an application too — a `toolchain`, provisioned and asserted like any other |
 
 ## Why the checks matter
 
@@ -54,6 +55,57 @@ application is usable. Each of these passed review and only failed in use:
 Every application role carries its own checks, because only the application
 knows what "working" means for it. The sample role in `apps/example-app/`
 shows the pattern.
+
+## The three kinds of application
+
+A manifest says where an application's code comes from. There are three kinds,
+and they differ in more than the value of `source.kind` — they differ in what
+has to happen before the application can be installed.
+
+| Kind | Source | Has an artifact? | `appctl build` |
+|---|---|---|---|
+| `package` | a published version | yes — it already exists | exits non-zero: nothing to build |
+| `repo` | a commit in a checkout | no — it has to be built | builds it |
+| `toolchain` | nothing | no — it *is* the environment | exits non-zero: nothing to build |
+
+A **toolchain** is an application whose purpose is to be the environment
+another application is built in. It installs no service, publishes no port,
+and has no artifact. Its role assembles what a build needs and asserts the
+machine can build:
+
+```yaml
+builder:
+  description: the guest other applications are built on
+  target:
+  source:
+    kind: toolchain
+  secrets: []
+```
+
+Three things follow from it being a toolchain, and each is deliberate:
+
+**No dependency on `common/python`.** That dependency is what asserts
+`app_port` is defined, and a build host serves nothing. A role with no
+dependency still runs — play 2 loops over each host's `app_roles` and
+`include_role`s it — so no playbook changes.
+
+**The postconditions are about the machine, not the install.** A role that
+installs a compiler and reports success has not said anything about whether
+a build can run on it. The builder asserts the architecture, the pinned
+runtime, the memory, the disk and the registry's reachability.
+
+**The minimums are measured, not guessed.** A builder created with 12 GB of
+RAM passed every install check and then failed during a build, with an error
+naming a memory limit rather than the guest — and the guest stopped
+answering SSH entirely. The role now refuses a guest below the floor it
+needs.
+
+The two shipped applications are the two hard shapes:
+
+| Application | Shape | What it shows |
+|---|---|---|
+| [`apps/omniroute/`](../apps/omniroute/) | `repo` — built from a checkout | a source build that refuses a stale tree, and checks an inference plane's key gate |
+| [`apps/builder/`](../apps/builder/) | `toolchain` | a guest that exists to build the other one |
 
 ## Targets
 
@@ -152,6 +204,10 @@ common/                  framework. Names no application, anywhere.
   python/                toolchain, service account, venv — the contract
 apps/                    one directory per application
   example-app/           the sample used by the quickstart
+  omniroute/             OmniRoute, built from a source checkout
+    build/               the build script and its host-side half
+    docs/                what building it taught
+  builder/               a toolchain: the guest other applications are built on
 src/appctl/              the appctl package
   targets/               the delivery-target interface and its implementations
     proxmox_lxc.py       the only implemented target
@@ -192,6 +248,8 @@ appctl install example-app -- --check --diff
 | [docs/rendering.md](../docs/rendering.md) | How YAML becomes the configuration the guest reads |
 | [docs/secrets.md](../docs/secrets.md) | How a secret reaches the guest |
 | [docs/targets.md](../docs/targets.md) | The target interface, and how to add a target |
+| [../apps/omniroute/](../apps/omniroute/) | A working application built from a source checkout |
+| [../apps/builder/](../apps/builder/) | A working build host — the `toolchain` application |
 
 ## Status
 

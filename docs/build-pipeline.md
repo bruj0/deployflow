@@ -131,3 +131,58 @@ its role assembles the environment itself; run `appctl install builder` to provi
 
 See [configuration.md](configuration.md#kind-toolchain) for what a toolchain
 source is and why it is not one of the other two kinds.
+
+## The other build path: a tree built on a build host
+
+`appctl build` produces a **Python** artifact — a wheel and a pinned
+lockfile. That is the right shape for a Python application and the wrong
+shape for everything else.
+
+A Node tree of the kind OmniRoute is cannot be moved to the guest as a
+wheel, and it cannot be built on the controller either. The controller is
+arm64 macOS and the guest is x86_64 Linux, so a tree built on the controller
+carries darwin-only native binaries — `sharp-darwin-arm64`,
+`@esbuild/darwin-arm64` — that fail on the guest much later, as an
+unrelated error deep in a request handler.
+
+And an emulated container is not the answer. It gets the architecture right
+and then falls over twice over:
+
+| Failure | Cause |
+|---|---|
+| `Next.js build worker exited with code: null and signal: SIGKILL` at ~5.6 GB | the emulated process sees the VM's memory, not the container's limit |
+| `fatal error: receive on synctest channel from outside bubble` / `SIGSEGV` | esbuild is a **Go** binary, and the Go runtime faults under qemu. No amount of memory fixes this. |
+
+So the build runs on a **native x86_64 host**, and that host is a guest this
+repository provisions:
+
+```bash
+appctl install builder                        # the build host
+apps/omniroute/build/omr-build-linux.sh   /path/to/OmniRoute main                     # the build
+appctl install omniroute                      # ship it
+```
+
+Three things about that path are worth knowing, because each one is a rule
+the framework could not have taught an agent by itself:
+
+**The build host clones the fork itself.** A transferred tree has no `.git`,
+so `git rev-parse --short HEAD` does not resolve and the artifact carries no
+provenance. And a tar of a macOS checkout carries AppleDouble sidecars
+(`._aliasConfig.ts` and hundreds like it) that esbuild reads as source files
+and rejects with `Unexpected "\x00"`.
+
+**The clone is pinned to a commit, not to a branch.** `git clone --branch
+main` resolves `main` at clone time, and `main` moves. A push between the
+controller reading `HEAD` and the builder cloning produces an artifact whose
+receipt does not name the commit that was asked for — which defeats the
+check the receipt exists to satisfy.
+
+**The build writes a receipt, and the role refuses rather than rebuilds.** A
+role that rebuilds on every play cannot tell "no changes" from "rebuilt". The
+receipt records the commit, the version and the platform, and the role
+refuses to ship a tree whose receipt does not match the checkout.
+
+The build host is itself an application — a `toolchain` — so it is
+provisioned, asserted and version-controlled like any other. See
+[`apps/builder/`](../apps/builder/) and
+[`apps/omniroute/docs/BUILDING-FROM-SOURCE.md`](../apps/omniroute/docs/BUILDING-FROM-SOURCE.md).
