@@ -27,12 +27,52 @@
     quiet: true
     success_msg: "installing {{ app_name }}"
 
+- name: Refuse to install a package the manifest does not name
+  # The manifest says where the application comes from and the role says what
+  # it installs. Those are two files, and they can drift. This refuses the run
+  # when they disagree, because a mismatch here means the role would install
+  # something other than what the manifest asked for — and the manifest is what
+  # the operator reviewed.
+  #
+  # The application's own name is not the package name. `example-app` is what
+  # the guest calls the service; `bottle` is what gets installed to serve it.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == app_package_name
+      - appctl_source_version == app_package_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs {{ app_package_name }}=={{ app_package_version }}. Change one of
+      them, or change this check if the role is meant to install a different
+      package than the manifest names.
+    quiet: true
+
+- name: Copy the lockfile to the guest
+  # The lockfile is read by PIP, ON THE GUEST, and pip on the guest cannot open
+  # a path on the controller. Pointing pip at the controller's path fails with
+  # "Could not open requirements file" — which names a missing file rather
+  # than a file that is present, on a different machine.
+  #
+  # So the file travels first, and pip is pointed at where it landed.
+  #
+  # It is copied rather than templated because it is a plain requirements file:
+  # the hashes are the content, and there is nothing to substitute.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/requirements.lock"
+    dest: "{{ app_dir }}/requirements.lock"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Install the application
   # The lockfile is pinned by sha256, so the tree that installs is the tree
   # that was reviewed. `--require-hashes` is what enforces it at install time;
   # the build refuses a lockfile without hashes, so the two agree.
   ansible.builtin.pip:
-    requirements: "{{ role_path }}/files/requirements.lock"
+    requirements: "{{ app_dir }}/requirements.lock"
     virtualenv: "{{ app_venv }}"
     extra_args: "--require-hashes"
   register: app_install
@@ -41,19 +81,41 @@
 - name: Fail when the install did not complete
   ansible.builtin.fail:
     msg: >-
-      The application could not be installed from {{ role_path }}/files/requirements.lock.
+      The application could not be installed from {{ app_dir }}/requirements.lock.
       The install failed with: {{ app_install.msg | default('no message') }}
   when: app_install is failed
+
+- name: Install the application module
+  # The module the server imports. It sits in the install root, next to the
+  # venv, and the unit's PYTHONPATH points at that root.
+  #
+  # It is a real file rather than a template because there is nothing to
+  # substitute: the paths it needs are the ones the framework already defines.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/{{ app_module }}.py"
+    dest: "{{ app_dir }}/{{ app_module }}.py"
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Check that the application can be imported
   # A package in site-packages is not a working package. This catches a
   # dependency tree that did not install and a native extension that did not
   # compile.
+  #
+  # The module name is `app_module`, not `app_name`. The application's name
+  # contains a hyphen and is not a valid Python identifier, so
+  # `import example-app` is a syntax error rather than a missing module — and
+  # the check would fail for a reason that has nothing to do with the install.
+  #
+  # It runs with the install root as the working directory, because that is
+  # where the module was just placed and where the unit will look for it.
   ansible.builtin.command:
     argv:
       - "{{ app_venv }}/bin/python"
       - -c
-      - "import {{ app_name }}"
+      - "import {{ app_module }}"
+    chdir: "{{ app_dir }}"
   changed_when: false
   register: app_import
   failed_when: false
@@ -133,7 +195,7 @@
   ansible.builtin.debug:
     msg:
       - "{{ app_name }} is installed and answering on port {{ app_port }}"
-      - "import {{ app_name }}: ok"
+      - "import {{ app_module }}: ok"
       - "unit {{ app_service_name }}: active"
       - "listener on {{ app_port }}: present"
       - "endpoint {{ app_health_path | default('/') }}: HTTP {{ app_endpoint.status }}"

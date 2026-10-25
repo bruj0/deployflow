@@ -11,8 +11,18 @@ Type=simple
 User={{ app_user }}
 Group={{ app_user }}
 WorkingDirectory={{ app_dir }}
+
+# The application module lives in the install root, next to the venv, and it is
+# not installed into site-packages — it is a file the role copied there. The
+# interpreter therefore has to be told where to look, or the import fails with
+# "No module named" on a module that is present.
+Environment=PYTHONPATH={{ app_dir }}
+# The state directory, so the application can read the configuration the
+# controller rendered for it.
+Environment=APP_STATE_DIR={{ app_state_dir }}
+
 EnvironmentFile=-{{ app_state_dir }}/{{ app_name }}.env
-ExecStart={{ app_venv }}/bin/{{ app_name }} --port {{ app_port }}
+ExecStart={{ app_venv }}/bin/bottle -b 127.0.0.1:{{ app_port }} {{ app_module }}:app
 Restart=on-failure
 RestartSec=5
 

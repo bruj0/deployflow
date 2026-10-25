@@ -1,11 +1,3 @@
-# An example lockfile. Replace it with a real one:
-#
-#   uv pip compile --python-version 3.14 --generate-hashes --no-header \
-#     -o apps/myapp/files/requirements.lock - <<< "myapp==1.2.3"
-#
-# Every entry must carry a sha256. A lockfile without one is refused at build
-# time, which is the same condition --require-hashes enforces at install time:
-# caught at build time it names the package, caught at install time pip names
-# nothing.
-example-package==1.0.0 \
-    --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+bottle==0.13.3 \
+    --hash=sha256:1c23aeb30aa8a13f39c60c0da494530ddd5de3da235bc431b818a50d999de49f \
+    --hash=sha256:551709073d750d2e88ade05915f0d5dbbbcb8e1d82573fbe85a0635eb842ab07

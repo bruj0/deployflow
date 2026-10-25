@@ -7,6 +7,21 @@ app_name: example-app
 app_port: 8080
 app_service_name: example-app
 
+# The package that gets installed, and the version of it.
+#
+# The application's name is not the package name. `example-app` is what the
+# guest calls the service; `bottle` is what is installed to serve it. Both are
+# checked against the manifest, so the two files cannot drift apart silently.
+app_package_name: bottle
+app_package_version: "0.13.3"
+
+# The module the server imports.
+#
+# It cannot be `app_name`: `example-app` contains a hyphen and is not a valid
+# Python identifier, so `import example-app` is a syntax error rather than a
+# missing module. The file is apps/example-app/files/<app_module>.py.
+app_module: example_app
+
 # Where the rendered configuration is copied on the guest. `lxcctl render`
 # writes it on the controller; common/python copies it here.
 app_config_target: "{{ app_state_dir }}/config.json"

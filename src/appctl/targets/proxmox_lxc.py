@@ -122,6 +122,9 @@ class ProxmoxLxcTarget(Target):
                 # at this boundary so neither name leaks into the other.
                 secret_vars=dict(context.secret_values or {}),
                 rendered=rendered,
+                # The manifest's own pin, so a role can check that it installs
+                # what the manifest named rather than what it pinned itself.
+                source_vars=install_mod.source_vars(app),
                 label=app_name,
             )
         finally:

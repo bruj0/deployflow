@@ -45,6 +45,17 @@ REMOTE_EXEC_RE = re.compile(r"SSH:\s*EXEC\s+ssh\b.*?'(.*)'\s*$")
 LIST_OPENER_RE = re.compile(r'^\s*"(cmd|argv|extra_args)":\s*\[\s*$')
 NULL_ARG_RE = re.compile(r'^\s*"(?:path|src|dest|name)":\s*null,?$')
 EXTRA_VARS_RE = re.compile(r"^(\s*)extra_vars:\s*(.*)$")
+# The role's own report task. An application ends its role with a debug task
+# named "Report the checks that passed", whose `msg` list holds one line per
+# check. This is what makes the summary say "the endpoint answered HTTP 200"
+# instead of "41 tasks, 0 failed" — the first is evidence, the second is only
+# a count.
+CHECKS_TASK_RE = re.compile(r"^TASK \[.*?Report the checks that passed\]")
+CHECK_LINE_RE = re.compile(r'^\s*"(.*)",?\s*$')
+# The list opens with a `"msg": [` line and closes with a `]` line. The
+# closing line has no comma, so it cannot be confused with an entry.
+CHECK_LIST_OPEN_RE = re.compile(r'^\s*"msg":\s*\[\s*$')
+CHECK_LIST_CLOSE_RE = re.compile(r"^\s*\]\s*$")
 
 ARG_KEYS = ("cmd", "argv", "_raw_params", "src", "dest", "path", "name",
             "requirements", "extra_args", "virtualenv", "content", "url", "state", "mode")
@@ -67,6 +78,38 @@ def redact_argv(cmd: list[str]) -> list[str]:
     return out
 
 
+def source_vars(app: Any) -> dict[str, str]:
+    """The manifest's own source pin, as variables the role can read.
+
+    The manifest names where an application comes from: a package and a
+    version, a repository and a ref. A role usually pins the same thing
+    independently, in its own defaults, because a role has to be able to say
+    what it installs without reading the manifest.
+
+    That gives two places that can disagree. This passes the manifest's pin
+    into the play so a role can refuse to install something the manifest did
+    not name, instead of quietly installing a different version than the one
+    that was reviewed.
+
+    Only a package source has a version to compare. A repository source has a
+    ref, and a toolchain source has neither — a role that builds from a
+    checkout compares the commit, and one that assembles an environment has
+    nothing to compare.
+    """
+    if app.source.kind != "package" or not app.source.package:
+        return {}
+    pin = str(app.source.package)
+    # "someapp[browser]==1.2.3" -> name "someapp", version "1.2.3".
+    name, _, version = pin.partition("==")
+    if not version:
+        # A package with no version pin cannot be compared, and pretending
+        # otherwise would make the assertion compare a name against itself.
+        return {}
+    # The extras are part of the requirement, not of the name.
+    name = name.split("[")[0].strip()
+    return {"appctl_source_package": name, "appctl_source_version": version.strip()}
+
+
 @dataclass
 class Result:
     label: str
@@ -78,6 +121,10 @@ class Result:
     tasks_failed: int = 0
     directory: Path = field(default_factory=lambda: Path("."))
     problems: list[str] = field(default_factory=list)
+    #: The evidence the application's own checks produced. Populated from the
+    #: role's own report task, so the summary the operator reads is the
+    #: application's statement about itself rather than a count of tasks.
+    checks: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         return (
@@ -104,9 +151,12 @@ class Installer:
         self._shared = {"last_output": [time.monotonic()], "last_task": ["(starting)"]}
         self._list_open: str | None = None
         self._list_items: list[str] = []
+        self._in_checks = False
+        self._collecting = False
 
     def command(self, extra: list[str], secret_vars: dict[str, str],
-                rendered: dict[str, str] | None = None) -> list[str]:
+                rendered: dict[str, str] | None = None,
+                source_vars: dict[str, str] | None = None) -> list[str]:
         cmd = [
             "ansible-playbook",
             "-i", str(self.config.root / "inventory" / "hosts.yml"),
@@ -119,14 +169,20 @@ class Installer:
         # visible in ps on the controller for the whole run. The rendered config
         # paths travel in the same file: they are controller paths, harmless, and
         # it keeps the play's whole variable set in one place.
-        handle = self._vars_file(secret_vars, rendered)
+        #
+        # The manifest's own source pin travels with them, for the same reason
+        # and with the same care: it is what the operator reviewed, and a role
+        # that installs a different version than the manifest names is a role
+        # that disagreed with the manifest. See _source_vars.
+        handle = self._vars_file(secret_vars, rendered, source_vars)
         if handle is not None:
             cmd += ["--extra-vars", f"@{handle}"]
         cmd += extra
         return cmd
 
     def _vars_file(self, values: dict[str, str],
-                   rendered: dict[str, str] | None = None) -> Path | None:
+                   rendered: dict[str, str] | None = None,
+                   source_vars: dict[str, str] | None = None) -> Path | None:
         """Write the extra-vars file, mode 0600, removed when the run ends.
 
         It carries the secrets and, when any application declares one, the paths
@@ -141,7 +197,8 @@ class Installer:
         wrapped gives an undefined variable, flat gives the value.
         """
         rendered = rendered or {}
-        if not values and not rendered:
+        source_vars = source_vars or {}
+        if not values and not rendered and not source_vars:
             return None
         import tempfile
 
@@ -150,6 +207,8 @@ class Installer:
             payload = dict(values)
             if rendered:
                 payload["appctl_rendered_configs"] = rendered
+            if source_vars:
+                payload.update(source_vars)
             json.dump(payload, handle)
         os.chmod(name, 0o600)
         self._cleanup_files = getattr(self, "_cleanup_files", [])
@@ -163,14 +222,15 @@ class Installer:
 
     def run(self, extra: list[str], *, label: str = "play",
             outdir: Path | None = None, secret_vars: dict[str, str] | None = None,
-            rendered: dict[str, str] | None = None) -> Result:
+            rendered: dict[str, str] | None = None,
+            source_vars: dict[str, str] | None = None) -> Result:
         stamp = outdir or (self.config.root / "tmp" / "runs" /
                            datetime.now().strftime("%Y%m%d-%H%M%S"))
         directory = stamp / label
         directory.mkdir(parents=True, exist_ok=True)
         result = Result(label=label, directory=directory)
 
-        cmd = self.command(extra, secret_vars or {}, rendered)
+        cmd = self.command(extra, secret_vars or {}, rendered, source_vars)
         _echo("run: " + " ".join(redact_argv(cmd)))
         _echo(f"--> {directory / 'commands.txt'}")
 
@@ -240,6 +300,30 @@ class Installer:
                 shared["last_task"][0] = m.group(1)
                 result.tasks_seen += 1
                 _echo(f"TASK {m.group(1)}")
+                # The application's own check report. It is collected when the
+                # list opens, not here: the task line is followed by the task
+                # path and the result header before the list itself, so
+                # collecting from this line would collect the metadata.
+                self._in_checks = m.group(1).endswith("Report the checks that passed")
+                continue
+
+            if self._in_checks:
+                if CHECK_LIST_OPEN_RE.match(line):
+                    self._collecting = True
+                    continue
+                if self._collecting:
+                    if CHECK_LIST_CLOSE_RE.match(line):
+                        self._collecting = False
+                        self._in_checks = False
+                        continue
+                    cm = CHECK_LINE_RE.match(line)
+                    if cm:
+                        result.checks.append(cm.group(1))
+                        continue
+                # Not the list yet. The task line is followed by the task path
+                # and the result header before the list opens, so the state
+                # survives them. A new TASK line ends the block, and that is
+                # handled where the task is matched.
                 continue
 
             r = RESULT_RE.match(line)

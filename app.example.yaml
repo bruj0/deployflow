@@ -34,7 +34,11 @@ applications:
         bind_host: 127.0.0.1    # 0.0.0.0 exposes the service to the network
     source:
       kind: package
-      package: "example-app==1.0.0"
+      # The package the role installs to serve the application. The
+      # application's own name is not the package name: `example-app` is what
+      # the guest calls the service, `bottle` is what gets installed. The role
+      # checks the two agree.
+      package: "bottle==0.13.3"
     config:
       target: "{{ app_state_dir }}/config.json"
       files:
