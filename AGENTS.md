@@ -23,6 +23,8 @@ apps/           one directory per application
   builder/      a toolchain: a guest that exists to build other applications
 src/appctl/     the appctl package
   targets/      where an application runs; proxmox_lxc is the only one built
+inventory/      the operator's own guests. GITIGNORED, and absent on a fresh
+                clone; inventory.example/ holds the templates.
 ```
 
 `roles_path = common:apps`. A role's `meta` dependency declares what it needs,
@@ -208,7 +210,36 @@ because the built tree crosses the link.
 
 - `ansible-playbook --syntax-check playbooks/site.yml`
 - `appctl secrets check` — a run needs these
-- `git status` must not show `.env`, `tmp/`, `apps/*/files/dist/`, or `tools/`
+- `git status` must not show `.env`, `tmp/`, `apps/*/files/dist/`, `tools/`, or
+  `inventory/`
 - `appctl install <app>` twice: the second must be `changed=0`
 - `git diff app.yaml` shows only the `state:` block changed, never the comments
 - `pytest tests` passes
+
+## The inventory is not in git
+
+`inventory/` is gitignored. It names the operator's own Proxmox host, the guest
+IDs and the addresses of machines only they can reach.
+
+Nothing in it is a credential, and none of it is public either — which is
+exactly why it does not belong in a repository that a stranger can clone. The
+committed templates are in `inventory.example/`, and a fresh clone creates the
+real inventory from them:
+
+```bash
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
+```
+
+Two things follow from the directory being absent on a fresh clone, and both
+are expected rather than broken:
+
+- `appctl list` reports every application as "no guest", because it finds no
+  `app_roles`. That is the truth about a clone with no inventory.
+- The CI syntax check runs against `inventory.example/hosts.yml`, which
+  exercises the same playbook and the same role paths.
+
+**Do not commit `inventory/`.** It is in `.gitignore`, so `git add inventory/`
+would need `-f` — and if a file from it ever lands in a commit, treat it as a
+leak. The host names and guest IDs are not secret, but they are not public.

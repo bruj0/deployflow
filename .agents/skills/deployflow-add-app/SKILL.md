@@ -10,7 +10,8 @@ description: >-
   postconditions a role must carry so a green play cannot hide a broken
   service. Also covers an application with no Python wheel — a JavaScript tree
   built on the controller and shipped — which the role installs instead of
-  building. Do NOT use for adding a guest to inventory, for choosing Proxmox
+  building. Also covers creating the gitignored inventory/ directory from
+  inventory.example/ when it is missing. Do NOT use for choosing Proxmox
   templates, for writing a new delivery target, or for anything outside this
   repository.
 ---
@@ -167,7 +168,7 @@ in its DEPLOYED column.
 Add `<name>` to the guest's `app_roles`:
 
 ```yaml
-# inventory/group_vars/<group>.yml
+# inventory/group_vars/<group>/main.yml
 app_roles:
   - myapp
 ```
@@ -179,6 +180,73 @@ among a long inventory. `ex` and `example-app` is the pair to copy.
 
 The guest block carries `ansible_user`, `lxc_vmid` and `lxc_hostname`. Leave the
 address out: Proxmox leases one and `common/lxc` reads it back.
+
+#### If `inventory/` does not exist yet
+
+**`inventory/` is gitignored.** It names the operator's own Proxmox host, the
+guest IDs and the addresses of machines only they can reach — no credential in
+it, but not public either. A fresh clone has no inventory, and that is the
+expected state, not a broken checkout.
+
+The committed templates are in `inventory.example/`. Create the real inventory
+from them:
+
+```bash
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
+```
+
+Then edit the two files the quickstart names:
+
+| File | What to change |
+|---|---|
+| `inventory/hosts.yml` | `ansible_host` and `ansible_port` for the `proxmox` group; the guest blocks under `lxc` |
+| `inventory/group_vars/all/main.yml` | `lxc_ssh_public_key` — the operator's own public SSH key |
+
+The template's `hosts.yml` already carries one example guest and one example
+group, so the shape is visible before anything is edited.
+
+**Do not commit `inventory/`.** It is in `.gitignore`; `git add inventory/`
+would need `-f`, and the reason it is ignored is that it is the operator's own
+topology. If a file from it ever does land in a commit, treat it as a leak:
+the host names and guest IDs are not secret, but they are not public either.
+
+#### The shape of `inventory/hosts.yml`
+
+```
+all:
+  children:
+    proxmox:
+      hosts:
+        pve:                    # the Proxmox node itself
+          ansible_host: ...
+          ansible_port: 6022
+          ansible_user: root
+    lxc:
+      hosts:
+        <guest>:                # each guest the repository provisions
+          ansible_user: root
+          lxc_vmid: 121
+          lxc_hostname: <guest>
+    <group>:                   # a group per guest, holding its app_roles
+      hosts:
+        <guest>:
+```
+
+Two rules that cost an afternoon to learn:
+
+- **The group name and the host name must differ.** Ansible rejects a group
+  that shares its name with a host, and the warning is easy to miss in a long
+  inventory. `ex` / `example-app` is the pair to copy; `mygrp` / `my-app` is
+  the other.
+- **The group name carries no hyphen.** Ansible rejects a hyphen in a group
+  name outright.
+
+`appctl` reads `app_roles` out of `inventory/group_vars/` with a shallow scan,
+so the group does not have to be listed in `all.children` for `appctl list` to
+report the application as deployed — but Ansible needs it there for the play
+to reach the host, so put it in both.
 
 ### 9. Secrets
 
@@ -613,6 +681,22 @@ lxc:
       lxc_vmid: 121
       lxc_hostname: my-app
 ```
+
+Plus a group that holds it, and a `group_vars/<group>/main.yml` that says what
+the guest runs. Remember the group name and the host name must differ, and the
+group name carries no hyphen.
+
+**`inventory/` is gitignored** — it holds the operator's own topology, not the
+project's. If it does not exist, create it from `inventory.example/` first:
+
+```bash
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
+```
+
+Do not commit it. See "If `inventory/` does not exist yet" above for the full
+procedure.
 
 Read `docs/PLAN-proxmox-lxc-ansible.md` before changing anything in
 `common/`. Section 8 is a list of failures that passed review and only showed up

@@ -24,4 +24,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ansible-core
-      - run: ansible-playbook --syntax-check -i inventory/hosts.yml playbooks/site.yml
+      # The real inventory is gitignored — it names the operator's own hosts —
+      # so the syntax check runs against the committed template instead. It
+      # exercises the same playbook, the same role paths and the same
+      # group_vars layout, which is what this job is for.
+      - run: ansible-playbook --syntax-check -i inventory.example/hosts.yml playbooks/site.yml

@@ -231,13 +231,17 @@ missing ones. See [secrets.md](secrets.md).
 The two are separate, and `appctl` reports them separately.
 
 An application is deployed when its name appears in an `app_roles` list under
-`inventory/group_vars/*.yml`:
+`inventory/group_vars/*/main.yml`:
 
 ```yaml
-# inventory/group_vars/example-app.yml
+# inventory/group_vars/ex/main.yml
 app_roles:
   - example-app
 ```
+
+The inventory is gitignored — it holds your own hosts — so a fresh clone has
+none. Create it from `inventory.example/`; the skill
+(`.agents/skills/deployflow-add-app/SKILL.md`) has the full procedure.
 
 `appctl list` shows that in the DEPLOYED column. Selection follows from it:
 

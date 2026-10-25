@@ -10,7 +10,26 @@ ansible-playbook --syntax-check -i inventory/hosts.yml playbooks/site.yml
 appctl install <app>   # twice; the second must report changed=0
 ```
 
-`git status` must not show `.env`, `tmp/`, `apps/*/files/dist/` or `tools/`.
+`git status` must not show `.env`, `tmp/`, `apps/*/files/dist/`, `tools/` or
+`inventory/`.
+
+**`inventory/` is gitignored.** It names your own Proxmox host, the guest IDs
+and the addresses of machines only you can reach. A fresh clone has no
+inventory at all, and that is the expected state — the committed templates live
+in `inventory.example/`, and the skill documents how to create the real one:
+
+```bash
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
+```
+
+The syntax check above therefore needs a local inventory. On a fresh clone,
+use the template instead — it exercises the same playbook and role paths:
+
+```bash
+ansible-playbook --syntax-check -i inventory.example/hosts.yml playbooks/site.yml
+```
 
 ## What a change must preserve
 

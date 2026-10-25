@@ -153,7 +153,12 @@ cd deployflow
 uv tool install --editable .
 
 cp app.example.yaml app.yaml        # then edit it
-cp inventory/hosts.yml inventory/hosts.yml   # already a copy; edit the host
+
+# The inventory is gitignored — it names your own hosts — so a fresh clone
+# has none. Create it from the committed templates.
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
 ```
 
 Edit three things:
@@ -161,6 +166,11 @@ Edit three things:
 1. `app.yaml` — the application, its port and its target options.
 2. `inventory/hosts.yml` — your Proxmox host and the guest.
 3. `inventory/group_vars/all/main.yml` — your SSH public key.
+
+`inventory/` stays out of git on purpose: it names your Proxmox host, the guest
+IDs and the addresses of machines only you can reach. Nothing in it is a
+credential, and none of it is public either. The committed templates in
+`inventory.example/` show the shape of every key.
 
 Then:
 
@@ -207,13 +217,17 @@ apps/                    one directory per application
   omniroute/             OmniRoute, built from a source checkout
     build/               the build script and its host-side half
     docs/                what building it taught
+  omniroute-release/     OmniRoute, installed from a published npm release
   builder/               a toolchain: the guest other applications are built on
 src/appctl/              the appctl package
   targets/               the delivery-target interface and its implementations
     proxmox_lxc.py       the only implemented target
 docs/                    architecture, configuration, rendering, secrets, build
 playbooks/site.yml
-inventory/               guests; the only file you edit to add one
+inventory/               guests; the only file you edit to add one.
+                         GITIGNORED — it names your own hosts. Create it
+                         from inventory.example/.
+inventory.example/       the committed templates for the above
 ```
 
 `roles_path = common:apps`. A role's `meta` dependency declares what it needs,

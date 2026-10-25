@@ -41,6 +41,7 @@ transfers when the next destination arrives.
 - **Deterministic flow** — `appctl` drives the same order every run: validate, check secrets, render, then play. Every command exits non-zero on failure — [`src/appctl/cli.py`](src/appctl/cli.py)
 - **Agentic skill** — the contract, scaffold and checklist an agent follows to write a new role — [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md)
 - **App manifest** — one file per application: source, config, secrets, destination. Unknown keys error out — [`app.example.yaml`](app.example.yaml)
+- **Private inventory** — your hosts, guest IDs and addresses stay out of git; the repository ships templates and the skill documents how to build the real one — [`inventory.example/`](inventory.example/)
 - **Pinned artifacts** — every dependency locked by hash; the build refuses a lockfile without one — [`src/appctl/build.py`](src/appctl/build.py)
 - **Application-level checks** — each app asserts its own thing: the listener is on the right address, the endpoint answers, the API refuses an unauthenticated caller — [`apps/omniroute/tasks/main.yml`](apps/omniroute/tasks/main.yml)
 - **Idempotency** — a second install reports `changed=0`, proving the run is repeatable — [`src/appctl/install.py`](src/appctl/install.py)
@@ -79,6 +80,16 @@ DeployFlow turns that into a repository an agent can work inside:
 ```bash
 git clone https://github.com/bruj0/deployflow.git
 cd deployflow
+
+# The inventory is gitignored — it names your own hosts — so a fresh clone has
+# none. Create it from the committed templates.
+mkdir -p inventory/group_vars
+cp inventory.example/hosts.yml inventory/hosts.yml
+cp -r inventory.example/group_vars/. inventory/group_vars/
+
+# Then edit the two files the templates name:
+#   inventory/hosts.yml                 your Proxmox host and your guests
+#   inventory/group_vars/all/main.yml   your SSH public key
 ```
 
 Then tell your agent:
@@ -110,6 +121,9 @@ CHECKOUT=../OmniRoute                          # wherever you put it
 # Point the role at your checkout. The default is the path it was developed
 # against, so change it.
 #   inventory/group_vars/omrsrc/main.yml -> om_local_source: <your path>
+#
+# That file is yours: the inventory is gitignored, so this is a local edit and
+# never a commit.
 
 appctl secrets set omniroute_jwt_secret            --generate
 appctl secrets set omniroute_api_key_secret        --generate
