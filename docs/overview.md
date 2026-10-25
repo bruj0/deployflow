@@ -100,12 +100,17 @@ naming a memory limit rather than the guest — and the guest stopped
 answering SSH entirely. The role now refuses a guest below the floor it
 needs.
 
-The two shipped applications are the two hard shapes:
+The two shipped applications that need a build are the two hard shapes:
 
 | Application | Shape | What it shows |
 |---|---|---|
 | [`apps/omniroute/`](../apps/omniroute/) | `repo` — built from a checkout | a source build that refuses a stale tree, and checks an inference plane's key gate |
 | [`apps/builder/`](../apps/builder/) | `toolchain` | a guest that exists to build the other one |
+
+Two more need no build at all: [`apps/example-app/`](../apps/example-app/) is
+a small HTTP service that installs from a pinned wheel, and
+[`apps/omniroute-release/`](../apps/omniroute-release/) installs a published
+npm release.
 
 ## Targets
 

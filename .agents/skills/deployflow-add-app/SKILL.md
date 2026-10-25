@@ -136,6 +136,36 @@ prove the service answers.
 Keep every postcondition — see below. They are the point of the role, not
 boilerplate.
 
+**Two mistakes that cost a run each, and that the reference role now avoids:**
+
+*pip runs on the guest, so the lockfile must be copied there first.* Pointing
+pip at `{{ role_path }}/files/requirements.lock` — a path on the controller —
+fails with "Could not open requirements file". That message names a missing
+file rather than a file that is present, on a different machine, and it looks
+like a broken lockfile rather than a path problem. Copy the file to
+`{{ app_dir }}/requirements.lock` and point pip at that.
+
+*The import check needs a module name, not the application name.* An
+application name may contain a hyphen, and `import example-app` is a *syntax
+error*, not a missing module — so the check fails for a reason that has
+nothing to do with the install, and the real problem is never reached. Name the
+module separately (`app_module`), and point the unit's `PYTHONPATH` at the
+install root where it lives.
+
+**End the role by reporting what it proved.** A `debug` task named
+`Report the checks that passed`, whose `msg` is a list of one line per check,
+becomes the `check:` lines in the operator's summary. Without it the summary
+reports a task count, which is not evidence:
+
+```yaml
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "import {{ app_module }}: ok"
+      - "endpoint /: HTTP {{ app_endpoint.status }}"
+```
+
 ### 7. Name the target
 
 Every application says where it runs:
@@ -155,6 +185,31 @@ applications:
 `kind` must be a registered target. `vm` and `docker_vm` are planned and fail
 before anything is built, so an application that names one cannot be deployed
 yet. Run `appctl targets` to see the current list.
+
+**The manifest's pin and the role's pin must agree.** `source.package` in
+`app.yaml` is what the operator reviews; the role pins the same thing in its
+own `defaults/main.yml`, because a role has to be able to say what it installs
+without reading the manifest. Those are two files, and they drift.
+
+`appctl` passes the manifest's pin into the play as `appctl_source_package` and
+`appctl_source_version`. A role should refuse to run when they disagree:
+
+```yaml
+- name: Refuse to install a package the manifest does not name
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package == app_package_name
+      - appctl_source_version == app_package_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package }}=={{ appctl_source_version }},
+      but this role installs {{ app_package_name }}=={{ app_package_version }}.
+    quiet: true
+```
+
+**The application's name is not its package name.** `example-app` is what the
+guest calls the service; `bottle` is what gets installed to serve it. Keep the
+two in separate variables, or the comparison above compares a name with
+itself.
 
 `options` belongs to the target. The shared schema does not read inside it, so
 a misspelled key there is caught by the target, not by the schema.

@@ -3,13 +3,13 @@
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> ·
   <a href="#the-problem-it-solves">The problem it solves</a> ·
   <a href="#try-it">Try it</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#three-kinds-of-application">Three kinds of application</a> ·
   <a href="#ready-to-use-applications">Ready-to-use applications</a> ·
-  <a href="#where-each-feature-lives">Where each feature lives</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#glossary">Glossary</a> ·
   <a href="#requirements">Requirements</a> ·
   <a href="#documentation">Documentation</a>
 </p>
@@ -37,20 +37,6 @@ Ansible. That is the first destination, not the definition of the project.
 The workflow itself — manifest, roles, checks, verification — is what
 transfers when the next destination arrives.
 
-## Features
-- **Deterministic flow** — `appctl` drives the same order every run: validate, check secrets, render, then play. Every command exits non-zero on failure — [`src/appctl/cli.py`](src/appctl/cli.py)
-- **Agentic skill** — the contract, scaffold and checklist an agent follows to write a new role — [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md)
-- **App manifest** — one file per application: source, config, secrets, destination. Unknown keys error out — [`app.example.yaml`](app.example.yaml)
-- **Private inventory** — your hosts, guest IDs and addresses stay out of git; the repository ships templates and the skill documents how to build the real one — [`inventory.example/`](inventory.example/)
-- **Pinned artifacts** — every dependency locked by hash; the build refuses a lockfile without one — [`src/appctl/build.py`](src/appctl/build.py)
-- **Application-level checks** — each app asserts its own thing: the listener is on the right address, the endpoint answers, the API refuses an unauthenticated caller — [`apps/omniroute/tasks/main.yml`](apps/omniroute/tasks/main.yml)
-- **Idempotency** — a second install reports `changed=0`, proving the run is repeatable — [`src/appctl/install.py`](src/appctl/install.py)
-- **Secrets management** — `appctl secrets` keeps them in a gitignored `.env`; the run reads them from a mode-0600 file, so they never reach `argv` or a log — [`src/appctl/secrets.py`](src/appctl/secrets.py)
-- **Pluggable targets** — a destination interface; `proxmox_lxc` ships, `vm` and `docker_vm` are named — [`src/appctl/targets/base.py`](src/appctl/targets/base.py)
-- **Streaming logs** — commands, log, recap and errors kept per run under `tmp/runs/` — [`src/appctl/install.py`](src/appctl/install.py)
-- **Shared framework** — the toolchain, service account and venv every app role depends on — [`common/python/`](common/python/)
-- **Three working applications** — a service installed from a published release, a service built from a checkout, and the build host that builds it — [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/)
-
 ## The problem it solves
 
 An agent can write a deployment in a few minutes. What it cannot do, on its
@@ -77,29 +63,107 @@ DeployFlow turns that into a repository an agent can work inside:
 
 ## Try it
 
+Four steps. The first two are the setup every run needs; the third is the one
+that proves the workflow works; the fourth is how you add your own
+application.
+
+### 1. Get the tool
+
 ```bash
 git clone https://github.com/bruj0/deployflow.git
 cd deployflow
+uv tool install --editable .
+```
 
-# The inventory is gitignored — it names your own hosts — so a fresh clone has
-# none. Create it from the committed templates.
+`appctl` is the command this repository is built around. It needs Python 3.12
+or later, and it needs `ansible-playbook` on your `PATH`:
+
+```bash
+uv tool install ansible-core     # or: pipx install ansible-core
+```
+
+The manifest is gitignored too — `app.yaml` is yours, and the committed
+template is [`app.example.yaml`](app.example.yaml). Copy it:
+
+```bash
+cp app.example.yaml app.yaml
+```
+
+### 2. Create your inventory
+
+The inventory names your Proxmox host, your guest IDs and the addresses of
+machines only you can reach. It is **gitignored**, so a fresh clone has none —
+and that is the expected state, not a broken checkout. The committed templates
+are in `inventory.example/`:
+
+```bash
 mkdir -p inventory/group_vars
 cp inventory.example/hosts.yml inventory/hosts.yml
 cp -r inventory.example/group_vars/. inventory/group_vars/
-
-# Then edit the two files the templates name:
-#   inventory/hosts.yml                 your Proxmox host and your guests
-#   inventory/group_vars/all/main.yml   your SSH public key
 ```
 
-Then tell your agent:
+Then edit the two files the templates name:
+
+| File | What to put in it |
+|---|---|
+| `inventory/hosts.yml` | your Proxmox host and your guests |
+| `inventory/group_vars/all/main.yml` | your SSH public key |
+
+### 3. Install an application and watch it prove itself
+
+The repository ships `example-app`: a small HTTP service that installs from a
+pinned wheel and checks that it answers. It needs no build host and no
+half-hour compile, so it is the fastest way to see the whole workflow.
+
+```bash
+appctl install example-app
+```
+
+The last lines are the point of the whole exercise:
+
+```
+example-app: proxmox_lxc -> example-app  10 changed, 0 failed, 41 tasks, 33s
+  check: example-app is installed and answering on port 8080
+  check: import example_app: ok
+  check: unit example-app: active
+  check: listener on 8080: present
+  check: endpoint /: HTTP 200
+```
+
+Those five lines are the application's own checks, not a task count. Each one
+stands in for a failure that a green play would otherwise hide.
+
+Now run it again:
+
+```bash
+appctl install example-app
+```
+
+```
+example-app: proxmox_lxc -> example-app  0 changed, 0 failed, 41 tasks, 29s
+  check: example-app is installed and answering on port 8080
+  check: import example_app: ok
+  check: unit example-app: active
+  check: listener on 8080: present
+  check: endpoint /: HTTP 200
+```
+
+**`0 changed` is the claim this project makes.** The second run found nothing
+to do and re-verified the service anyway. A tool that reports a change every
+run is reinstalling itself and proving nothing.
+
+### 4. Add your own application
+
+Do not write the role by hand. There is a skill for it, and your agent can
+follow it:
 
 > Read AGENTS.md and .agents/skills/deployflow-add-app/SKILL.md, then add support for
 > <your application>. Use the deployflow-add-app skill. Show me the diff before you run
 > anything.
 
 The skill covers the manifest, the role, the pinned lockfile, the checks, and
-the traps that make a run reinstall itself forever.
+the traps that make a run reinstall itself forever. It also documents how to
+create the inventory above when it is missing.
 
 To look around first:
 
@@ -108,37 +172,19 @@ appctl targets      # which destinations exist, and which are not built yet
 appctl list         # what this repository has configured
 ```
 
-Or run one of the two shipped applications end to end. `builder` first, because
-`omniroute` builds on it:
+### The other three applications
 
-```bash
-appctl install builder                       # the build host
+`example-app` is the smallest thing that works. Three others ship as worked
+examples of the shapes that are harder:
 
-# OmniRoute needs a checkout on this controller, and its secrets.
-git clone https://github.com/cheaper-inference/OmniRoute.git
-CHECKOUT=../OmniRoute                          # wherever you put it
+| Application | What it shows | What it costs |
+|---|---|---|
+| [`omniroute-release`](apps/omniroute-release/) | an application installed from a **published release** | five generated secrets, no build |
+| [`omniroute`](apps/omniroute/) | an application **built from a checkout** | a checkout, a build host, ~28 min |
+| [`builder`](apps/builder/) | the **build host** the second one needs | 24 GB of RAM on the host |
 
-# Point the role at your checkout. The default is the path it was developed
-# against, so change it.
-#   inventory/group_vars/omrsrc/main.yml -> om_local_source: <your path>
-#
-# That file is yours: the inventory is gitignored, so this is a local edit and
-# never a commit.
-
-appctl secrets set omniroute_jwt_secret            --generate
-appctl secrets set omniroute_api_key_secret        --generate
-appctl secrets set omniroute_storage_encryption_key --generate
-appctl secrets set omniroute_initial_password       --generate
-appctl secrets set omniroute_ws_bridge_secret      --generate
-
-apps/omniroute/build/omr-build-linux.sh "$CHECKOUT" main   # ~28 min
-appctl install omniroute                         # deploy and verify
-appctl install omniroute                         # must be changed=0
-```
-
-The build takes about half an hour because it compiles a 2 GB JavaScript tree
-on the guest's platform. That is the cost of not shipping a darwin binary to
-a linux server.
+`omniroute-release` is the one to run next if you want a real service: it
+needs no builder and no compile.
 
 ## How it works
 
@@ -212,6 +258,13 @@ The third is the unusual one, and it is what makes the workflow general
 enough to build the other two. It is explained in
 [Three kinds of application](#three-kinds-of-application).
 
+`source.package` is the pin the operator reviews, and the role checks that it
+installs the same thing. If the manifest says `bottle==0.13.3` and the role
+pins a different version, the install refuses to run rather than quietly
+installing something else. The application's *name* is not its package name:
+`example-app` is what the guest calls the service, `bottle` is what gets
+installed to serve it.
+
 ### 2. The application role
 
 How it is installed, in one directory per application. The agent writes this;
@@ -219,9 +272,17 @@ it follows the contract in `AGENTS.md`:
 
 ```yaml
 # apps/myapp/tasks/main.yml
+- name: Copy the lockfile to the guest
+  # pip on the guest cannot open a path on the controller, so the file
+  # travels first and pip is pointed at where it landed.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/requirements.lock"
+    dest: "{{ app_dir }}/requirements.lock"
+    mode: "0644"
+
 - name: Install the application
   ansible.builtin.pip:
-    requirements: "{{ role_path }}/files/requirements.lock"
+    requirements: "{{ app_dir }}/requirements.lock"
     virtualenv: "{{ app_venv }}"
     extra_args: "--require-hashes"
 
@@ -235,6 +296,15 @@ it follows the contract in `AGENTS.md`:
   ansible.builtin.fail:
     msg: "The service listens but does not answer"
   when: app_endpoint.status is undefined
+
+- name: Report the checks that passed
+  # This task is what the summary prints. Its lines become the `check:` lines
+  # the operator reads, so the evidence the application gave is the evidence
+  # that is reported.
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "endpoint /: HTTP {{ app_endpoint.status }}"
 ```
 
 ### 3. The target
@@ -353,7 +423,7 @@ half the guest configured.
 |---|---|
 | `.env` on the controller | the only plain-text copy, mode 0600, gitignored |
 | the temporary extra-vars file | mode 0600, passed as `--extra-vars @file`, deleted at exit |
-| the guest's `EnvironmentFile` | mode 0600, owned by root |
+| the guest's `EnvironmentFile` | mode 0640, owned by `root:<service account>` — systemd reads it as PID 1, and the service account has to be able to read it too |
 | the application's memory | resolved from that file at startup |
 | **any log** | **never** |
 
@@ -409,7 +479,9 @@ The worked example is [`apps/builder/`](apps/builder/).
 
 ## Ready-to-use applications
 
-The repository ships three applications that work, not just two that illustrate.
+The repository ships four applications that work, not three that illustrate.
+`example-app` is covered in [Try it](#try-it) above; the other three cover
+the shapes that are harder.
 
 ### `omniroute-release` — an application installed from a published release
 
@@ -465,24 +537,45 @@ A reviewer reading the diff sees the intent, not a wall of generated YAML:
 The agent's own reasoning stays in its session. What lands in the repository is
 declarative and reviewable.
 
-## Where each feature lives
+## Features
 
-The same list as a map, for when you want to go straight to the file.
+Every feature, what it gives you, and the file that holds it.
 
 | Feature | What it gives you | Where |
 |---|---|---|
 | **Deterministic flow** | `appctl` drives the same order every run — validate, check secrets, render, then play — and exits non-zero on failure. | [`src/appctl/cli.py`](src/appctl/cli.py) |
 | **Agentic skill** | The contract, the scaffold and the checklist, so an agent writes a role that matches the others. | [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md) |
 | **App manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | [`app.example.yaml`](app.example.yaml) |
-| **Pinned artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one. | [`src/appctl/build.py`](src/appctl/build.py) |
-| **Application-level checks** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. | [`apps/omniroute/tasks/main.yml`](apps/omniroute/tasks/main.yml) |
+| **Private inventory** | Your hosts, guest IDs and addresses stay out of git. The repository ships templates and the skill documents how to build the real one. | [`inventory.example/`](inventory.example/) |
+| **Pinned artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one, and the role checks the manifest and the role agree on the version. | [`src/appctl/build.py`](src/appctl/build.py) |
+| **Application-level checks** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. The result is printed as `check:` lines, so the summary is evidence rather than a task count. | [`apps/example-app/tasks/main.yml`](apps/example-app/tasks/main.yml) |
 | **Idempotency** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Secrets management** | `appctl secrets` keeps them in a gitignored `.env`; the run reads them from a mode-0600 file, so they never reach `argv` or a log. | [`src/appctl/secrets.py`](src/appctl/secrets.py) |
 | **Pluggable targets** | A target interface separates "what the application is" from "where it runs". One target ships today. | [`src/appctl/targets/base.py`](src/appctl/targets/base.py) |
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
-| **Two working applications** | Two shipped applications cover the two hard shapes: a service built from a source checkout, and the build host that builds it. | [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/) |
-| **Three working applications** | A third covers the third shape: an application installed from a published release, with no build at all. | [`apps/omniroute-release/`](apps/omniroute-release/) |
+| **Four working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, and the build host that builds it. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/) |
+
+## Glossary
+
+The words this document uses, in the order a newcomer meets them.
+
+| Word | What it means here |
+|---|---|
+| **`appctl`** | The command-line tool. It validates, renders and installs. |
+| **manifest** (`app.yaml`) | One file describing every application: where it comes from, what config it takes, which secrets it needs, where it runs. Gitignored — the committed template is [`app.example.yaml`](app.example.yaml). |
+| **role** | A directory under `apps/<name>/` holding the install steps and the checks for one application. |
+| **target** | Where an application runs. `proxmox_lxc` ships; `vm` and `docker_vm` are named but not built. |
+| **inventory** | Which machines exist. `inventory/hosts.yml` plus `group_vars/`. Gitignored, because it names your own hosts. |
+| **`group_vars/`** | Per-group settings, read by Ansible. `all/` holds what every guest needs; each other directory holds one group's. |
+| **guest** | The machine an application is installed into — here, a Proxmox LXC container. |
+| **controller** | The machine you run `appctl` on. It renders and drives; it does not serve. |
+| **artifact** | The thing that gets installed: a pinned wheel, a built tree, a published release. |
+| **pin** | An exact version, and for a Python dependency the sha256 of the file behind it. |
+| **lockfile** (`requirements.lock`) | Every dependency and its hashes, so the tree that installs is the tree that was reviewed. |
+| **`changed=0`** | The second run found nothing to do. The project's central claim. |
+| **toolchain** | An application that installs no service: the build host other applications are built on. |
+
 ## Requirements
 
 ### To run a delivery on the current target
@@ -494,7 +587,7 @@ The same list as a map, for when you want to go straight to the file.
 | SSH access from the controller to the host | The framework drives `pct` over SSH. |
 | `ansible-playbook` on the controller | The play does the configuring. |
 | Python 3.12 or later on the controller | That is the CLI's own requirement. |
-| A real application to install | The sample role is a reference. Point the agent at your application. |
+| Nothing else for the sample | `example-app` installs from a public wheel, so it needs no checkout, no build host and no secrets. |
 
 For the `omniroute` application specifically, three more things are needed,
 and all three are consequences of building from source rather than

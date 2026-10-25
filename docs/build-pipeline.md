@@ -113,7 +113,7 @@ the installed code, because that is the thing which will run.
 exits non-zero and says so:
 
 ```
-error: example-app is installed from example-app==1.0.0, so there is nothing to build
+error: example-app is installed from bottle==0.13.3, so there is nothing to build
 ```
 
 That is deliberate. Silently succeeding would hide a misconfiguration where
