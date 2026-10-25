@@ -100,6 +100,7 @@ it takes precedence over this file for anything about the tool:
 | [docs/rendering.md](docs/rendering.md) | how YAML becomes the configuration the guest reads |
 | [docs/secrets.md](docs/secrets.md) | how a secret reaches the guest |
 | [docs/targets.md](docs/targets.md) | the target interface, and how to add a target |
+| [docs/site.md](docs/site.md) | the documentation site: how it is assembled and how to publish it |
 
 ## Adding an application
 
@@ -215,6 +216,8 @@ because the built tree crosses the link.
 - `appctl install <app>` twice: the second must be `changed=0`
 - `git diff app.yaml` shows only the `state:` block changed, never the comments
 - `pytest tests` passes
+- `python scripts/build_site_docs.py --clean && mkdocs build --strict` — if you
+  changed a document, a link, or a diagram
 
 ## The inventory is not in git
 

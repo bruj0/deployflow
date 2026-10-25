@@ -1,0 +1,94 @@
+site_name: DeployFlow
+site_description: Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.
+site_url: https://bruj0.github.io/deployflow
+repo_url: https://github.com/bruj0/deployflow
+repo_name: bruj0/deployflow
+edit_uri: edit/main/site_src/
+
+docs_dir: site_src
+site_dir: site
+
+theme:
+  name: material
+  logo: assets/logo-icon.png
+  favicon: assets/logo-icon.png
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - panzoom:
+      key: "alt"
+      hint_location: "top"
+      full_screen: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid_fences.fence_pre_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Essay: index.md
+  - The project:
+      - Readme: project/readme.md
+      - Agent guide: project/agents.md
+      - Contributing: project/contributing.md
+      - Security: project/security.md
+      - Add-app skill: project/add-app-skill.md
+  - Reference:
+      - Index: reference/index.md
+      - Overview: reference/overview.md
+      - Architecture: reference/architecture.md
+      - Targets: reference/targets.md
+      - Configuration: reference/configuration.md
+      - Build pipeline: reference/build-pipeline.md
+      - Rendering: reference/rendering.md
+      - Secrets: reference/secrets.md
+      - Site: reference/site.md
+  - Applications:
+      - example-app: apps/example-app.md
+      - omniroute-release: apps/omniroute-release.md
+      - omniroute: apps/omniroute.md
+      - builder: apps/builder.md
+      - Building OmniRoute from source: apps/omniroute-building-from-source.md

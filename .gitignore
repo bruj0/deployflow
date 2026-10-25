@@ -49,3 +49,11 @@ tmp/
 
 # Upstream installer sources fetched for analysis. Not part of this repository.
 tools/
+
+# Documentation site. `site_src/` is assembled from the repository's own
+# Markdown by scripts/build_site_docs.py, and `site/` is the built output.
+# Both are build artifacts: the sources are the files the generator reads.
+site_src/
+site/
+_site/
+.venv-docs/

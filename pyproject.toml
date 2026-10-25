@@ -27,5 +27,15 @@ appctl = "appctl.cli:main"
 [project.urls]
 Repository = "https://github.com/bruj0/deployflow"
 
+# The documentation site. Kept out of the runtime dependencies: `appctl`
+# must not pull a documentation toolchain into a deployment host.
+[project.optional-dependencies]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.5.50",
+    "pymdown-extensions>=10.14",
+    "mkdocs-panzoom-plugin>=0.5",
+]
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/appctl"]
+packages = ["src/appctl", "mermaid_fences"]

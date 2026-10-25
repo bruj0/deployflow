@@ -1,0 +1,115 @@
+# GitHub Pages deploy for the documentation site.
+#
+# The repository keeps its documentation next to the code it describes.
+# `scripts/build_site_docs.py` assembles those files into `site_src/`, the
+# tree MkDocs builds. Nothing in `site_src/` is committed: it is a build
+# artifact, rebuilt here on every run.
+#
+# Configure Pages in repo Settings -> Pages -> Source:
+# "Deploy from a branch" -> Branch: `gh-pages` / `/ (root)`.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "essay/**"
+      - "docs/**"
+      - "apps/**/README.md"
+      - "assets/**"
+      - "scripts/build_site_docs.py"
+      - "mermaid_fences/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "essay/**"
+      - "docs/**"
+      - "apps/**/README.md"
+      - "assets/**"
+      - "scripts/build_site_docs.py"
+      - "mermaid_fences/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.4"
+
+      - name: Install Python dependencies (with [docs] extra)
+        run: |
+          uv sync --extra docs
+
+      - name: Assemble the site source tree
+        run: |
+          python scripts/build_site_docs.py --clean
+
+      - name: Build the site (--strict)
+        run: |
+          uv run mkdocs build --strict --site-dir site
+
+      - name: Upload the built site as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+          retention-days: 7
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.4"
+
+      - name: Build the site for deployment
+        run: |
+          uv sync --extra docs
+          python scripts/build_site_docs.py --clean
+          uv run mkdocs build --strict --site-dir _site
+
+      - name: Deploy _site/ to the gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          keep_files: false
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "docs: deploy site (${{ github.sha }})"

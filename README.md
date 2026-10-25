@@ -630,6 +630,11 @@ all:
 | [AGENTS.md](AGENTS.md) | The rules for changing this repository |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and what a change must preserve |
 
+The same documents are published as a site, with the essay as its home page:
+<https://bruj0.github.io/deployflow>. The site is assembled from the files
+above by `scripts/build_site_docs.py` — see [the site
+guide](docs/site.md) for how to build it.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
