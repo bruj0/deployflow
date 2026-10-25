@@ -14,6 +14,11 @@
   <a href="#documentation">Documentation</a>
 </p>
 
+> **Read the documentation online:** <https://bruj0.github.io/deployflow>
+>
+> The same documents, with the essay *"Software Delivery Needs a Harness, Not a
+> Better Prompt"* as the home page, and every diagram rendered.
+
 # DeployFlow
 
 **Point your coding agent at this repository and tell it to install an
@@ -633,7 +638,8 @@ all:
 The same documents are published as a site, with the essay as its home page:
 <https://bruj0.github.io/deployflow>. The site is assembled from the files
 above by `scripts/build_site_docs.py` — see [the site
-guide](docs/site.md) for how to build it.
+guide](docs/site.md) for how to build it, and
+`python scripts/serve_docs.py` to work on it locally.
 
 ## License
 
