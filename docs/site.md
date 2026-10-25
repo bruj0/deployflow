@@ -15,21 +15,35 @@ generator reads; the outputs are build artifacts.
 ## Build it locally
 
 ```bash
-uv venv -p 3.12 .venv-docs
-uv pip install --python .venv-docs/bin/python -e ".[docs]"
-.venv-docs/bin/python scripts/build_site_docs.py --clean
-.venv-docs/bin/python -m mkdocs build --strict --site-dir site
+uv sync --extra docs
+python scripts/build_site_docs.py --clean
+uv run mkdocs build --strict --site-dir site
 ```
 
 Serve it with a live reload while writing:
 
 ```bash
-.venv-docs/bin/python -m mkdocs serve --dev-addr 127.0.0.1:8899
+uv run python scripts/serve_docs.py
 ```
 
 The site is served under `/deployflow/` locally, because `site_url` names the
 GitHub Pages path. That prefix is not part of the site: it is where Pages
 will mount it.
+
+### Why not `mkdocs serve` directly
+
+`mkdocs serve` watches `docs_dir`, which here is `site_src/` — a tree the
+generator writes. Editing `README.md` does not change `site_src/`, so the
+server never rebuilds and the browser keeps showing the old page. The watch
+looks broken.
+
+`scripts/serve_docs.py` runs the generator, starts `mkdocs serve --strict`,
+and watches the documents the generator actually reads. A change to any of
+them re-runs the generator, which writes `site_src/`, which the server
+notices and rebuilds. The browser reloads a few seconds later.
+
+It takes the address as an option: `python scripts/serve_docs.py --addr
+127.0.0.1:8899`.
 
 ## What the generator does
 

@@ -217,7 +217,8 @@ because the built tree crosses the link.
 - `git diff app.yaml` shows only the `state:` block changed, never the comments
 - `pytest tests` passes
 - `python scripts/build_site_docs.py --clean && mkdocs build --strict` — if you
-  changed a document, a link, or a diagram
+  changed a document, a link, or a diagram. `python scripts/serve_docs.py`
+  does the same and watches the sources.
 
 ## The inventory is not in git
 
