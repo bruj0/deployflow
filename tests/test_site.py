@@ -9,6 +9,7 @@ nowhere, and a link inside a code sample that must not be touched.
 
 from __future__ import annotations
 
+import fnmatch
 import importlib.util
 import re
 import subprocess
@@ -113,6 +114,52 @@ def assembled(tmp_path_factory):
         check=True,
     )
     return output
+
+
+class TestWorkflowPaths:
+    """Every source the generator reads must trigger a site rebuild.
+
+    A `paths:` filter that misses a source is silent: the workflow does not
+    run, the site keeps the old page, and nothing fails. Both triggers are
+    checked separately, because a filter on the pull-request trigger does not
+    help a push to `main`.
+    """
+
+    @pytest.fixture(scope="module")
+    def triggers(self):
+        import re
+
+        workflow = (REPO_ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+        found = {}
+        for name in ("push", "pull_request"):
+            block = re.search(
+                rf"^\s*{name}:\s*$.*?(?=^\s*workflow_dispatch:|\Z)",
+                workflow,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert block, f"no {name} trigger in the workflow"
+            found[name] = re.findall(r'^\s*-\s*"([^"]+)"\s*$', block.group(0), re.MULTILINE)
+        return found
+
+    @pytest.mark.parametrize("trigger", ["push", "pull_request"])
+    def test_every_source_is_covered_by_a_path_pattern(self, triggers, trigger):
+        patterns = triggers[trigger]
+        sources = set(generator.PAGES) | set(generator.ASSETS)
+        uncovered = sorted(
+            source
+            for source in sources
+            if not any(fnmatch.fnmatch(source, pattern) for pattern in patterns)
+        )
+        assert not uncovered, f"the {trigger} trigger would not rebuild for: {uncovered}"
+
+    @pytest.mark.parametrize("trigger", ["push", "pull_request"])
+    def test_the_workflow_mentions_the_generator(self, triggers, trigger):
+        assert "scripts/build_site_docs.py" in triggers[trigger]
+
+    @pytest.mark.parametrize("trigger", ["push", "pull_request"])
+    def test_the_workflow_mentions_the_root_documents(self, triggers, trigger):
+        for document in ("README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md"):
+            assert document in triggers[trigger], document
 
 
 class TestAssembledSite:

@@ -14,9 +14,18 @@ on:
   push:
     branches: [main]
     paths:
+      # Every document the generator reads. A change to any of them changes
+      # the site, so it must trigger a rebuild. The root Markdown files are
+      # the ones people forget: the README is a page on the site.
+      - "README.md"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - ".agents/skills/**"
       - "essay/**"
       - "docs/**"
       - "apps/**/README.md"
+      - "apps/omniroute/docs/**"
       - "assets/**"
       - "scripts/build_site_docs.py"
       - "mermaid_fences/**"
@@ -26,9 +35,15 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "README.md"
+      - "AGENTS.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - ".agents/skills/**"
       - "essay/**"
       - "docs/**"
       - "apps/**/README.md"
+      - "apps/omniroute/docs/**"
       - "assets/**"
       - "scripts/build_site_docs.py"
       - "mermaid_fences/**"
