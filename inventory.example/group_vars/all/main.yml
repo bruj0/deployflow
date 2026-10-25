@@ -1,15 +1,22 @@
+---
 # Settings shared by every guest.
-
+#
+# This file is a TEMPLATE. The real one is `inventory/group_vars/all/main.yml`,
+# which is gitignored with the rest of the inventory.
+#
 # The operator's public SSH key, injected into each guest at create time by
 # `pct create --ssh-public-keys`. A public key is not a secret, so it lives in
-# the repository in plain text. That is deliberate: reading it from
-# ~/.ssh/id_ed25519.pub would work only on the machine that happens to hold
-# that key, and would break the moment the key moves to an agent.
+# plain text — but it identifies the operator, so it stays out of the
+# repository.
+#
+# Reading it from ~/.ssh/id_ed25519.pub would work only on the machine that
+# happens to hold that key, and would break the moment the key moves to an
+# agent. Put the key here instead.
 #
 # Replace this with your own key before running anything.
 lxc_ssh_public_key: >-
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBAehCKabzXnclJf1J8xKbuimS0m3L5zedOqgtPQf5Zb
-  bruj0@workstation
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyGoesHereYourOperatorKey000
+  operator@workstation
 
 # The repository root, for roles that read a build artifact from the controller.
 #

@@ -29,7 +29,14 @@ __pycache__/
 
 # The manifest an operator edits. app.example.yaml is the committed template.
 app.yaml
-
+# The inventory. It names the operator's own Proxmox host, the guest IDs and
+# the addresses of machines only they can reach — no credential, but not
+# public either.
+#
+# The inventory is created from a template rather than cloned with the
+# repository. `.agents/skills/deployflow-add-app/SKILL.md` documents the
+# shape and what each key means; `inventory.example/` holds the templates.
+inventory/
 # Build artifacts. The wheel is a multi-megabyte binary that changes on every
 # commit, and BUILDINFO records the sha256 the role checks before installing
 # anything. The lockfile beside them IS committed: it is a pure function of the

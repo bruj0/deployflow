@@ -1,0 +1,20 @@
+---
+# What this guest runs.
+#
+# This file is a TEMPLATE. The real one is `inventory/group_vars/mygrp/main.yml`,
+# which is gitignored with the rest of the inventory.
+#
+# The list names roles under apps/. Each role declares its dependency on
+# common/python through its meta/main.yml, so adding an application never
+# edits a playbook.
+app_roles:
+  - my-app
+
+# The guest is bigger than the framework default when the application needs
+# more than the default gives it. The values below are the framework's
+# defaults, spelled out so the shape is visible.
+#
+# lxc_cores: 2
+# lxc_memory: 2048
+# lxc_swap: 512
+# lxc_rootfs_gb: 16

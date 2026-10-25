@@ -1,4 +1,8 @@
-# Applications installed on this guest.
+---
+# What this guest runs.
+#
+# This file is a TEMPLATE. The real one is `inventory/group_vars/ex/main.yml`,
+# which is gitignored with the rest of the inventory.
 #
 # The list names roles under apps/. Each role declares its dependency on
 # common/python through its meta/main.yml, so adding an application never
