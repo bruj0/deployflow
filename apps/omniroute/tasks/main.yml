@@ -230,12 +230,27 @@
     mode: "0755"
 
 - name: Create the credentials directory
+  # The GROUP is the service account and the mode is 0750, not 0700.
+  #
+  # The directory has to be traversable by the account, because the operator
+  # wrapper reads the credentials file from it — and a 0700 root-owned
+  # directory makes that read fail even when the file inside it is readable.
+  #
+  # Measured on CT 120: `omniroute doctor` reported "Encrypted credentials
+  # exist but STORAGE_ENCRYPTION_KEY is missing" while the running server was
+  # perfectly healthy. The cause was exactly this — the wrapper ran as the
+  # service account, could not open the credentials file, and so never put
+  # STORAGE_ENCRYPTION_KEY in the environment. The server had the key because
+  # systemd read the file as PID 1; the diagnostic did not, because it did not
+  # go through systemd.
   ansible.builtin.file:
     path: "{{ om_secrets_dir }}"
     state: directory
     owner: root
-    group: root
-    mode: "0700"
+    group: "{{ app_user }}"
+    mode: "0750"
+  become: true
+  become_user: root
 
 - name: Install the omniroute command
   # A wrapper, not a symlink to the package's own bin entry: that shim runs
@@ -371,37 +386,25 @@
       A tree built on a different platform than the guest is the usual cause.
   when: om_native_binding.rc != 0
 
-- name: Run the application's own diagnostic
-  # The application's own opinion of its health, rather than this role's.
-  ansible.builtin.command:
-    argv: ["{{ om_cli }}", doctor, --no-liveness]
-    chdir: "{{ om_data_dir }}"
-  become_user: "{{ app_user }}"
-  changed_when: false
-  failed_when: false
-  register: om_doctor
-
-- name: Fail when the application reports an unhealthy install
-  ansible.builtin.fail:
-    msg: >-
-      The application reported an unhealthy install:
-      {{ om_doctor.stdout | default('') | trim }}
-      {{ om_doctor.stderr | default('') | trim }}
-  when: om_doctor.rc != 0
-
-# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 - name: Write the credentials file
-  # root:root 0600. systemd reads it as PID 1 before it drops to the service
-  # account, so the service account never needs to read it.
+  # The GROUP is the service account and the mode is 0640, not 0600. The
+  # service account needs to READ this file: the operator wrapper in
+  # /usr/local/bin reads it and exports what it finds, and the role's own
+  # `doctor` check runs through that wrapper as the service account.
+  #
+  # Read-only, deliberately. The service account can read the credentials and
+  # cannot change them — the file stays root-owned and unwritable by the
+  # process it belongs to, so a compromised application cannot rewrite the key
+  # that encrypts its own store.
   ansible.builtin.template:
     src: omniroute-secrets.env.j2
     dest: "{{ om_secrets_file }}"
     owner: root
-    group: root
-    mode: "0600"
+    group: "{{ app_user }}"
+    mode: "0640"
   # `no_log` is a TASK keyword, not a module parameter. Inside the module
   # block Ansible rejects it outright:
   #   Unsupported parameters for (ansible.legacy.copy) module: no_log
@@ -418,6 +421,41 @@
     group: "{{ app_user }}"
     mode: "0600"
   register: om_env_written
+
+# ---------------------------------------------------------------------------
+# The application's own opinion of its health
+# ---------------------------------------------------------------------------
+
+- name: Run the application's own diagnostic
+  # The application's own opinion of its health, rather than this role's.
+  #
+  # It runs AFTER the credentials and the environment file are written, and
+  # that order is load-bearing. The diagnostic goes through the operator
+  # wrapper, which reads the credentials file and exports what it finds, so a
+  # diagnostic that ran first would read the guest's previous configuration —
+  # no key on a first install, a stale key afterwards — and report a problem
+  # the service would not have.
+  #
+  # Measured on CT 122: the diagnostic ran before the credentials existed and
+  # reported "Encrypted credentials exist but STORAGE_ENCRYPTION_KEY is
+  # missing" while the database held a provider key encrypted under that key.
+  # The service was fine; the diagnostic was reading a guest that did not
+  # exist yet.
+  ansible.builtin.command:
+    argv: ["{{ om_cli }}", doctor, --no-liveness]
+    chdir: "{{ om_data_dir }}"
+  become_user: "{{ app_user }}"
+  changed_when: false
+  failed_when: false
+  register: om_doctor
+
+- name: Fail when the application reports an unhealthy install
+  ansible.builtin.fail:
+    msg: >-
+      The application reported an unhealthy install:
+      {{ om_doctor.stdout | default('') | trim }}
+      {{ om_doctor.stderr | default('') | trim }}
+  when: om_doctor.rc != 0
 
 # ---------------------------------------------------------------------------
 # The service

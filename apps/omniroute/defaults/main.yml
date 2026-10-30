@@ -157,6 +157,15 @@ om_bootstrap_stamp: "{{ app_state_dir }}/.bootstrap-complete"
 # the network can spend, billed to the operator's providers.
 om_require_api_key: true
 
+# Skip OmniRoute's local context-window check on incoming requests.
+#
+# The local guard estimates the input size by counting the assistant's own
+# reasoning text in the history, which the upstream provider does not count.
+# The estimate therefore runs ahead of the real prompt size and the gateway
+# refuses a request the provider would accept. Upstream enforces its own
+# limit, so a rejected request fails there with the provider's own message.
+om_disable_context_window_checks: true
+
 # A log level, and a V8 heap ceiling. The ceiling is not a memory limit;
 # native buffers sit outside it.
 om_log_level: info
