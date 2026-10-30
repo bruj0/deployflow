@@ -35,6 +35,22 @@ The manifest key is `omniroute-release` and the role directory is
 role with `--tags lxc,<key>`, and a key that is not a role name selects
 nothing.
 
+## Why its secrets are named `omniroute_release_*`
+
+Two guests run this application: this role installs the published release, and
+`apps/omniroute/` builds one from a checkout. Both derive their paths from
+`app_name`, so both write `/opt/omniroute` and both read a credentials file
+with the same five keys.
+
+One `.env` cannot hold two storage encryption keys. The release role's
+credentials are therefore named `omniroute_release_*`, and the source-built
+role keeps the unscoped names. Two guests, two key sets, one file.
+
+The cost is a name that repeats the role, and the benefit is that adopting a
+guest under this role cannot rotate a key the other guest is using. The
+storage encryption key and `storage.sqlite` are one backup set: a rotated key
+leaves every stored provider credential undecryptable.
+
 ## Why the role is named `omniroute-release` but the app is `omniroute`
 
 Two roles cannot share a name, and `apps/omniroute/` already owns the first

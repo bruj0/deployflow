@@ -74,8 +74,8 @@ applications:
   #     kind: package
   #     package: "omniroute-release@3.8.51"
   #   secrets:
-  #     - omniroute_jwt_secret
-  #     - omniroute_api_key_secret
-  #     - omniroute_storage_encryption_key
-  #     - omniroute_initial_password
-  #     - omniroute_ws_bridge_secret
+  #     - omniroute_release_jwt_secret
+  #     - omniroute_release_api_key_secret
+  #     - omniroute_release_storage_encryption_key
+  #     - omniroute_release_initial_password
+  #     - omniroute_release_ws_bridge_secret

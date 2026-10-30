@@ -34,11 +34,11 @@
       {{ item.name }} is empty. Set it with
       `appctl secrets set {{ item.name }}` and re-run.
   loop:
-    - { name: omniroute_jwt_secret }
-    - { name: omniroute_api_key_secret }
-    - { name: omniroute_storage_encryption_key }
-    - { name: omniroute_initial_password }
-    - { name: omniroute_ws_bridge_secret }
+    - { name: omniroute_release_jwt_secret }
+    - { name: omniroute_release_api_key_secret }
+    - { name: omniroute_release_storage_encryption_key }
+    - { name: omniroute_release_initial_password }
+    - { name: omniroute_release_ws_bridge_secret }
   loop_control:
     label: "{{ item.name }}"
   when: (vars[item.name] | default('') | string) == ''
@@ -49,11 +49,11 @@
   # bootstrap that the next play would not retry.
   ansible.builtin.fail:
     msg: >-
-      omniroute_initial_password is shorter than the 8 characters
+      omniroute_release_initial_password is shorter than the 8 characters
       `omniroute setup` requires. Re-generate it with
-      `appctl secrets set omniroute_initial_password --generate`.
+      `appctl secrets set omniroute_release_initial_password --generate`.
   no_log: true
-  when: (omniroute_initial_password | string | length) < 8
+  when: (omniroute_release_initial_password | string | length) < 8
 
 - name: Fail when a credential cannot be written to an EnvironmentFile
   # A newline ends a line in the format systemd parses, so a value containing
@@ -62,11 +62,11 @@
   ansible.builtin.fail:
     msg: "{{ item.name }} contains a newline, which an EnvironmentFile cannot carry."
   loop:
-    - { name: omniroute_jwt_secret }
-    - { name: omniroute_api_key_secret }
-    - { name: omniroute_storage_encryption_key }
-    - { name: omniroute_initial_password }
-    - { name: omniroute_ws_bridge_secret }
+    - { name: omniroute_release_jwt_secret }
+    - { name: omniroute_release_api_key_secret }
+    - { name: omniroute_release_storage_encryption_key }
+    - { name: omniroute_release_initial_password }
+    - { name: omniroute_release_ws_bridge_secret }
   loop_control:
     label: "{{ item.name }}"
   no_log: true
@@ -776,7 +776,7 @@
     dest: "{{ omr_bootstrap_stamp }}"
     content: |
       # Written by the omniroute-release role once `omniroute setup
-      # --non-interactive` has applied omniroute_initial_password. Delete this to
+      # --non-interactive` has applied omniroute_release_initial_password. Delete this to
       # re-run the bootstrap on the next install.
       applied_at: "{{ ansible_date_time.iso8601 | default('unknown') }}"
     owner: "{{ app_user }}"
@@ -1070,7 +1070,7 @@
       {{ omr_management_anonymous.status | default('no answer') }} instead of 401,
       so the dashboard has no administrator password. Delete
       {{ omr_bootstrap_stamp }} on the guest and re-run, or set
-      omniroute_initial_password and re-run.
+      omniroute_release_initial_password and re-run.
   when:
     - omr_reachable_from_controller | bool
     - omr_management_anonymous is not skipped

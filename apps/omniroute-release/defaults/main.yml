@@ -165,6 +165,15 @@ omr_bootstrap_stamp: "{{ app_state_dir }}/.bootstrap-complete"
 # in force after every start rather than trusting the variable.
 omr_require_api_key: true
 
+# Skip OmniRoute's local context-window check on incoming requests.
+#
+# The local guard estimates the input size by counting the assistant's own
+# reasoning text in the history, which the upstream provider does not count.
+# The estimate therefore runs ahead of the real prompt size and the gateway
+# refuses a request the provider would accept. Upstream enforces its own
+# limit, so a rejected request fails there with the provider's own message.
+omr_disable_context_window_checks: true
+
 # The realtime dashboard WebSocket. It binds loopback independently of
 # OMNIROUTE_SERVER_HOST (src/server/ws/liveServer.ts), so a published dashboard
 # whose live view cannot reach the browser fails silently — degraded, not
@@ -207,26 +216,26 @@ omr_home: "{{ app_state_dir }}/home"
 # Signs dashboard session cookies. Auto-generated and persisted when absent —
 # which is exactly what makes an explicit value necessary: a wiped state
 # directory would otherwise silently rotate it and sign every operator out.
-omniroute_jwt_secret: ""
+omniroute_release_jwt_secret: ""
 
 # Encrypts stored provider API keys at rest. Same auto-generation, same risk,
 # and worse: a rotated value leaves every stored credential undecryptable.
-omniroute_api_key_secret: ""
+omniroute_release_api_key_secret: ""
 
 # Encrypts the database itself. It is set here rather than left to the
 # application because OmniRoute generates one on first run and appends it to
 # <DATA_DIR>/.env — a file this role owns and rewrites. Left unset, the next play
 # would render that file without the key and leave a database nothing can
 # decrypt.
-omniroute_storage_encryption_key: ""
+omniroute_release_storage_encryption_key: ""
 
 # The dashboard administrator password, applied once by the bootstrap task
 # below. Leaving it unset does not fail boot: it leaves the dashboard to the
 # onboarding wizard, and skipping that wizard turns dashboard login off
 # altogether, which REQUIRE_API_KEY does not compensate for. Note that
 # .env.example ships the literal CHANGEME, which npm install seeds on first run.
-omniroute_initial_password: ""
+omniroute_release_initial_password: ""
 
 # Required in production but not persisted anywhere, so it is ephemeral per
 # boot: unset, every WebSocket bridge request is rejected.
-omniroute_ws_bridge_secret: ""
+omniroute_release_ws_bridge_secret: ""
