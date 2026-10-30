@@ -1,0 +1,1571 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/">
+      
+      
+      
+        <link rel="next" href="project/readme/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/panzoom.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta name="panzoom-theme" content="material">
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#software-delivery-needs-a-harness-not-a-better-prompt" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Essay
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-an-agent-has-to-guess-when-you-say-install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What an agent has to guess when you say “install it”
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#make-the-next-deployment-less-dependent-on-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make the next deployment less dependent on memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-belongs-in-the-harness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What belongs in the harness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-delivery-workflow-with-an-agent-in-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A delivery workflow with an agent in it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-green-deployment-that-returned-500" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The green deployment that returned 500
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-earlier-tools-already-taught-us" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the earlier tools already taught us
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-judgment-still-belongs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where judgment still belongs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#about-the-author" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        About the author
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="project/readme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="project/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="project/add-app-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="apps/example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="apps/omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="apps/omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="apps/builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="apps/omniroute-building-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-an-agent-has-to-guess-when-you-say-install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What an agent has to guess when you say “install it”
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#make-the-next-deployment-less-dependent-on-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make the next deployment less dependent on memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-belongs-in-the-harness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What belongs in the harness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-delivery-workflow-with-an-agent-in-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A delivery workflow with an agent in it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-green-deployment-that-returned-500" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The green deployment that returned 500
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-earlier-tools-already-taught-us" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the earlier tools already taught us
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-judgment-still-belongs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where judgment still belongs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#about-the-author" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        About the author
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="software-delivery-needs-a-harness-not-a-better-prompt">Software Delivery Needs a Harness, Not a Better Prompt<a class="headerlink" href="#software-delivery-needs-a-harness-not-a-better-prompt" title="Permanent link">&para;</a></h1>
+<p><em>Let agents write the new parts of a deployment. Make the established rules executable so they do not have to guess them again.</em></p>
+<p>An agent can write an Ansible role faster than I can. It can inspect a repository, find an entry point, draft a service unit, and propose the tasks needed to install it. That is useful. But what should happen when it has finished writing?</p>
+<p>A green playbook is not the answer. A process can be active while its UI returns 500. A port can be open while the application is bound to the wrong address. A deployment can succeed once and reinstall the same files on every subsequent run.</p>
+<p>In <a href="https://bruj0.github.io/engineer-expectations-after-genai/">my earlier essay about engineer expectations</a>, I argued that engineers now need to turn unclear needs into reliable systems of work, not merely turn requirements into code. Software delivery is a good place to test that claim. If an agent writes deployment code, the surrounding system must decide what counts as valid and what evidence counts as done.</p>
+<p><strong>The next step in agentic delivery is not to ask an LLM to make every operational decision. It is to build a harness around the work: a contract the agent can extend, deterministic tools that enforce decisions we have already made, and checks that can refuse a plausible but broken deployment.</strong></p>
+<p style="font-size: small; color: #6b7280; margin-top: 0.5em;">By Rodrigo A. Diaz Leven — <a href="https://www.linkedin.com/in/rodrigoleven/">LinkedIn</a> · <a href="https://github.com/bruj0">GitHub</a> · <a href="https://resume.bruj0.net/bruj0/rodrigo-leven">Resume</a></p>
+
+<h2 id="table-of-contents">Table of contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#what-an-agent-has-to-guess-when-you-say-install-it">What an agent has to guess when you say “install it”</a></li>
+<li><a href="#make-the-next-deployment-less-dependent-on-memory">Make the next deployment less dependent on memory</a></li>
+<li><a href="#what-belongs-in-the-harness">What belongs in the harness</a></li>
+<li><a href="#a-delivery-workflow-with-an-agent-in-it">A delivery workflow with an agent in it</a></li>
+<li><a href="#the-green-deployment-that-returned-500">The green deployment that returned 500</a></li>
+<li><a href="#what-the-earlier-tools-already-taught-us">What the earlier tools already taught us</a></li>
+<li><a href="#where-judgment-still-belongs">Where judgment still belongs</a></li>
+<li><a href="#about-the-author">About the author</a></li>
+</ul>
+<h2 id="what-an-agent-has-to-guess-when-you-say-install-it">What an agent has to guess when you say “install it”<a class="headerlink" href="#what-an-agent-has-to-guess-when-you-say-install-it" title="Permanent link">&para;</a></h2>
+<p>Ask an agent: “Install OmniRoute for me.” Without a shared delivery contract, it has to fill in the blanks as it goes:</p>
+<ol>
+<li><strong>Inspect the app.</strong> Is this a published release or a checkout that needs building? Does its native SQLite binding work on the target container's Node version?</li>
+<li><strong>Choose a destination.</strong> Which host, container or VM, ports, and service account should it use? Those are operator decisions, not facts in the npm package.</li>
+<li><strong>Write and run the install.</strong> It might choose <code>latest</code>, omit a required secret, or put a key in a command argument.</li>
+<li><strong>Declare success.</strong> A running unit and an open port do not prove that the database works or that anonymous callers cannot spend the operator's provider credentials.</li>
+</ol>
+<p>A <em>harness</em> changes that sequence. DeployFlow's <a href="https://github.com/bruj0/deployflow/blob/main/app.example.yaml">example manifest</a> includes a commented <code>omniroute-release</code> entry with the <code>proxmox_lxc</code> target and required secret names. Its <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute-release/tasks/main.yml">release role</a> pins and verifies the installed version, checks the native binding, and refuses anonymous inference requests that get through. The agent can draft changes to that role; the operator reviews them before <code>appctl install omniroute-release</code> runs. The <a href="apps/omniroute-release/">role guide</a> records what the checks mean and requires a second install with <code>changed=0</code>.</p>
+<p><strong>Do not spend model judgment on a decision you can encode and test.</strong> Save it for the application's unfamiliar behavior.</p>
+<h2 id="make-the-next-deployment-less-dependent-on-memory">Make the next deployment less dependent on memory<a class="headerlink" href="#make-the-next-deployment-less-dependent-on-memory" title="Permanent link">&para;</a></h2>
+<p>When a team learns that a service must render a page after a build, the finding should not live only in an incident note or in the engineer who restarted it. When it learns that a build needs a pinned source, that rule should not depend on whether the next prompt mentions it. In DeployFlow, the <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute/tasks/main.yml">OmniRoute role</a> now keeps both lessons: it checks the build receipt before shipping and requests <code>/login</code> after starting. The next agent need not know the original incident to encounter those checks.</p>
+<p>Agents make it cheaper to write the next deployment. That increases the value of a system that can say <strong>no</strong> with a reason and <strong>yes</strong> with evidence.</p>
+<p>I want agents to spend their time on the new questions: what this application is, what it needs, where the uncertain parts are, and which checks would prove that it works. I want Python, Ansible, tests, and the operator to handle the decisions we can already state precisely. Not because an LLM is incapable of making a good guess, but because a good guess is the wrong standard for a decision we have already made.</p>
+<p>The best result is not an agent that can describe a successful deployment. It is a delivery system that can distinguish one from a convincing failure — and gets better each time that distinction proves inadequate.</p>
+<h2 id="what-belongs-in-the-harness">What belongs in the harness<a class="headerlink" href="#what-belongs-in-the-harness" title="Permanent link">&para;</a></h2>
+<p>I built <a href="https://github.com/bruj0/deployflow">DeployFlow</a> to explore this approach. It is a working application-delivery repository, not an autonomous deployment agent. The current implementation uses Python for a small <code>appctl</code> command and Ansible to install and verify applications in target Proxmox LXC containers. A <a href="project/add-app-skill/">repository-local agent skill</a> explains how to add an application. An operator reviews the changes and authorizes the install.</p>
+<p>Each part gets the work it is good at:</p>
+<ul>
+<li><strong>The <a href="https://github.com/bruj0/deployflow/blob/main/app.example.yaml">manifest</a> records intent:</strong> which source, target, configuration, and secret names the application needs. A reviewer can inspect those choices before a run.</li>
+<li><strong>The LLM agent handles the unknowns:</strong> it investigates the app, asks the operator when a decision is missing, and drafts the manifest and app-specific role, following the <a href="project/add-app-skill/">add-app skill</a>. It can coordinate that writing and review, but does not authorize its own deployment.</li>
+<li><strong><a href="https://github.com/bruj0/deployflow/tree/main/src/appctl">Python's <code>appctl</code></a> makes settled decisions deterministic:</strong> it parses and validates the manifest, rejects unsupported targets and missing secrets, and runs the agreed build and install sequence. It does not guess what an unknown target means.</li>
+<li><strong><a href="https://github.com/bruj0/deployflow/tree/main/apps">Ansible roles</a> declare and check desired state:</strong> they create or configure the target container, install files, start the service, and report changes. The application role checks whether this particular service actually works.</li>
+<li><strong>The operator owns the risk:</strong> a person reviews the diff and decides whether to run the install against the chosen host.</li>
+</ul>
+<div class="panzoom-box" data-key="alt" id="panzoom0" oncontextmenu="return false;">
+    <div class="panzoom-info-box panzoom-info-box-top panzoom-hidden">
+Hold "Alt" / "Option" to enable pan &amp; zoom
+</div>
+    <nav class="panzoom-nav panzoom-top-nav">
+    <button class="panzoom-info panzoom-button">
+    <svg class="panzoom-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <path d="M464 256A208 208 0 1 0 48 256a208 208 0 1 0 416 0zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm169.8-90.7c7.9-22.3 29.1-37.3 52.8-37.3l58.3 0c34.9 0 63.1 28.3 63.1 63.1c0 22.6-12.1 43.5-31.7 54.8L280 264.4c-.2 13-10.9 23.6-24 23.6c-13.3 0-24-10.7-24-24l0-13.5c0-8.6 4.6-16.5 12.1-20.8l44.3-25.4c4.7-2.7 7.6-7.7 7.6-13.1c0-8.4-6.8-15.1-15.1-15.1l-58.3 0c-3.4 0-6.4 2.1-7.5 5.3l-.4 1.2c-4.4 12.5-18.2 19-30.6 14.6s-19-18.2-14.6-30.6l.4-1.2zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"></path>
+    </svg>
+</button><button class="panzoom-reset panzoom-button">
+    <svg class="panzoom-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <path d="M125.7 160l50.3 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L48 224c-17.7 0-32-14.3-32-32L16 64c0-17.7 14.3-32 32-32s32 14.3 32 32l0 51.2L97.6 97.6c87.5-87.5 229.3-87.5 316.8 0s87.5 229.3 0 316.8s-229.3 87.5-316.8 0c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0c62.5 62.5 163.8 62.5 226.3 0s62.5-163.8 0-226.3s-163.8-62.5-226.3 0L125.7 160z"></path>
+    </svg>
+</button><button class="panzoom-max panzoom-button">
+    <svg class="panzoom-icon" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 32C14.3 32 0 46.3 0 64l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-64 64 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L32 32zM64 352c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32l96 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-64 0 0-64zM320 32c-17.7 0-32 14.3-32 32s14.3 32 32 32l64 0 0 64c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96c0-17.7-14.3-32-32-32l-96 0zM448 352c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 64-64 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l96 0c17.7 0 32-14.3 32-32l0-96z"></path>
+    </svg>
+</button><button class="panzoom-min panzoom-button panzoom-hidden">
+    <svg class="panzoom-icon" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg">
+        <path d="M160 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 64-64 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l96 0c17.7 0 32-14.3 32-32l0-96zM32 320c-17.7 0-32 14.3-32 32s14.3 32 32 32l64 0 0 64c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96c0-17.7-14.3-32-32-32l-96 0zM352 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32l96 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-64 0 0-64zM320 320c-17.7 0-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-64 64 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-96 0z"></path>
+    </svg>
+</button>
+    </nav>
+    <pre class="mermaid">sequenceDiagram
+    actor Operator
+    participant Agent
+    participant LLM
+    participant appctl
+    participant Ansible
+    participant Target as Target container
+
+    Operator-&gt;&gt;Agent: Install app
+    Agent-&gt;&gt;LLM: Inspect app and draft role
+    LLM--&gt;&gt;Agent: Draft
+    Agent-&gt;&gt;Operator: Ask unknowns, show diff
+    Operator-&gt;&gt;appctl: Approve install
+    appctl-&gt;&gt;appctl: Validate inputs
+    alt Invalid
+        appctl--&gt;&gt;Operator: Refuse
+    else Valid
+        appctl-&gt;&gt;Ansible: Install
+        Ansible-&gt;&gt;Target: Apply desired state
+        Ansible-&gt;&gt;Target: Check app
+        Target--&gt;&gt;Ansible: Result
+        Ansible--&gt;&gt;appctl: Changes and checks
+        appctl--&gt;&gt;Operator: Report result
+    end</pre> 
+    
+</div>
+<p>In the <a href="apps/omniroute-release/"><code>omniroute-release</code> application</a>, that sequence means:</p>
+<ul>
+<li><strong>Agent and operator:</strong> The agent investigates the release and proposes the manifest and role. The operator resolves unknowns, reviews the diff, and chooses whether to run the install.</li>
+<li><strong><code>appctl</code> validates:</strong> Python checks the manifest and required secrets. Only <code>proxmox_lxc</code> is implemented; the <a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/targets/registry.py">target registry</a> refuses <code>target.kind: docker_vm</code> before an install rather than silently treating it as an LXC.</li>
+<li><strong>Ansible applies and checks:</strong> The <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute-release/tasks/main.yml">release role</a> pins the npm version, verifies what was installed, starts the service, and checks its behavior. A successful command alone is not its definition of done.</li>
+<li><strong>The result comes back:</strong> <code>appctl</code> reports changes and checks to the operator. A repeat install should report <code>changed=0</code> while the checks still run.</li>
+</ul>
+<p>The same boundary handles other sources without making the agent guess a single install recipe: the <a href="apps/omniroute/">source-built OmniRoute role</a> requires a separate build and a commit receipt; the <a href="apps/builder/">builder role</a> provides an environment rather than a service port. <strong>The value is in making each decision explicit, then letting the right part of the workflow enforce it.</strong></p>
+<h2 id="a-delivery-workflow-with-an-agent-in-it">A delivery workflow with an agent in it<a class="headerlink" href="#a-delivery-workflow-with-an-agent-in-it" title="Permanent link">&para;</a></h2>
+<p>The workflow begins before any remote command runs. An operator asks for an application. The agent reads the <a href="project/agents/">repository contract</a> and <a href="project/add-app-skill/">add-app skill</a>, asks about any missing choices, writes a manifest entry and an application role, and shows the diff. It does not silently choose production credentials or treat a guessed port as a requirement.</p>
+<p>The operator reviews the choice of source, target, configuration, and checks. Then <code>appctl</code> validates what it can before mutation: it rejects unsupported target kinds, missing required secrets, and source/build mismatches. The <a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/targets/proxmox_lxc.py">Proxmox LXC target</a> runs Ansible. The app role installs the artifact and tests the resulting service. A second install should report <code>changed=0</code> and run the checks again.</p>
+<p>Consider the <a href="https://github.com/bruj0/deployflow/blob/main/apps/example-app/tasks/main.yml">Python <code>example-app</code> role</a>. It is easy to tell the agent to write a task that starts the unit. It is more useful to require its role to assert that the package imports, the unit is active, the process listens on the configured address and port, and an endpoint answers. If the endpoint fails, the play must fail. Those are distinct claims. One does not follow from the other.</p>
+<p><code>changed=0</code> is similarly narrow but valuable evidence. It says the same inputs did not require another install on a settled target container. It does not prove that no external dependency changed or that the app is healthy. That is why the application checks still run on the second pass. DeployFlow makes this visible in the <a href="apps/example-app/">example-app guide</a>: run <code>appctl install example-app</code> again and the report should say <code>0 changed</code> while the role still checks the package, unit, listener, and endpoint.</p>
+<p>The agent can help write these checks. It cannot award itself a pass. Python validation and Ansible's observed results must make the final determination. That is what I mean by a <em>tested</em> agentic workflow: tests of the CLI contract, syntax checks for the playbook, a real install of worked examples, application-level postconditions, and a settled repeat run. It is not a claim that every new application or another person's infrastructure has already been tested.</p>
+<p>This is also why a review of the generated diff remains necessary. A deterministic executor will reliably run a bad role. The harness reduces the number of decisions an agent must improvise; it does not remove the need to decide whether the role's application-specific checks are the right ones.</p>
+<h2 id="the-green-deployment-that-returned-500">The green deployment that returned 500<a class="headerlink" href="#the-green-deployment-that-returned-500" title="Permanent link">&para;</a></h2>
+<p>While installing the <a href="apps/omniroute/">source-built OmniRoute instance</a>, <code>appctl</code> <a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/install.py">streamed Ansible's tasks</a> as they ran and saved <code>log.txt</code>, <code>commands.txt</code>, <code>recap.txt</code>, and <code>errors.txt</code> under <code>tmp/runs/</code>. The run showed that the new tree had shipped, Ansible had made changes, and the play had ended green. The service was active, its port was open, and <code>/healthz</code> returned 200. Yet the UI returned 500. Those records made the contradiction visible; they did not diagnose the page failure on their own.</p>
+<p>The application's log supplied the missing clue: React could not find modules in its Client Manifest. The running process had loaded the old server bundle, while Ansible had replaced its files on disk. Restarting the service restored the UI.</p>
+<p>A manual restart would not prevent the next failure. I updated <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute/tasks/main.yml">the role</a> to restart when the shipped bundle is newer than the process, then request <code>/login</code>. A 500 now fails the play even if <code>/healthz</code> returns 200. I also excluded Next.js's runtime route cache in the <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute/defaults/main.yml">role defaults</a>: rsync had been deleting that target-container cache, making every run look changed. Restarting on <em>any</em> transfer change would have caused needless restarts.</p>
+<p>After a controlled stale-bundle test, <code>appctl</code> showed the restart and the subsequent installs reported <code>0 changed</code> while checks still ran. <strong>The streamed run showed what Ansible did; the app log showed what it missed; the new page check made that lesson part of the next run.</strong></p>
+<h2 id="what-the-earlier-tools-already-taught-us">What the earlier tools already taught us<a class="headerlink" href="#what-the-earlier-tools-already-taught-us" title="Permanent link">&para;</a></h2>
+<p>DeployFlow does not invent agent-assisted operations. That claim would ignore a useful body of prior work.</p>
+<p>The <a href="https://github.com/GoogleCloudPlatform/kubectl-ai">kubectl-ai project</a> shows an LLM helping users choose and call Kubernetes tools while Kubernetes performs the changes. The <a href="https://github.com/awslabs/agent-plugins/blob/main/plugins/deploy-on-aws/skills/deploy/SKILL.md">AWS deploy skill</a> shows an agent inspecting an application, proposing cloud infrastructure, generating deployment code, and asking for confirmation. <a href="https://github.com/nichenqin/appaloft">Appaloft</a> and <a href="https://github.com/DaoFlow-dev/DaoFlow">DaoFlow</a> describe agent-facing delivery workflows for server or container targets. <a href="https://github.com/ansible/aap-mcp-server">Ansible's AAP MCP service</a> exposes existing automation to an external agent; that interface is not itself an LLM. <a href="https://github.com/controlplaneio-fluxcd/flux-operator">Flux Operator's MCP tools</a> likewise let a client ask for operations while a controller reconciles state.</p>
+<p>These examples differ in targets and design. Their common lesson is more important than a feature checklist: an agent's ability to <em>request</em> a deployment is separate from the system's ability to <em>apply and verify</em> it. An MCP server is a tool interface, not proof of autonomous reasoning. An Ansible role is automation, not an agent. Human confirmation in a skill is a workflow rule, not an enforced approval protocol.</p>
+<p>My narrower claim for DeployFlow is that it puts a reviewable application contract beside a tested Proxmox LXC and Ansible implementation. It couples the agent's drafting work to refusals and observable postconditions: a wrong source receipt, missing secret, unsupported target, failed endpoint, or repeat install that churns should be visible.</p>
+<p>For example, the <a href="https://github.com/bruj0/deployflow/blob/main/apps/omniroute/tasks/main.yml">source-built OmniRoute role</a> reads a build receipt and refuses to ship it if the recorded commit differs from the checkout's requested commit. The agent can propose a new role; that comparison still runs when the operator installs it. Some prior projects also offer contracts, verification, or target abstractions; the point is to make those properties real in this deployment path, not to claim they have never existed before.</p>
+<p>That distinction protects an important question: what can a new user actually run? A successful deployment on my own host is evidence about that host. It is not a clean-clone acceptance test on a second Proxmox installation.</p>
+<h2 id="where-judgment-still-belongs">Where judgment still belongs<a class="headerlink" href="#where-judgment-still-belongs" title="Permanent link">&para;</a></h2>
+<p>Codifying known decisions does not settle every deployment decision. Someone still has to decide which application behavior matters, which failure should stop a release, how to handle data migration, what an acceptable outage is, and whether a credential has enough scope. Those choices depend on the service and its users.</p>
+<p>Nor does an agent-facing skill make remote mutation safe by itself. A future interface that lets agents apply changes directly would need separate read, plan, and apply permissions; approval tied to the exact target, manifest, and artifact; scoped credentials; redacted audit evidence; and a tested account of retries and rollback. DeployFlow does not claim to provide that approval system today. The operator still controls when <code>appctl install</code> runs. In practice, an agent can follow the <a href="project/add-app-skill/">add-app skill</a> to prepare a new role and show its diff; the operator decides whether to run the install against the configured Proxmox host. A skill's request for approval is not a technical substitute for that decision.</p>
+<p>The harness can also fail. A postcondition can check the wrong endpoint. A lockfile can pin the wrong artifact. A health check can miss a broken UI. The answer is not to give the model wider authority; it is to improve the contract and the test when evidence exposes the miss. In the OmniRoute case, “process active” and “healthz 200” were true statements. They were insufficient statements.</p>
+<p>That leads to a practical rule for teams building their own delivery workflows:</p>
+<table>
+<thead>
+<tr>
+<th>If the question is...</th>
+<th>Put the answer...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What does this particular application need?</td>
+<td>In a reviewed manifest and app-specific role</td>
+</tr>
+<tr>
+<td>Which targets and input shapes are supported?</td>
+<td>In strict validation code</td>
+</tr>
+<tr>
+<td>How do we repeat the install?</td>
+<td>In a deterministic executor such as Ansible</td>
+</tr>
+<tr>
+<td>Did this service actually work?</td>
+<td>In observable application postconditions</td>
+</tr>
+<tr>
+<td>May this change reach this host now?</td>
+<td>With an accountable human or a tested approval mechanism</td>
+</tr>
+</tbody>
+</table>
+<p>The table is not a demand for five layers of ceremony around a trivial script. It is a way to keep one kind of decision from being quietly delegated to the wrong component. Review depth should follow the risk of the deployment.</p>
+<hr />
+<h2 id="about-the-author">About the author<a class="headerlink" href="#about-the-author" title="Permanent link">&para;</a></h2>
+<p><strong>Rodrigo A. Diaz Leven</strong> is a platform engineering lead focused on AI-assisted engineering, evaluation, and developer tooling.</p>
+<p>If this essay sparked a question, disagreement, or an example from your own team, he would like to hear it:</p>
+<ul>
+<li>LinkedIn: <a href="https://www.linkedin.com/in/rodrigoleven/">https://www.linkedin.com/in/rodrigoleven/</a></li>
+<li>GitHub: <a href="https://github.com/bruj0">https://github.com/bruj0</a></li>
+<li>Resume: <a href="https://resume.bruj0.net/bruj0/rodrigo-leven">https://resume.bruj0.net/bruj0/rodrigo-leven</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+        
+          
+          <a href="project/readme/" class="md-footer__link md-footer__link--next" aria-label="Next: Readme">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Readme
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="assets/javascripts/panzoom.min.js"></script>
+      
+        <script src="assets/javascripts/zoompan.js"></script>
+      
+    
+  </body>
+</html>

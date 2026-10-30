@@ -1,0 +1,2229 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/apps/omniroute-building-from-source/">
+      
+      
+        <link rel="prev" href="../builder/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Building OmniRoute from source - DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/panzoom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta name="panzoom-theme" content="material">
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#building-omniroute-from-source" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Building OmniRoute from source
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/readme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/add-app-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-shape-of-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The shape of the problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-platform-mismatch-and-why-it-is-slow-to-find" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The platform mismatch, and why it is slow to find
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-build-can-run-and-where-it-cannot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the build can run, and where it cannot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Where the build can run, and where it cannot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-native-build-on-the-controller-wrong-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Native build on the controller — wrong architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-container-on-the-controller-emulated-failed-twice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Container on the controller, emulated — failed twice
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-native-build-on-an-x86_64-host-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Native build on an x86_64 host — works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-build-host-is-a-guest-this-repository-provisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The build host is a guest this repository provisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The build host is a guest this repository provisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-the-build-finds-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the build finds it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-toolchain-is-asserted-not-assumed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The toolchain is asserted, not assumed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-gb-was-not-enough-and-the-failure-was-silent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12 GB was not enough, and the failure was silent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-clone-is-pinned-to-a-commit-not-to-a-branch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The clone is pinned to a commit, not to a branch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-toolchain-lives-on-the-builder-not-in-the-build-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The toolchain lives on the builder, not in the build script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#npm-is-invoked-through-its-js-entry-not-its-bin-shim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        npm is invoked through its JS entry, not its bin shim
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-build-host-needs-and-why-a-clone-rather-than-a-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the build host needs, and why a clone rather than a transfer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-dependency-tree-is-not-a-graph-you-can-walk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The dependency tree is not a graph you can walk
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-artifact-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the artifact is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pinning-the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the runtime
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-receipt-is-what-makes-changed0-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The receipt is what makes changed=0 possible
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-rsync-flags-that-are-load-bearing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The rsync flags that are load-bearing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-postconditions-that-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The postconditions that matter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measured-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproducing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducing it
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-shape-of-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The shape of the problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-platform-mismatch-and-why-it-is-slow-to-find" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The platform mismatch, and why it is slow to find
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-build-can-run-and-where-it-cannot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the build can run, and where it cannot
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Where the build can run, and where it cannot">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-native-build-on-the-controller-wrong-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Native build on the controller — wrong architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-container-on-the-controller-emulated-failed-twice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Container on the controller, emulated — failed twice
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-native-build-on-an-x86_64-host-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Native build on an x86_64 host — works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-build-host-is-a-guest-this-repository-provisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The build host is a guest this repository provisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The build host is a guest this repository provisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-the-build-finds-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the build finds it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-toolchain-is-asserted-not-assumed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The toolchain is asserted, not assumed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-gb-was-not-enough-and-the-failure-was-silent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12 GB was not enough, and the failure was silent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-clone-is-pinned-to-a-commit-not-to-a-branch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The clone is pinned to a commit, not to a branch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-toolchain-lives-on-the-builder-not-in-the-build-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The toolchain lives on the builder, not in the build script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#npm-is-invoked-through-its-js-entry-not-its-bin-shim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        npm is invoked through its JS entry, not its bin shim
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-build-host-needs-and-why-a-clone-rather-than-a-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the build host needs, and why a clone rather than a transfer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-dependency-tree-is-not-a-graph-you-can-walk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The dependency tree is not a graph you can walk
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-artifact-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the artifact is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pinning-the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning the runtime
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-receipt-is-what-makes-changed0-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The receipt is what makes changed=0 possible
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-rsync-flags-that-are-load-bearing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The rsync flags that are load-bearing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-postconditions-that-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The postconditions that matter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measured-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reproducing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducing it
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="building-omniroute-from-source">Building OmniRoute from source<a class="headerlink" href="#building-omniroute-from-source" title="Permanent link">&para;</a></h1>
+<p>What it takes to build <code>cheaper-inference/OmniRoute</code> at <code>main</code> into an
+artifact that runs on an x86_64 Linux guest, and what fails on the way there.</p>
+<p>This is written from the measurements, not from the theory. Every failure
+listed here happened, and the symptom is what was actually observed — not what
+would be expected.</p>
+<h2 id="the-shape-of-the-problem">The shape of the problem<a class="headerlink" href="#the-shape-of-the-problem" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controller</td>
+<td>arm64 macOS (Apple Silicon), 48 GB</td>
+</tr>
+<tr>
+<td>Guest</td>
+<td>x86_64 Linux, Proxmox LXC</td>
+</tr>
+<tr>
+<td>Upstream</td>
+<td><code>cheaper-inference/OmniRoute</code>, branch <code>main</code>, version <code>3.8.52</code></td>
+</tr>
+<tr>
+<td>Commit built</td>
+<td><code>edab7c3a59bf7d6f040d581dbda3a46adbee0d57</code></td>
+</tr>
+<tr>
+<td>Runtime</td>
+<td>Node <code>&gt;=22.22.2 &lt;23 \|\| &gt;=24.0.0 &lt;27</code> — pinned to 24.14.1</td>
+</tr>
+<tr>
+<td>Build recipe</td>
+<td><code>npm run build:release</code></td>
+</tr>
+</tbody>
+</table>
+<p>The controller and the guest are different architectures. That single fact
+causes every hard problem below.</p>
+<h2 id="the-platform-mismatch-and-why-it-is-slow-to-find">The platform mismatch, and why it is slow to find<a class="headerlink" href="#the-platform-mismatch-and-why-it-is-slow-to-find" title="Permanent link">&para;</a></h2>
+<p>A tree built on arm64 macOS carries darwin-only native binaries:</p>
+<ul>
+<li><code>sharp-darwin-arm64</code></li>
+<li><code>@esbuild/darwin-arm64</code></li>
+<li><code>lightningcss-darwin-arm64</code></li>
+</ul>
+<p>The guest needs <code>sharp-linux-x64</code> and friends.</p>
+<p><strong><code>better-sqlite3</code> hides the problem.</strong> It ships a prebuild for every
+platform, so it loads on the guest even from a macOS build, and the tree gets
+all the way to serving requests before <code>sharp</code> fails deep in a request
+handler. Checking <code>better-sqlite3</code> alone would have said "the tree is fine".</p>
+<p>The check that actually catches it is a <em>write</em> through the native binding, not
+a load:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Database</span><span class="p">(</span><span class="s2">":memory:"</span><span class="p">);</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nx">db</span><span class="p">.</span><span class="nx">exec</span><span class="p">(</span><span class="s2">"CREATE TABLE t (x INTEGER)"</span><span class="p">);</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nx">db</span><span class="p">.</span><span class="nx">prepare</span><span class="p">(</span><span class="s2">"INSERT INTO t VALUES (?)"</span><span class="p">).</span><span class="nx">run</span><span class="p">(</span><span class="mf">42</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="where-the-build-can-run-and-where-it-cannot">Where the build can run, and where it cannot<a class="headerlink" href="#where-the-build-can-run-and-where-it-cannot" title="Permanent link">&para;</a></h2>
+<p>Three options were tried. Two failed, and they failed for different reasons.</p>
+<h3 id="1-native-build-on-the-controller-wrong-architecture">1. Native build on the controller — wrong architecture<a class="headerlink" href="#1-native-build-on-the-controller-wrong-architecture" title="Permanent link">&para;</a></h3>
+<p>Worked. Produced a <code>dist/server.js</code> that ran locally. Useless for the guest:
+the natives are darwin.</p>
+<h3 id="2-container-on-the-controller-emulated-failed-twice">2. Container on the controller, emulated — failed twice<a class="headerlink" href="#2-container-on-the-controller-emulated-failed-twice" title="Permanent link">&para;</a></h3>
+<p><code>docker run --platform linux/amd64</code> on the arm64 host. The architecture is
+right and then two separate things go wrong.</p>
+<p><strong>Failure A — out of memory.</strong> The Next.js webpack build needs roughly 10 GB.
+The emulated process sees the VM's memory, not the container's limit, and is
+SIGKILLed at about 5.6 GB:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Next.js build worker exited with code: null and signal: SIGKILL
+</code></pre></div>
+<p>Raising the Colima VM from 8 GB to 20 GB fixes this one. The build then
+proceeds normally and generates all 637 static pages.</p>
+<p><strong>Failure B — the Go runtime faults under qemu.</strong> esbuild is a <strong>Go</strong> binary.
+Under qemu its runtime dies:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>fatal error: receive on synctest channel from outside bubble
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>goroutine 3 [running]:
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>main.(*serviceType).sendRequest(...)
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    github.com/evanw/esbuild/cmd/esbuild/service.go:192 +0x12b
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>...
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Next.js build worker exited with code: null and signal: SIGSEGV
+</code></pre></div>
+<p>This is not a memory problem and no amount of memory fixes it. Emulation is
+simply not reliable for this build.</p>
+<p><strong>A third, smaller failure in the same image:</strong> <code>node:24-bookworm-slim</code> has
+<code>gcc</code> but no <code>g++</code> or <code>make</code>. <code>better-sqlite3</code> is an <em>optional</em> dependency
+that compiles a native binding on install; with no toolchain its install
+script fails, npm treats the optional dependency as skippable, and it is
+<strong>silently absent</strong> from the tree. The application then falls back to another
+driver or fails at the first query, and nothing says the binding is missing.</p>
+<h3 id="3-native-build-on-an-x86_64-host-works">3. Native build on an x86_64 host — works<a class="headerlink" href="#3-native-build-on-an-x86_64-host-works" title="Permanent link">&para;</a></h3>
+<p>The Proxmox node is x86_64: the guest's exact platform. 12 CPUs, 125 GB RAM,
+96 GB free.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>emulated container</th>
+<th>native x86_64</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>npm ci</code></td>
+<td>8 min</td>
+<td><strong>1 min</strong></td>
+</tr>
+<tr>
+<td>webpack build</td>
+<td>SIGSEGV</td>
+<td><strong>637 pages, 17 s</strong></td>
+</tr>
+<tr>
+<td>esbuild</td>
+<td>Go runtime fault</td>
+<td><strong>works</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The build runs there as itself. No emulation, no cross-compilation.</p>
+<h2 id="the-build-host-is-a-guest-this-repository-provisions">The build host is a guest this repository provisions<a class="headerlink" href="#the-build-host-is-a-guest-this-repository-provisions" title="Permanent link">&para;</a></h2>
+<p>The first version of this build used the Proxmox node itself as the build
+host, because it was already there and already x86_64. That works, and it is
+the wrong shape: the node is shared infrastructure, and a build that reaches
+11.5 GB of RSS and writes 16 GB to <code>/root</code> is a build that can take the node
+with it.</p>
+<p>So the build host is now a guest — CT 123, <code>builder</code> — provisioned by this
+repository like any other application. It is created by <code>appctl install
+builder</code> and it installs no service: it is a <strong>toolchain</strong>, an application
+whose purpose is to be the environment another application is built in.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>builder<span class="w">        </span><span class="c1"># creates CT 123, installs the toolchain</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>sh<span class="w"> </span>apps/omniroute/build/omr-build-linux.sh<span class="w">   </span>/Users/bruj0/Projects/Omniroute<span class="w"> </span>main
+</code></pre></div>
+<h3 id="how-the-build-finds-it">How the build finds it<a class="headerlink" href="#how-the-build-finds-it" title="Permanent link">&para;</a></h3>
+<p>Guest hostnames do not resolve from the controller. Proxmox registers the
+hostname in <em>its own</em> resolver, and the controller is not on that side of the
+network — <code>ansible -i inventory/hosts.yml builder -m stat</code> fails with
+"Could not resolve hostname builder". The address has to be discovered, and
+<code>common/lxc</code> already does that: it reads the lease with
+<code>pct exec &lt;vmid&gt; -- hostname -I</code> and sets <code>ansible_host</code> from it.</p>
+<p>The build script needs the same address, and it is not the ansible
+controller. So the builder role publishes it to a file both sides can read:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>tmp/builders/builder.endpoint
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="na">host</span><span class="o">=</span><span class="s">10.0.0.80</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="na">user</span><span class="o">=</span><span class="s">root</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="na">node_dir</span><span class="o">=</span><span class="s">/opt/builder/node</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="na">work</span><span class="o">=</span><span class="s">/var/lib/builder/work</span>
+</code></pre></div>
+<p>The file lives under <code>tmp/</code>, which is gitignored, because it is a runtime
+artifact: the address is a DHCP lease and changes when the guest is rebuilt.
+It is rewritten by every play, so it is never stale.</p>
+<p><strong>The user is part of the address, not an argument.</strong> The build script reads
+<code>user</code> from the same file and builds <code>root@10.0.0.80</code> from it. Left out,
+<code>ssh</code> defaults to <code>$USER</code> — which on this controller is not <code>root</code> — and the
+connection fails with "Too many authentication failures" after the agent
+offers five keys against an <code>authorized_keys</code> that holds one. That is a
+confusing error for a credential problem that is not really a credential
+problem.</p>
+<h3 id="the-toolchain-is-asserted-not-assumed">The toolchain is asserted, not assumed<a class="headerlink" href="#the-toolchain-is-asserted-not-assumed" title="Permanent link">&para;</a></h3>
+<p>The builder role installs <code>build-essential</code>, <code>git</code>, <code>ca-certificates</code>,
+<code>xz-utils</code> and <code>rsync</code>, and a pinned Node 24.14.1 fetched with a checksum.
+It then asserts the properties a build depends on:</p>
+<table>
+<thead>
+<tr>
+<th>Assertion</th>
+<th>What it catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>uname -m</code> is <code>x86_64</code></td>
+<td>a builder running under emulation, where esbuild's Go runtime faults</td>
+</tr>
+<tr>
+<td>Node reports the pinned version</td>
+<td>a runtime the tree was not built against</td>
+</tr>
+<tr>
+<td><code>npm-cli.js</code> exists</td>
+<td>a Node tarball that is not a Node tarball</td>
+</tr>
+<tr>
+<td>≥ 24 GB of RAM</td>
+<td>a guest that thrashes during the build (see below)</td>
+</tr>
+<tr>
+<td>≥ 6 cores</td>
+<td>a guest that builds too slowly to be worth having</td>
+</tr>
+<tr>
+<td>≥ 40 GB free on the workspace</td>
+<td>a build that fails on "No space left on device"</td>
+</tr>
+<tr>
+<td><code>registry.npmjs.org</code> reachable</td>
+<td>a build that fails at <code>npm ci</code> with a network error</td>
+</tr>
+</tbody>
+</table>
+<p>Each of these is a <em>result</em>, not an exit code. A role that installs a
+compiler and reports success has not said anything about whether a build can
+run on it.</p>
+<h3 id="12-gb-was-not-enough-and-the-failure-was-silent">12 GB was not enough, and the failure was silent<a class="headerlink" href="#12-gb-was-not-enough-and-the-failure-was-silent" title="Permanent link">&para;</a></h3>
+<p>The first builder was created with 12 GB of RAM — 10 GB of heap cap plus 2 GB
+of headroom, which sounds right on paper. It was not.</p>
+<p>The build's webpack process reaches about <strong>11.5 GB RSS</strong> against that 10 GB
+heap cap. On a 12 GB guest the arithmetic leaves nothing: the build was
+observed spinning with 96 MB free and 348 MB available, and then the guest
+<strong>stopped answering SSH entirely</strong>. The banner timed out. <code>pct exec</code> returned:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>lxc-attach: 123: ../src/lxc/attach.c: lxc_attach: 1615
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>Cannot allocate memory - Failed to clone attached process
+</code></pre></div>
+<p>Even the Proxmox host could not get a shell into the container, because
+cloning a process inside the container needs memory the container does not
+have.</p>
+<p>Nothing in the build's own output said "out of memory". The play that
+launched it was green. The failure looked like a network problem — a
+connection timeout — and it was a memory problem, three layers down.</p>
+<p><strong>24 GB clears it.</strong> The build then runs with 21 GB available and a peak RSS
+of 2.7 GB in the observed sample, with the page cache holding the rest. The
+role asserts the floor, so a builder resized by hand is checked at install
+time rather than discovered during a build.</p>
+<p>This is the lesson the framework already had, restated at a new scale: <em>a
+guest that is too small does not fail at install, it fails hours later with
+an error that names a memory limit rather than the guest.</em></p>
+<h3 id="the-clone-is-pinned-to-a-commit-not-to-a-branch">The clone is pinned to a commit, not to a branch<a class="headerlink" href="#the-clone-is-pinned-to-a-commit-not-to-a-branch" title="Permanent link">&para;</a></h3>
+<p>The build host clones the repository itself (see the next section for why),
+and the first version of the script cloned <code>--branch main</code>. <code>main</code> moves: a
+push between the controller reading <code>HEAD</code> and the builder cloning produces
+an artifact built from a commit the receipt does not name.</p>
+<p>The receipt is the role's provenance check — the role refuses a tree whose
+receipt does not match the checkout's <code>HEAD</code> — so a receipt that is wrong
+defeats the check it exists to satisfy. The clone is now pinned:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>clone<span class="w"> </span>--branch<span class="w"> </span><span class="s2">"</span><span class="nv">$REF</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$REPO_URL</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$BUILD_DIR</span><span class="s2">"</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>git<span class="w"> </span>-C<span class="w"> </span><span class="s2">"</span><span class="nv">$BUILD_DIR</span><span class="s2">"</span><span class="w"> </span>fetch<span class="w"> </span>--quiet<span class="w"> </span>origin<span class="w"> </span><span class="s2">"</span><span class="nv">$COMMIT</span><span class="s2">"</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>git<span class="w"> </span>-C<span class="w"> </span><span class="s2">"</span><span class="nv">$BUILD_DIR</span><span class="s2">"</span><span class="w"> </span>checkout<span class="w"> </span>--quiet<span class="w"> </span>--detach<span class="w"> </span><span class="s2">"</span><span class="nv">$COMMIT</span><span class="s2">"</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="nb">test</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>-C<span class="w"> </span><span class="s2">"</span><span class="nv">$BUILD_DIR</span><span class="s2">"</span><span class="w"> </span>rev-parse<span class="w"> </span>HEAD<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"</span><span class="nv">$COMMIT</span><span class="s2">"</span>
+</code></pre></div>
+<p>The explicit fetch is needed because a shallow branch clone may not contain
+the commit once the branch has moved past it, and the final <code>test</code> is there
+so the build fails rather than shipping an artifact from the wrong commit.</p>
+<h3 id="the-toolchain-lives-on-the-builder-not-in-the-build-script">The toolchain lives on the builder, not in the build script<a class="headerlink" href="#the-toolchain-lives-on-the-builder-not-in-the-build-script" title="Permanent link">&para;</a></h3>
+<p>The remote build script used to install its own toolchain: <code>apt-get install
+build-essential</code>, download Node, unpack it. Now it asserts that the builder
+has them and fails with a named error if it does not.</p>
+<p>That is a better shape for three reasons. The build is reproducible because
+the environment is provisioned and checksummed by a role, not by whatever
+<code>apt-get</code> returned on the day. The builder's Node is pinned and checksummed
+in one place — <code>apps/builder/defaults/main.yml</code> — instead of two copies that
+can drift. And the build script's failure message can name the actual cause,
+because the check is a check and not an installation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>FATAL: no compiler on this build host
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>       the builder role installs build-essential; this host is not it
+</code></pre></div>
+<h3 id="npm-is-invoked-through-its-js-entry-not-its-bin-shim">npm is invoked through its JS entry, not its bin shim<a class="headerlink" href="#npm-is-invoked-through-its-js-entry-not-its-bin-shim" title="Permanent link">&para;</a></h3>
+<p><code>/opt/builder/node/bin/npm</code> is a symlink to <code>npm-cli.js</code>, and that file
+starts with <code>#!/usr/bin/env node</code>. Nothing under <code>/opt</code> is on <code>PATH</code> on a
+stock guest, so the shim dies:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>env: 'node': No such file or directory
+</code></pre></div>
+<p>The build invokes the interpreter by absolute path and the entry script by
+path:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">NPM_CLI</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NODE_DIR</span><span class="s2">/lib/node_modules/npm/bin/npm-cli.js"</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>node<span class="w"> </span><span class="s2">"</span><span class="nv">$NPM_CLI</span><span class="s2">"</span><span class="w"> </span>ci<span class="w"> </span>--no-audit<span class="w"> </span>--no-fund
+</code></pre></div>
+<p>This is the same trap the skill already records for the OpenAI CLI shims, and
+it is worth stating again because it is a failure with no useful message: the
+shell reports a missing <code>node</code> when the problem is that <code>node</code> exists and is
+not on the <code>PATH</code>.</p>
+<h2 id="what-the-build-host-needs-and-why-a-clone-rather-than-a-transfer">What the build host needs, and why a clone rather than a transfer<a class="headerlink" href="#what-the-build-host-needs-and-why-a-clone-rather-than-a-transfer" title="Permanent link">&para;</a></h2>
+<p>Two independent reasons, both measured.</p>
+<p><strong>The sha has to resolve.</strong> <code>build:release</code> runs
+<code>OMNIROUTE_BUILD_SHA=$(git rev-parse --short HEAD)</code>. A transferred tree has no
+<code>.git</code>, so the sha is empty and the artifact carries no provenance at all —
+<code>dist/BUILD_SHA</code> is written empty and the receipt has nothing to record.</p>
+<p><strong>A tar of the controller's checkout carries macOS sidecars.</strong> Every file on
+an APFS volume may have a <code>._name</code> AppleDouble companion. They survive
+<code>tar</code>, and esbuild reads them as source files:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>src/mitm/._aliasConfig.ts:1:0: ERROR: Unexpected "\x00"
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>src/mitm/._childExitCleanup.ts:1:0: ERROR: Unexpected "\x00"
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>...
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>Error: Build failed with 77 errors
+</code></pre></div>
+<p>So the build host runs <code>git clone</code> itself. The repository is public, so it
+needs no credential. A private one needs a token the host already holds.</p>
+<h2 id="the-dependency-tree-is-not-a-graph-you-can-walk">The dependency tree is not a graph you can walk<a class="headerlink" href="#the-dependency-tree-is-not-a-graph-you-can-walk" title="Permanent link">&para;</a></h2>
+<p>The server runs from <code>dist/</code> alone. Verified by moving the root
+<code>node_modules</code> away and starting it — it served, bound its ports, and shut
+down cleanly. <code>dist/</code> carries its own <code>node_modules</code> (741 MB) and its own
+<code>.build/next</code> (312 MB).</p>
+<p>The CLI is different. It needs packages that are not in <code>dist/node_modules</code>.
+The first attempt computed their closure by scanning the CLI's imports. That
+is fragile in three separate ways, and each one only surfaced on the guest:</p>
+<table>
+<thead>
+<tr>
+<th>What the scan missed</th>
+<th>Symptom on the guest</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>await import("tsx/esm")</code> — a <strong>dynamic</strong> import</td>
+<td><code>Cannot find package 'tsx' imported from .../bin/omniroute.mjs</code></td>
+</tr>
+<tr>
+<td>the loader resolves from <code>src/</code> and <code>open-sse/</code>, not just <code>bin/</code></td>
+<td><code>Cannot find package 'ws' imported from .../open-sse/utils/setupPolyfill.ts</code></td>
+</tr>
+<tr>
+<td><code>@esbuild/linux-x64</code> is an <strong>optional</strong> dependency, chosen by an install script that reads <code>os</code> and <code>cpu</code></td>
+<td><code>The package "@esbuild/linux-x64" could not be found, and is needed by esbuild</code></td>
+</tr>
+</tbody>
+</table>
+<p>The third one is the reason a dependency walk can never be complete: npm
+installs those packages by running a script that inspects the current
+platform, not by resolving a graph. No graph walk reaches them.</p>
+<p><strong>So the tree <code>npm ci</code> produced is shipped as-is.</strong> It is correct by
+construction. The cost is a 1.2 GB transfer that takes seconds on a LAN.</p>
+<p>The CLI's own diagnostic is the check that it is right:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Summary: 7 ok, 43 warning(s), 0 failure(s)
+</code></pre></div>
+<p>The 43 warnings are absent optional provider CLIs (<code>claude</code>, <code>codex</code>,
+<code>gemini</code> and friends). Zero failures is the signal.</p>
+<h2 id="what-the-artifact-is">What the artifact is<a class="headerlink" href="#what-the-artifact-is" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>dist/            1.0 GB   the server bundle, with its own .build/next
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>bin/             the CLI
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>node_modules/    the dependency tree, native linux-x64
+</code></pre></div>
+<p>The root <code>.build/</code> is <strong>5.4 GB of webpack cache</strong> and does not travel. The
+build has already produced the 312 MB <code>dist/.build/next</code> that the runtime
+reads.</p>
+<p>The root <code>node_modules</code> is 4.3 GB unpacked but tarballs to 1.2 GB.</p>
+<h2 id="pinning-the-runtime">Pinning the runtime<a class="headerlink" href="#pinning-the-runtime" title="Permanent link">&para;</a></h2>
+<p>The <code>engines</code> field allows a range, and a runtime outside it fails at import
+rather than at install:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span><span class="nt">"node"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&gt;=22.22.2 &lt;23 || &gt;=24.0.0 &lt;27"</span><span class="p">}</span>
+</code></pre></div>
+<p>The tree is built with one Node and must run on one. Node <strong>24.14.1</strong> is
+pinned and checksummed against the sha256 <code>nodejs.org</code> publishes in its
+<code>SHASUMS256.txt</code>.</p>
+<p>npm's own <code>bin</code> shim runs <code>#!/usr/bin/env node</code>, and nothing under
+<code>app_home</code> is on <code>PATH</code> on a stock guest, so it dies with
+<code>env: 'node': No such file or directory</code> before the application starts. The
+interpreter is therefore named by path, and the operator-facing command is a
+wrapper rather than a symlink to the package's own <code>bin</code> entry.</p>
+<h2 id="the-receipt-is-what-makes-changed0-possible">The receipt is what makes <code>changed=0</code> possible<a class="headerlink" href="#the-receipt-is-what-makes-changed0-possible" title="Permanent link">&para;</a></h2>
+<p>The build writes <code>.deployflow-build.json</code> into the checkout:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"edab7c3a59bf7d6f040d581dbda3a46adbee0d57"</span><span class="p">,</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">"shortCommit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"edab7c3a59"</span><span class="p">,</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"3.8.52"</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">"ref"</span><span class="p">:</span><span class="w"> </span><span class="s2">"main"</span><span class="p">,</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span><span class="nt">"platform"</span><span class="p">:</span><span class="w"> </span><span class="s2">"linux-amd64"</span><span class="p">,</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">"node"</span><span class="p">:</span><span class="w"> </span><span class="s2">"24"</span><span class="p">,</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="nt">"builtAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-24T16:30:24Z"</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="p">}</span>
+</code></pre></div>
+<p>The role compares the commit in the receipt against the checkout's <code>HEAD</code> and
+refuses a tree that does not match. Without it the role has nothing to
+compare, and either reinstalls every time or trusts an mtime.</p>
+<p><strong>The role never builds.</strong> A role that rebuilds on every play cannot tell
+"no changes" from "rebuilt".</p>
+<h2 id="the-rsync-flags-that-are-load-bearing">The rsync flags that are load-bearing<a class="headerlink" href="#the-rsync-flags-that-are-load-bearing" title="Permanent link">&para;</a></h2>
+<p>The tree is shipped with <code>ansible.posix.synchronize</code>. Two flags are not
+optional, and each failure is silent:</p>
+<ul>
+<li><strong><code>--links</code></strong> — without it a symlinked <code>node_modules</code> arrives with its
+  packages but empty subdirectories, and every entry point fails with
+  <code>ERR_MODULE_NOT_FOUND</code> for a package that is present.</li>
+<li><strong><code>--times</code></strong> — without it <code>synchronize</code>'s own <code>--delay-updates</code> staging
+  renames every file at the end of the run, giving it a fresh mtime. The next
+  run sees the whole tree as different, transfers all of it again, and reports
+  changed forever.</li>
+</ul>
+<p>Two flags have to be <strong>absent</strong>, and both were found the hard way:</p>
+<ul>
+<li>
+<p><strong><code>--chown</code></strong> — the controller is macOS, whose rsync is <code>openrsync</code>, a
+  compatible reimplementation that does not implement it:
+  <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>rsync: unrecognized option `--chown=omniroute:omniroute'
+</code></pre></div>
+  The task fails outright. Ownership is set on the guest by a separate task
+  instead, which works the same on every controller.</p>
+</li>
+<li>
+<p><strong><code>--owner --group</code></strong> — these make rsync set each file's owner to the
+  <em>controller's</em> uid, which is 501 on macOS and nobody on the guest. The
+  chown task then sets it back, and the next run repeats both. The role
+  reported <code>changed=2</code> forever on a tree that had not changed. Without them,
+  rsync leaves the ownership of existing files alone and the second run is
+  <code>changed=0</code>.</p>
+</li>
+</ul>
+<h2 id="the-postconditions-that-matter">The postconditions that matter<a class="headerlink" href="#the-postconditions-that-matter" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Assert</th>
+<th>Guards against</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dist/server.js</code> is on the guest</td>
+<td>a transfer that stopped half way</td>
+</tr>
+<tr>
+<td><code>better-sqlite3</code> loads <strong>and takes a write</strong></td>
+<td>a native module built for the wrong platform</td>
+</tr>
+<tr>
+<td><code>omniroute doctor</code> is healthy</td>
+<td>the application's own opinion of itself</td>
+</tr>
+<tr>
+<td><code>storage.sqlite</code> exists and is not empty</td>
+<td>a running server with nothing to log in to</td>
+</tr>
+<tr>
+<td>the listener is on the configured address</td>
+<td>the process listening somewhere else</td>
+</tr>
+<tr>
+<td><code>/healthz</code> answers 200</td>
+<td>a service that binds a port and does not serve</td>
+</tr>
+<tr>
+<td><code>/v1/chat/completions</code> answers 401 without a key</td>
+<td>an inference plane any device can spend</td>
+</tr>
+<tr>
+<td><code>/v1</code> answers 401 for a bad key, and names the gate</td>
+<td>a proxy answering 401 instead of the application</td>
+</tr>
+<tr>
+<td><code>/api/providers</code> answers 401</td>
+<td>a dashboard serving an anonymous caller</td>
+</tr>
+<tr>
+<td>the unit is enabled</td>
+<td>a service that does not come back after a reboot</td>
+</tr>
+</tbody>
+</table>
+<p>The key gate checks are the ones worth reading. A server that serves <code>/v1</code>
+without a key spends the operator's provider credentials for anyone who can
+reach the port, and nothing else in the play would notice.</p>
+<h2 id="measured-results">Measured results<a class="headerlink" href="#measured-results" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build on the builder guest</td>
+<td>28 min end to end, including the transfer</td>
+</tr>
+<tr>
+<td><code>npm ci</code></td>
+<td>1 min (8 min emulated)</td>
+</tr>
+<tr>
+<td>Transfer to the guest</td>
+<td>~50 s for 3.9 GB over rsync with compression</td>
+</tr>
+<tr>
+<td>First install</td>
+<td>80 tasks, 2 changed</td>
+</tr>
+<tr>
+<td>Second install</td>
+<td>80 tasks, <strong>0 changed</strong></td>
+</tr>
+<tr>
+<td>Build host</td>
+<td>CT 123, <code>builder</code>, <code>10.0.0.80</code>, 6 cores / 24 GB / 60 GB</td>
+</tr>
+<tr>
+<td>Runtime guest</td>
+<td>CT 122, <code>omniroute-src</code>, <code>10.0.0.78</code></td>
+</tr>
+<tr>
+<td>Served version</td>
+<td><code>3.8.52</code>, <code>BUILD_SHA=edab7c3a59</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="reproducing-it">Reproducing it<a class="headerlink" href="#reproducing-it" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>builder<span class="w">        </span><span class="c1"># the build host; CT 123</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>apps/omniroute/build/omr-build-linux.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span>/Users/bruj0/Projects/Omniroute<span class="w"> </span>main
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>appctl<span class="w"> </span>install<span class="w"> </span>omniroute
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>appctl<span class="w"> </span>install<span class="w"> </span>omniroute<span class="w">      </span><span class="c1"># must be changed=0</span>
+</code></pre></div>
+<p>The build script takes the checkout and the ref. It finds the build host
+itself, by reading <code>tmp/builders/builder.endpoint</code> — the file the builder
+role writes. There is no host argument, because a guest address is a DHCP
+lease and a host argument would be a value that goes stale.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../builder/" class="md-footer__link md-footer__link--prev" aria-label="Previous: builder">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                builder
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../assets/javascripts/panzoom.min.js"></script>
+      
+        <script src="../../assets/javascripts/zoompan.js"></script>
+      
+    
+  </body>
+</html>

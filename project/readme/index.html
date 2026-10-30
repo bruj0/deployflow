@@ -1,0 +1,2628 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/project/readme/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../agents/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Readme - DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/panzoom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta name="panzoom-theme" content="material">
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#deployflow" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Readme
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-problem-it-solves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The problem it solves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Try it">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-get-the-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Get the tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-create-your-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Create your inventory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-install-an-application-and-watch-it-prove-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install an application and watch it prove itself
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-add-your-own-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Add your own application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-other-three-applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The other three applications
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How it works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-the-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The manifest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-the-application-role" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The application role
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-the-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The target
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-the-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. The checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#three-kinds-of-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three kinds of application
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ready-to-use-applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ready-to-use applications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ready-to-use applications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#omniroute-release-an-application-installed-from-a-published-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        omniroute-release — an application installed from a published release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omniroute-an-application-built-from-a-source-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        omniroute — an application built from a source checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-the-build-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        builder — the build host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-get-when-the-agent-does-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you get when the agent does it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#to-run-a-delivery-on-the-current-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        To run a delivery on the current target
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../add-app-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute-building-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-problem-it-solves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The problem it solves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Try it">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-get-the-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Get the tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-create-your-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Create your inventory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-install-an-application-and-watch-it-prove-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install an application and watch it prove itself
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-add-your-own-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Add your own application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-other-three-applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The other three applications
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How it works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-the-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The manifest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-the-application-role" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The application role
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-the-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The target
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-the-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. The checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#three-kinds-of-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three kinds of application
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ready-to-use-applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ready-to-use applications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ready-to-use applications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#omniroute-release-an-application-installed-from-a-published-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        omniroute-release — an application installed from a published release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omniroute-an-application-built-from-a-source-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        omniroute — an application built from a source checkout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#builder-the-build-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        builder — the build host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-get-when-the-agent-does-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What you get when the agent does it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#to-run-a-delivery-on-the-current-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        To run a delivery on the current target
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<p align="center">
+  <img src="../../assets/logo.png" alt="DeployFlow" width="420">
+</p>
+
+<p align="center">
+  <a href="#the-problem-it-solves">The problem it solves</a> ·
+  <a href="#try-it">Try it</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#three-kinds-of-application">Three kinds of application</a> ·
+  <a href="#ready-to-use-applications">Ready-to-use applications</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#glossary">Glossary</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
+
+<blockquote>
+<p><strong>Read the documentation online:</strong> <a href="https://bruj0.github.io/deployflow">https://bruj0.github.io/deployflow</a></p>
+<p>The same documents, with the essay <em>"Software Delivery Needs a Harness, Not a
+Better Prompt"</em> as the home page, and every diagram rendered.</p>
+</blockquote>
+<h1 id="deployflow">DeployFlow<a class="headerlink" href="#deployflow" title="Permanent link">&para;</a></h1>
+<p><strong>Point your coding agent at this repository and tell it to install an
+application. It writes the deployment, you review it, and the service is
+verified before anyone calls it done.</strong></p>
+<p align="center">
+  <img src="../../assets/diagrams/deployflow-current-state.png" alt="Current-state diagram in three zones: authoring, where the agent writes app.yaml and a role that carries its own checks; delivery, where appctl builds pinned artifacts and installs them; and the guests, where a build host and the omniroute service run. Two further destinations are named in the registry but not built." width="100%">
+</p>
+
+<p align="center"><sub>
+The current landscape. <a href="../../assets/diagrams/deployflow-current-state.html">Open the diagram</a>.
+</sub></p>
+
+<p>DeployFlow is a workflow for delivering applications to servers. It defines
+what an application needs, how it should be installed, and how we know it
+actually works. The agent does the writing. The workflow does the proving.</p>
+<p>The current implementation delivers to a container on a Proxmox host with
+Ansible. That is the first destination, not the definition of the project.
+The workflow itself — manifest, roles, checks, verification — is what
+transfers when the next destination arrives.</p>
+<h2 id="the-problem-it-solves">The problem it solves<a class="headerlink" href="#the-problem-it-solves" title="Permanent link">&para;</a></h2>
+<p>An agent can write a deployment in a few minutes. What it cannot do, on its
+own, is tell you the deployment is <em>correct</em>:</p>
+<ul>
+<li>The playbook finished green. That proves Ansible ran, not that the service
+  works. A database file exists on a server that was never bootstrapped, and a
+  process binds the wrong port — both produce a green play.</li>
+<li>The same steps run on every machine, and the differences between machines
+  are where deployments break.</li>
+<li>The knowledge of "how this application should be installed" lives in
+  someone's head, and leaves when they do.</li>
+<li>The next person, or the next agent, starts from nothing.</li>
+</ul>
+<p>DeployFlow turns that into a repository an agent can work inside:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The application declares itself</strong></td>
+<td>A manifest says where it comes from, what it needs, and what "working" means for it.</td>
+</tr>
+<tr>
+<td><strong>The agent writes the delivery</strong></td>
+<td>A role per application, generated against a documented contract, reviewable before it runs.</td>
+</tr>
+<tr>
+<td><strong>The workflow proves it works</strong></td>
+<td>Each application carries its own checks, and they run after every install.</td>
+</tr>
+<tr>
+<td><strong>The steps are repeatable</strong></td>
+<td>A second install on the same inputs changes nothing, and says so.</td>
+</tr>
+<tr>
+<td><strong>The knowledge is in the repo</strong></td>
+<td>The next agent reads it instead of guessing.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="try-it">Try it<a class="headerlink" href="#try-it" title="Permanent link">&para;</a></h2>
+<p>Four steps. The first two are the setup every run needs; the third is the one
+that proves the workflow works; the fourth is how you add your own
+application.</p>
+<h3 id="1-get-the-tool">1. Get the tool<a class="headerlink" href="#1-get-the-tool" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/bruj0/deployflow.git
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>deployflow
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>--editable<span class="w"> </span>.
+</code></pre></div>
+<p><code>appctl</code> is the command this repository is built around. It needs Python 3.12
+or later, and it needs <code>ansible-playbook</code> on your <code>PATH</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>ansible-core<span class="w">     </span><span class="c1"># or: pipx install ansible-core</span>
+</code></pre></div>
+<p>The manifest is gitignored too — <code>app.yaml</code> is yours, and the committed
+template is <a href="https://github.com/bruj0/deployflow/blob/main/app.example.yaml"><code>app.example.yaml</code></a>. Copy it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cp<span class="w"> </span>app.example.yaml<span class="w"> </span>app.yaml
+</code></pre></div>
+<h3 id="2-create-your-inventory">2. Create your inventory<a class="headerlink" href="#2-create-your-inventory" title="Permanent link">&para;</a></h3>
+<p>The inventory names your Proxmox host, your guest IDs and the addresses of
+machines only you can reach. It is <strong>gitignored</strong>, so a fresh clone has none —
+and that is the expected state, not a broken checkout. The committed templates
+are in <code>inventory.example/</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>inventory/group_vars
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>cp<span class="w"> </span>inventory.example/hosts.yml<span class="w"> </span>inventory/hosts.yml
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>cp<span class="w"> </span>-r<span class="w"> </span>inventory.example/group_vars/.<span class="w"> </span>inventory/group_vars/
+</code></pre></div>
+<p>Then edit the two files the templates name:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What to put in it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inventory/hosts.yml</code></td>
+<td>your Proxmox host and your guests</td>
+</tr>
+<tr>
+<td><code>inventory/group_vars/all/main.yml</code></td>
+<td>your SSH public key</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-install-an-application-and-watch-it-prove-itself">3. Install an application and watch it prove itself<a class="headerlink" href="#3-install-an-application-and-watch-it-prove-itself" title="Permanent link">&para;</a></h3>
+<p>The repository ships <code>example-app</code>: a small HTTP service that installs from a
+pinned wheel and checks that it answers. It needs no build host and no
+half-hour compile, so it is the fastest way to see the whole workflow.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>example-app
+</code></pre></div>
+<p>The last lines are the point of the whole exercise:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>example-app: proxmox_lxc -&gt; example-app  10 changed, 0 failed, 41 tasks, 33s
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  check: example-app is installed and answering on port 8080
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  check: import example_app: ok
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  check: unit example-app: active
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>  check: listener on 8080: present
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  check: endpoint /: HTTP 200
+</code></pre></div>
+<p>Those five lines are the application's own checks, not a task count. Each one
+stands in for a failure that a green play would otherwise hide.</p>
+<p>Now run it again:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>example-app
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>example-app: proxmox_lxc -&gt; example-app  0 changed, 0 failed, 41 tasks, 29s
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  check: example-app is installed and answering on port 8080
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  check: import example_app: ok
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  check: unit example-app: active
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>  check: listener on 8080: present
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  check: endpoint /: HTTP 200
+</code></pre></div>
+<p><strong><code>0 changed</code> is the claim this project makes.</strong> The second run found nothing
+to do and re-verified the service anyway. A tool that reports a change every
+run is reinstalling itself and proving nothing.</p>
+<h3 id="4-add-your-own-application">4. Add your own application<a class="headerlink" href="#4-add-your-own-application" title="Permanent link">&para;</a></h3>
+<p>Do not write the role by hand. There is a skill for it, and your agent can
+follow it:</p>
+<blockquote>
+<p>Read AGENTS.md and .agents/skills/deployflow-add-app/SKILL.md, then add support for
+<your application>. Use the deployflow-add-app skill. Show me the diff before you run
+anything.</p>
+</blockquote>
+<p>The skill covers the manifest, the role, the pinned lockfile, the checks, and
+the traps that make a run reinstall itself forever. It also documents how to
+create the inventory above when it is missing.</p>
+<p>To look around first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>appctl<span class="w"> </span>targets<span class="w">      </span><span class="c1"># which destinations exist, and which are not built yet</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>appctl<span class="w"> </span>list<span class="w">         </span><span class="c1"># what this repository has configured</span>
+</code></pre></div>
+<h3 id="the-other-three-applications">The other three applications<a class="headerlink" href="#the-other-three-applications" title="Permanent link">&para;</a></h3>
+<p><code>example-app</code> is the smallest thing that works. Three others ship as worked
+examples of the shapes that are harder:</p>
+<table>
+<thead>
+<tr>
+<th>Application</th>
+<th>What it shows</th>
+<th>What it costs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../apps/omniroute-release/"><code>omniroute-release</code></a></td>
+<td>an application installed from a <strong>published release</strong></td>
+<td>five generated secrets, no build</td>
+</tr>
+<tr>
+<td><a href="../../apps/omniroute/"><code>omniroute</code></a></td>
+<td>an application <strong>built from a checkout</strong></td>
+<td>a checkout, a build host, ~28 min</td>
+</tr>
+<tr>
+<td><a href="../../apps/builder/"><code>builder</code></a></td>
+<td>the <strong>build host</strong> the second one needs</td>
+<td>24 GB of RAM on the host</td>
+</tr>
+</tbody>
+</table>
+<p><code>omniroute-release</code> is the one to run next if you want a real service: it
+needs no builder and no compile.</p>
+<h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<p align="center">
+  <img src="../../assets/diagrams/deployflow-workflow.png" alt="Swimlane diagram: you ask the agent for an application, the agent writes the manifest and the role, you review the diff, appctl builds and installs the pinned artifact, the guest runs the application's own checks, and the service answers. A failed check refuses the install and names the fix." width="100%">
+</p>
+
+<p align="center"><sub>
+The workflow, lane by lane. <a href="../../assets/diagrams/deployflow-workflow.html">Open the diagram</a>.
+</sub></p>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>you:  "install a new application"
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>agent: reads the contract, writes the manifest and the role,
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>       runs the checks, reports what it changed and what it verified
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>you:   reviews the diff, approves the run
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>run:   installs the pinned artifact, then checks the service actually answers
+</code></pre></div>
+<p>Five parts:</p>
+<p align="center">
+  <img src="../../assets/diagrams/deployflow-anatomy.png" alt="Tree diagram: one application is a manifest entry in app.yaml, a role under apps/name that carries its own checks, and a target file that decides where it runs." width="100%">
+</p>
+
+<p align="center"><sub>
+Where each part lives. <a href="../../assets/diagrams/deployflow-anatomy.html">Open the diagram</a>.
+</sub></p>
+
+<h3 id="1-the-manifest">1. The manifest<a class="headerlink" href="#1-the-manifest" title="Permanent link">&para;</a></h3>
+<p>What an application is: where its code comes from, what configuration it takes,
+which secrets it needs, and which destination runs it. One file, <code>app.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">applications</span><span class="p">:</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">myapp</span><span class="p">:</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">what it is, in one line</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">proxmox_lxc</span><span class="w">        </span><span class="c1"># the destination that runs it</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">      </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="nt">hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">        </span><span class="nt">vmid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">121</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repo</span><span class="w">               </span><span class="c1"># a checkout, built here</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">      </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/myapp</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">      </span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HEAD</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">    </span><span class="nt">build</span><span class="p">:</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="w">      </span><span class="nt">python_version</span><span class="p">:</span><span class="w"> </span><span class="s">"3.14"</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">      </span><span class="nt">verify_lock</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">        </span><span class="c1"># refuse a lock entry with no hash</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="w">    </span><span class="nt">config</span><span class="p">:</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_state_dir</span><span class="nv"> </span><span class="s">}}/config.json"</span>
+<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="w">      </span><span class="nt">files</span><span class="p">:</span>
+<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps/myapp/config.yml</span>
+<a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="w">      </span><span class="nt">vars</span><span class="p">:</span>
+<a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a><span class="w">        </span><span class="nt">app_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9000</span>
+<a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a><span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp_api_key</span>
+</code></pre></div>
+<p>The <code>source:</code> block says where the code comes from. There are three kinds,
+because there are three genuinely different things to say:</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>What it is</th>
+<th>What has to happen first</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>package</code></td>
+<td>a published version</td>
+<td>nothing — the artifact already exists</td>
+</tr>
+<tr>
+<td><code>repo</code></td>
+<td>a commit in a checkout</td>
+<td>the artifact has to be built</td>
+</tr>
+<tr>
+<td><code>toolchain</code></td>
+<td>nothing at all — the application <em>is</em> the environment</td>
+<td>the role assembles it</td>
+</tr>
+</tbody>
+</table>
+<p>The third is the unusual one, and it is what makes the workflow general
+enough to build the other two. It is explained in
+<a href="#three-kinds-of-application">Three kinds of application</a>.</p>
+<p><code>source.package</code> is the pin the operator reviews, and the role checks that it
+installs the same thing. If the manifest says <code>bottle==0.13.3</code> and the role
+pins a different version, the install refuses to run rather than quietly
+installing something else. The application's <em>name</em> is not its package name:
+<code>example-app</code> is what the guest calls the service, <code>bottle</code> is what gets
+installed to serve it.</p>
+<h3 id="2-the-application-role">2. The application role<a class="headerlink" href="#2-the-application-role" title="Permanent link">&para;</a></h3>
+<p>How it is installed, in one directory per application. The agent writes this;
+it follows the contract in <code>AGENTS.md</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># apps/myapp/tasks/main.yml</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Copy the lockfile to the guest</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="c1"># pip on the guest cannot open a path on the controller, so the file</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="c1"># travels first and pip is pointed at where it landed.</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">ansible.builtin.copy</span><span class="p">:</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">role_path</span><span class="nv"> </span><span class="s">}}/files/requirements.lock"</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">dest</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_dir</span><span class="nv"> </span><span class="s">}}/requirements.lock"</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">"0644"</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Install the application</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">  </span><span class="nt">ansible.builtin.pip</span><span class="p">:</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="nt">requirements</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_dir</span><span class="nv"> </span><span class="s">}}/requirements.lock"</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="nt">virtualenv</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_venv</span><span class="nv"> </span><span class="s">}}"</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">    </span><span class="nt">extra_args</span><span class="p">:</span><span class="w"> </span><span class="s">"--require-hashes"</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Check that the application answers a request</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">  </span><span class="nt">ansible.builtin.uri</span><span class="p">:</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">    </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">"http://127.0.0.1:{{</span><span class="nv"> </span><span class="s">app_port</span><span class="nv"> </span><span class="s">}}/"</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">  </span><span class="nt">register</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_endpoint</span>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">  </span><span class="nt">failed_when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a>
+<a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fail when the application does not answer</span>
+<a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="w">  </span><span class="nt">ansible.builtin.fail</span><span class="p">:</span>
+<a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="w">    </span><span class="nt">msg</span><span class="p">:</span><span class="w"> </span><span class="s">"The</span><span class="nv"> </span><span class="s">service</span><span class="nv"> </span><span class="s">listens</span><span class="nv"> </span><span class="s">but</span><span class="nv"> </span><span class="s">does</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">answer"</span>
+<a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_endpoint.status is undefined</span>
+<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a>
+<a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Report the checks that passed</span>
+<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a><span class="w">  </span><span class="c1"># This task is what the summary prints. Its lines become the `check:` lines</span>
+<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a><span class="w">  </span><span class="c1"># the operator reads, so the evidence the application gave is the evidence</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a><span class="w">  </span><span class="c1"># that is reported.</span>
+<a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a><span class="w">  </span><span class="nt">ansible.builtin.debug</span><span class="p">:</span>
+<a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a><span class="w">    </span><span class="nt">msg</span><span class="p">:</span>
+<a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_name</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">installed</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">answering</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">port</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_port</span><span class="nv"> </span><span class="s">}}"</span>
+<a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"endpoint</span><span class="nv"> </span><span class="s">/:</span><span class="nv"> </span><span class="s">HTTP</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_endpoint.status</span><span class="nv"> </span><span class="s">}}"</span>
+</code></pre></div>
+<h3 id="3-the-target">3. The target<a class="headerlink" href="#3-the-target" title="Permanent link">&para;</a></h3>
+<p>Where it runs. The manifest names one, and the target owns everything about
+that destination:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># src/appctl/targets/proxmox_lxc.py</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nd">@register</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">ProxmoxLxcTarget</span><span class="p">(</span><span class="n">Target</span><span class="p">):</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">kind</span> <span class="o">=</span> <span class="s2">"proxmox_lxc"</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">summary</span> <span class="o">=</span> <span class="s2">"an application installed into a Proxmox LXC guest with Ansible"</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">        </span><span class="sd">"""Reject a bad setup before anything is built or started."""</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">app</span><span class="p">()</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"hostname"</span><span class="p">):</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>            <span class="k">raise</span> <span class="n">TargetError</span><span class="p">(</span><span class="s2">"target is missing: hostname"</span><span class="p">)</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">deploy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">artifacts</span><span class="p">,</span> <span class="n">rendered</span><span class="p">):</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">        </span><span class="sd">"""Install it, run its checks, and report what was observed."""</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>        <span class="o">...</span>
+</code></pre></div>
+<p>Two more destinations are named so a manifest can ask for them and get a clear
+answer, but they are not built yet:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="gp">$ </span>appctl<span class="w"> </span>targets
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="go">implemented targets:</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="go">  proxmox_lxc: an application installed into a Proxmox LXC guest with Ansible</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="go">planned, not implemented:</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="go">  docker_vm: provision a virtual machine and run the application in Docker there</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="go">  vm: provision a virtual machine and install the application into it</span>
+</code></pre></div>
+<h3 id="4-the-checks">4. The checks<a class="headerlink" href="#4-the-checks" title="Permanent link">&para;</a></h3>
+<p>The part most tools skip. A deployment is not done when the command succeeds.
+It is done when the service answers. Each application carries its own checks,
+because only the application knows what "working" means for it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># apps/myapp/tasks/main.yml</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Check that the package imports</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">ansible.builtin.command</span><span class="p">:</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">argv</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_venv</span><span class="nv"> </span><span class="s">}}/bin/python"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"-c"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"import</span><span class="nv"> </span><span class="s">myapp"</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">changed_when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Check that the service is listening on the requested port</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">ansible.builtin.command</span><span class="p">:</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">    </span><span class="nt">argv</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ss</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-ltn</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span><span class="nt">changed_when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">  </span><span class="nt">register</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_listeners</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Fail when the service is not listening on the requested port</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">  </span><span class="nt">ansible.builtin.fail</span><span class="p">:</span>
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="w">    </span><span class="nt">msg</span><span class="p">:</span><span class="w"> </span><span class="s">"The</span><span class="nv"> </span><span class="s">service</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">running</span><span class="nv"> </span><span class="s">but</span><span class="nv"> </span><span class="s">not</span><span class="nv"> </span><span class="s">listening</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">port</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_port</span><span class="nv"> </span><span class="s">}}"</span>
+<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_port | string not in app_listeners.stdout</span>
+</code></pre></div>
+<p>The port check matters more than it looks. <code>systemctl is-active</code> says the
+process is up; it does not say the process bound the port you asked for. A
+service that came up on 8000 instead of 9000 passes an is-active check and
+fails every request.</p>
+<h3 id="5-secrets">5. Secrets<a class="headerlink" href="#5-secrets" title="Permanent link">&para;</a></h3>
+<p><code>appctl secrets</code> manages a single file: <code>.env</code> at the repository root, mode
+0600, gitignored. It is the only plain-text copy of a secret on the controller.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>appctl<span class="w"> </span>secrets<span class="w"> </span>init<span class="w">                       </span><span class="c1"># write .env (0600) and .env.example</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>appctl<span class="w"> </span>secrets<span class="w"> </span>check<span class="w">                      </span><span class="c1"># what is required and still missing</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>appctl<span class="w"> </span>secrets<span class="w"> </span>list<span class="w">                       </span><span class="c1"># names and state, never values</span>
+</code></pre></div>
+<p><code>init</code> reads the <code>secrets:</code> blocks in <code>app.yaml</code> and creates one key per
+secret, empty, so a fresh clone knows exactly what to fill in. <code>.env.example</code>
+— the list of required keys with no values — is committed, so the next person
+sees what the deployment needs without seeing anything it should not.</p>
+<p>Setting a value has three forms, and the first is the one to reach for:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>myapp_api_key<span class="w">                   </span><span class="c1"># prompts; the value never reaches argv or shell history</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>myapp_api_key<span class="w"> </span><span class="s1">'&lt;value&gt;'</span><span class="w">         </span><span class="c1"># positional</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>myapp_api_key<span class="w"> </span>--generate<span class="w">        </span><span class="c1"># random value, 32 bytes of entropy</span>
+</code></pre></div>
+<p><code>--generate</code> takes several names at once, which is how the shipped
+applications are set up — all five OmniRoute credentials are issued by the
+system itself:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>omniroute_jwt_secret<span class="w"> </span>omniroute_api_key_secret<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">                     </span>omniroute_storage_encryption_key<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">                     </span>omniroute_initial_password<span class="w"> </span>omniroute_ws_bridge_secret<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">                     </span>--generate
+</code></pre></div>
+<p><code>set</code> rewrites the file in place, preserving existing keys and their order, so
+running it twice for one key leaves one entry — a duplicate <code>KEY</code> in a <code>.env</code>
+is a well-known source of "I changed it and nothing happened".</p>
+<p>Use <code>--generate</code> for a secret this system issues for itself. It is wrong for
+anything with an external issuer: a provider API key has to come from the
+provider, not from a random string.</p>
+<p><code>check</code> exits 1 while anything required is unset, which is what makes it
+usable in CI. <code>appctl install</code> runs the same check before it touches the
+cluster, because discovering a missing secret halfway through a play leaves
+half the guest configured.</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.env</code> on the controller</td>
+<td>the only plain-text copy, mode 0600, gitignored</td>
+</tr>
+<tr>
+<td>the temporary extra-vars file</td>
+<td>mode 0600, passed as <code>--extra-vars @file</code>, deleted at exit</td>
+</tr>
+<tr>
+<td>the guest's <code>EnvironmentFile</code></td>
+<td>mode 0640, owned by <code>root:&lt;service account&gt;</code> — systemd reads it as PID 1, and the service account has to be able to read it too</td>
+</tr>
+<tr>
+<td>the application's memory</td>
+<td>resolved from that file at startup</td>
+</tr>
+<tr>
+<td><strong>any log</strong></td>
+<td><strong>never</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A secret is never written to <code>app.yaml</code>, to a rendered config file, or to a
+log. In a config file it appears only as a <code>${NAME}</code> reference, which the
+guest resolves at startup — that is what makes a config file safe to commit.</p>
+<p>Full detail, including the three ways a secret leaks and the guard for each:
+<a href="../../reference/secrets/">docs/secrets.md</a>.</p>
+<h2 id="three-kinds-of-application">Three kinds of application<a class="headerlink" href="#three-kinds-of-application" title="Permanent link">&para;</a></h2>
+<p>Most applications come from somewhere: a registry, or a checkout. Some
+applications <em>are</em> somewhere — they are the machine other applications are
+built on, and they install nothing at all.</p>
+<p>That is the third kind, and the workflow needs it to describe its own build
+hosts honestly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nt">builder</span><span class="p">:</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">the guest other applications are built on</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">proxmox_lxc</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">      </span><span class="nt">hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builder</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">      </span><span class="nt">vmid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">toolchain</span><span class="w">          </span><span class="c1"># no package, no repo, no build</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">  </span><span class="nt">secrets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+</code></pre></div>
+<p>A toolchain application:</p>
+<ul>
+<li><strong>installs no service</strong> and publishes no port;</li>
+<li><strong>has no artifact</strong>, so <code>appctl build</code> on it says so and exits non-zero
+  rather than silently succeeding;</li>
+<li><strong>has no dependency on <code>common/python</code></strong> — that dependency is what asserts
+  <code>app_port</code> is defined, and a build host serves nothing;</li>
+<li><strong>asserts the machine, not the install.</strong> Its role checks that the guest is
+  the right architecture, that the runtime is the pinned one, that it has
+  enough memory and disk, and that it can reach the package registry. A role
+  that installs a compiler and reports success has not said anything about
+  whether a build can run on it.</li>
+</ul>
+<p>That last point is the difference that matters, and it is measured. A builder
+created with 12 GB of RAM passed every install check and then failed during
+a build, with an error that named a memory limit and not the guest — and the
+guest stopped answering SSH entirely. The role now asserts the floor it needs
+before the build starts.</p>
+<p>The worked example is <a href="../../apps/builder/"><code>apps/builder/</code></a>.</p>
+<h2 id="ready-to-use-applications">Ready-to-use applications<a class="headerlink" href="#ready-to-use-applications" title="Permanent link">&para;</a></h2>
+<p>The repository ships four applications that work, not three that illustrate.
+<code>example-app</code> is covered in <a href="#try-it">Try it</a> above; the other three cover
+the shapes that are harder.</p>
+<h3 id="omniroute-release-an-application-installed-from-a-published-release"><code>omniroute-release</code> — an application installed from a published release<a class="headerlink" href="#omniroute-release-an-application-installed-from-a-published-release" title="Permanent link">&para;</a></h3>
+<p><a href="https://github.com/cheaper-inference/OmniRoute">OmniRoute</a> is a Next.js
+server with a native SQLite binding, served by one systemd unit on one guest.</p>
+<p>This one is installed from a <strong>published npm release</strong>: the guest's own
+<code>npm install</code> fetches a pinned version, and nothing OmniRoute-related runs on
+the controller. It is the shape an application takes when its code already
+ships as an artifact.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>omniroute-release
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>appctl<span class="w"> </span>install<span class="w"> </span>omniroute-release<span class="w">        </span><span class="c1"># must report changed=0</span>
+</code></pre></div>
+<p>See <a href="../../apps/omniroute-release/"><code>apps/omniroute-release/</code></a> for what the role
+asserts and why the credentials file is group-readable.</p>
+<h3 id="omniroute-an-application-built-from-a-source-checkout"><code>omniroute</code> — an application built from a source checkout<a class="headerlink" href="#omniroute-an-application-built-from-a-source-checkout" title="Permanent link">&para;</a></h3>
+<p>The same application, built from the upstream <code>main</code> branch instead of
+installed from npm. It is the shape an application takes when there is no
+published artifact — a fork, a development branch — and the build has to
+happen on a guest of its own.</p>
+<h3 id="builder-the-build-host"><code>builder</code> — the build host<a class="headerlink" href="#builder-the-build-host" title="Permanent link">&para;</a></h3>
+<p>The guest the OmniRoute build runs on. It installs a compiler, a pinned Node
+and a workspace, and it installs no service of its own.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>builder
+</code></pre></div>
+<p>It publishes its address to <code>tmp/builders/builder.endpoint</code>, because guest
+hostnames do not resolve from the controller — Proxmox's resolver is not the
+controller's — and a build script that cannot find the machine cannot use it.</p>
+<p>See <a href="../../apps/builder/"><code>apps/builder/</code></a>.</p>
+<h2 id="what-you-get-when-the-agent-does-it">What you get when the agent does it<a class="headerlink" href="#what-you-get-when-the-agent-does-it" title="Permanent link">&para;</a></h2>
+<p>A reviewer reading the diff sees the intent, not a wall of generated YAML:</p>
+<ul>
+<li>the manifest block for the new application,</li>
+<li>one role directory with the install steps and the checks,</li>
+<li>a pinned dependency lockfile, so the tree that installs is the tree that was
+  reviewed,</li>
+<li>a recorded <code>state:</code> block saying what was built and when it was last
+  installed.</li>
+</ul>
+<p>The agent's own reasoning stays in its session. What lands in the repository is
+declarative and reviewable.</p>
+<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
+<p>Every feature, what it gives you, and the file that holds it.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>What it gives you</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Deterministic flow</strong></td>
+<td><code>appctl</code> drives the same order every run — validate, check secrets, render, then play — and exits non-zero on failure.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/cli.py"><code>src/appctl/cli.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Agentic skill</strong></td>
+<td>The contract, the scaffold and the checklist, so an agent writes a role that matches the others.</td>
+<td><a href="../add-app-skill/"><code>.agents/skills/deployflow-add-app/SKILL.md</code></a></td>
+</tr>
+<tr>
+<td><strong>App manifest</strong></td>
+<td>One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/app.example.yaml"><code>app.example.yaml</code></a></td>
+</tr>
+<tr>
+<td><strong>Private inventory</strong></td>
+<td>Your hosts, guest IDs and addresses stay out of git. The repository ships templates and the skill documents how to build the real one.</td>
+<td><a href="https://github.com/bruj0/deployflow/tree/main/inventory.example"><code>inventory.example/</code></a></td>
+</tr>
+<tr>
+<td><strong>Pinned artifacts</strong></td>
+<td>Every dependency pinned by hash. The build refuses a lockfile without one, and the role checks the manifest and the role agree on the version.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/build.py"><code>src/appctl/build.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Application-level checks</strong></td>
+<td>Each app checks that it imports, is active, listens where it was asked to, and answers a request. The result is printed as <code>check:</code> lines, so the summary is evidence rather than a task count.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/apps/example-app/tasks/main.yml"><code>apps/example-app/tasks/main.yml</code></a></td>
+</tr>
+<tr>
+<td><strong>Idempotency</strong></td>
+<td>A second install reports <code>changed=0</code>, which proves the run is repeatable rather than reinstalling itself.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/install.py"><code>src/appctl/install.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Secrets management</strong></td>
+<td><code>appctl secrets</code> keeps them in a gitignored <code>.env</code>; the run reads them from a mode-0600 file, so they never reach <code>argv</code> or a log.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/secrets.py"><code>src/appctl/secrets.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Pluggable targets</strong></td>
+<td>A target interface separates "what the application is" from "where it runs". One target ships today.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/targets/base.py"><code>src/appctl/targets/base.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Streaming logs</strong></td>
+<td>The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under <code>tmp/runs/</code>.</td>
+<td><a href="https://github.com/bruj0/deployflow/blob/main/src/appctl/install.py"><code>src/appctl/install.py</code></a></td>
+</tr>
+<tr>
+<td><strong>Shared framework</strong></td>
+<td>The toolchain, the service account and the venv that every application role depends on.</td>
+<td><a href="https://github.com/bruj0/deployflow/tree/main/common/python"><code>common/python/</code></a></td>
+</tr>
+<tr>
+<td><strong>Four working applications</strong></td>
+<td>A sample that installs in one command, a service from a published release, a service built from a checkout, and the build host that builds it.</td>
+<td><a href="../../apps/example-app/"><code>apps/example-app/</code></a>, <a href="../../apps/omniroute-release/"><code>apps/omniroute-release/</code></a>, <a href="../../apps/omniroute/"><code>apps/omniroute/</code></a>, <a href="../../apps/builder/"><code>apps/builder/</code></a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="glossary">Glossary<a class="headerlink" href="#glossary" title="Permanent link">&para;</a></h2>
+<p>The words this document uses, in the order a newcomer meets them.</p>
+<table>
+<thead>
+<tr>
+<th>Word</th>
+<th>What it means here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>appctl</code></strong></td>
+<td>The command-line tool. It validates, renders and installs.</td>
+</tr>
+<tr>
+<td><strong>manifest</strong> (<code>app.yaml</code>)</td>
+<td>One file describing every application: where it comes from, what config it takes, which secrets it needs, where it runs. Gitignored — the committed template is <a href="https://github.com/bruj0/deployflow/blob/main/app.example.yaml"><code>app.example.yaml</code></a>.</td>
+</tr>
+<tr>
+<td><strong>role</strong></td>
+<td>A directory under <code>apps/&lt;name&gt;/</code> holding the install steps and the checks for one application.</td>
+</tr>
+<tr>
+<td><strong>target</strong></td>
+<td>Where an application runs. <code>proxmox_lxc</code> ships; <code>vm</code> and <code>docker_vm</code> are named but not built.</td>
+</tr>
+<tr>
+<td><strong>inventory</strong></td>
+<td>Which machines exist. <code>inventory/hosts.yml</code> plus <code>group_vars/</code>. Gitignored, because it names your own hosts.</td>
+</tr>
+<tr>
+<td><strong><code>group_vars/</code></strong></td>
+<td>Per-group settings, read by Ansible. <code>all/</code> holds what every guest needs; each other directory holds one group's.</td>
+</tr>
+<tr>
+<td><strong>guest</strong></td>
+<td>The machine an application is installed into — here, a Proxmox LXC container.</td>
+</tr>
+<tr>
+<td><strong>controller</strong></td>
+<td>The machine you run <code>appctl</code> on. It renders and drives; it does not serve.</td>
+</tr>
+<tr>
+<td><strong>artifact</strong></td>
+<td>The thing that gets installed: a pinned wheel, a built tree, a published release.</td>
+</tr>
+<tr>
+<td><strong>pin</strong></td>
+<td>An exact version, and for a Python dependency the sha256 of the file behind it.</td>
+</tr>
+<tr>
+<td><strong>lockfile</strong> (<code>requirements.lock</code>)</td>
+<td>Every dependency and its hashes, so the tree that installs is the tree that was reviewed.</td>
+</tr>
+<tr>
+<td><strong><code>changed=0</code></strong></td>
+<td>The second run found nothing to do. The project's central claim.</td>
+</tr>
+<tr>
+<td><strong>toolchain</strong></td>
+<td>An application that installs no service: the build host other applications are built on.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<h3 id="to-run-a-delivery-on-the-current-target">To run a delivery on the current target<a class="headerlink" href="#to-run-a-delivery-on-the-current-target" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A Proxmox VE host</td>
+<td>You need <code>pct</code> and SSH access to it.</td>
+</tr>
+<tr>
+<td>A cached Linux template on that host</td>
+<td>The guest is created from it.</td>
+</tr>
+<tr>
+<td>SSH access from the controller to the host</td>
+<td>The framework drives <code>pct</code> over SSH.</td>
+</tr>
+<tr>
+<td><code>ansible-playbook</code> on the controller</td>
+<td>The play does the configuring.</td>
+</tr>
+<tr>
+<td>Python 3.12 or later on the controller</td>
+<td>That is the CLI's own requirement.</td>
+</tr>
+<tr>
+<td>Nothing else for the sample</td>
+<td><code>example-app</code> installs from a public wheel, so it needs no checkout, no build host and no secrets.</td>
+</tr>
+</tbody>
+</table>
+<p>For the <code>omniroute</code> application specifically, three more things are needed,
+and all three are consequences of building from source rather than
+installing a release:</p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A checkout of OmniRoute on the controller</td>
+<td>The role ships a tree; it does not fetch one. The build host clones it for itself, so it needs to be reachable from the guest.</td>
+</tr>
+<tr>
+<td>The build host provisioned</td>
+<td><code>appctl install builder</code>. The build cannot run on the controller and must not run emulated.</td>
+</tr>
+<tr>
+<td>24 GB of RAM on the Proxmox host</td>
+<td>The build's webpack process reaches 11.5 GB RSS. The builder role asserts this and refuses a host that is too small.</td>
+</tr>
+</tbody>
+</table>
+<p>SSH access means whatever your SSH setup already provides. The framework
+does not read <code>~/.ssh/config</code> by name, and it does not need one. If you keep
+your hosts in an SSH config, name the host in the inventory and the alias
+resolves on its own:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">all</span><span class="p">:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">children</span><span class="p">:</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="nt">proxmox</span><span class="p">:</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">      </span><span class="nt">hosts</span><span class="p">:</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="w">        </span><span class="nt">pve</span><span class="p">:</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">          </span><span class="nt">ansible_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pve.example.net</span><span class="w">   </span><span class="c1"># a Host block in ~/.ssh/config</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">          </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+</code></pre></div>
+<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../../reference/overview/">docs/overview.md</a></td>
+<td>The current implementation: the <code>appctl</code> command, the Proxmox LXC target, the manifest and the roles</td>
+</tr>
+<tr>
+<td><a href="../../reference/targets/">docs/targets.md</a></td>
+<td>The target interface, and how to add a destination</td>
+</tr>
+<tr>
+<td><a href="../../reference/architecture/">docs/architecture.md</a></td>
+<td>How the parts fit together, and the rules that must hold</td>
+</tr>
+<tr>
+<td><a href="../../reference/configuration/">docs/configuration.md</a></td>
+<td>Every key in the manifest</td>
+</tr>
+<tr>
+<td><a href="../../reference/build-pipeline/">docs/build-pipeline.md</a></td>
+<td>How an artifact is produced and pinned</td>
+</tr>
+<tr>
+<td><a href="../../reference/rendering/">docs/rendering.md</a></td>
+<td>How YAML becomes the configuration the server reads</td>
+</tr>
+<tr>
+<td><a href="../../reference/secrets/">docs/secrets.md</a></td>
+<td>How a secret reaches the server</td>
+</tr>
+<tr>
+<td><a href="../../apps/omniroute/">apps/omniroute/</a></td>
+<td>A working application built from a source checkout: the role, and what building it taught</td>
+</tr>
+<tr>
+<td><a href="../../apps/builder/">apps/builder/</a></td>
+<td>A working build host: the <code>toolchain</code> application</td>
+</tr>
+<tr>
+<td><a href="../agents/">AGENTS.md</a></td>
+<td>The rules for changing this repository</td>
+</tr>
+<tr>
+<td><a href="../contributing/">CONTRIBUTING.md</a></td>
+<td>How to contribute, and what a change must preserve</td>
+</tr>
+</tbody>
+</table>
+<p>The same documents are published as a site, with the essay as its home page:
+<a href="https://bruj0.github.io/deployflow">https://bruj0.github.io/deployflow</a>. The site is assembled from the files
+above by <code>scripts/build_site_docs.py</code> — see <a href="../../reference/site/">the site
+guide</a> for how to build it, and
+<code>python scripts/serve_docs.py</code> to work on it locally.</p>
+<h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
+<p>MIT. See <a href="https://github.com/bruj0/deployflow/blob/main/LICENSE">LICENSE</a>.
+</content></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../.." class="md-footer__link md-footer__link--prev" aria-label="Previous: Essay">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Essay
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../agents/" class="md-footer__link md-footer__link--next" aria-label="Next: Agent guide">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Agent guide
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../assets/javascripts/panzoom.min.js"></script>
+      
+        <script src="../../assets/javascripts/zoompan.js"></script>
+      
+    
+  </body>
+</html>

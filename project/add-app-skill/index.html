@@ -1,0 +1,2449 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/project/add-app-skill/">
+      
+      
+        <link rel="prev" href="../security/">
+      
+      
+        <link rel="next" href="../../reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Add-app skill - DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/panzoom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta name="panzoom-theme" content="material">
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#add-an-application-to-deployflow" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Add-app skill
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../readme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-roots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two roots
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-contract-one-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The contract: one variable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Process
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Process">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-scaffold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Scaffold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-defaultsmainyml-the-whole-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. defaults/main.yml — the whole interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-metamainyml-declare-the-dependency-not-the-playbook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. meta/main.yml — declare the dependency, not the playbook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-build-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Build artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-tasksmainyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. tasks/main.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-name-the-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Name the target
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-wire-it-up-and-deploy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Wire it up and deploy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Wire it up and deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-inventory-does-not-exist-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If inventory/ does not exist yet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-shape-of-inventoryhostsyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The shape of inventory/hosts.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-prove-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Prove it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-that-is-not-a-python-wheel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application that is not a Python wheel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-built-from-a-source-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application built from a source checkout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-whose-purpose-is-to-build-another-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application whose purpose is to build another application
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postconditions-non-negotiable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Postconditions: non-negotiable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sentinels-the-four-ways-to-break-changed0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sentinels: the four ways to break changed=0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sentinels: the four ways to break changed=0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#greedy-regexes-and-block-scalars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Greedy regexes and block scalars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas-all-measured-on-this-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas, all measured on this host
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-guest-not-an-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a guest, not an app
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps/omniroute-building-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-two-roots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The two roots
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-contract-one-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The contract: one variable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Process
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Process">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-scaffold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Scaffold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-defaultsmainyml-the-whole-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. defaults/main.yml — the whole interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-metamainyml-declare-the-dependency-not-the-playbook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. meta/main.yml — declare the dependency, not the playbook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-build-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Build artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-tasksmainyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. tasks/main.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-name-the-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Name the target
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-wire-it-up-and-deploy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Wire it up and deploy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Wire it up and deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-inventory-does-not-exist-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If inventory/ does not exist yet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-shape-of-inventoryhostsyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The shape of inventory/hosts.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Secrets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-prove-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Prove it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-that-is-not-a-python-wheel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application that is not a Python wheel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-built-from-a-source-checkout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application built from a source checkout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-application-whose-purpose-is-to-build-another-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An application whose purpose is to build another application
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postconditions-non-negotiable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Postconditions: non-negotiable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sentinels-the-four-ways-to-break-changed0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sentinels: the four ways to break changed=0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sentinels: the four ways to break changed=0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#greedy-regexes-and-block-scalars" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Greedy regexes and block scalars
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas-all-measured-on-this-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas, all measured on this host
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-guest-not-an-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a guest, not an app
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="add-an-application-to-deployflow">Add an application to DeployFlow<a class="headerlink" href="#add-an-application-to-deployflow" title="Permanent link">&para;</a></h1>
+<p>An application is <strong>one directory</strong> under <code>apps/</code>. Nothing in <code>common/</code> and
+nothing in <code>playbooks/site.yml</code> changes when you add one. If your change touches
+either, stop — you are about to put application knowledge in the framework, which
+is the one thing this layout exists to prevent.</p>
+<h2 id="the-two-roots">The two roots<a class="headerlink" href="#the-two-roots" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Root</th>
+<th>Knows about</th>
+<th>Contains</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>common/</code></td>
+<td>guests, never applications</td>
+<td><code>lxc/</code> (create), <code>python/</code> (contract)</td>
+</tr>
+<tr>
+<td><code>apps/</code></td>
+<td>its own application, never guests</td>
+<td><code>example-app/</code>, and whatever you add</td>
+</tr>
+</tbody>
+</table>
+<p><code>roles_path = common:apps</code> in <code>ansible.cfg</code>. An application may not require
+anything from another application.</p>
+<h2 id="the-contract-one-variable">The contract: one variable<a class="headerlink" href="#the-contract-one-variable" title="Permanent link">&para;</a></h2>
+<p><code>common/python/defaults/main.yml</code> derives <strong>everything</strong> from <code>app_name</code>:
+<code>app_user</code>, <code>app_home</code>, <code>app_dir</code>, <code>app_venv</code>, <code>app_state_dir</code>,
+<code>app_service_name</code>. You set <code>app_name</code> and every path follows.</p>
+<p>Two values have no derivation and you must set them: <code>app_port</code> and anything else
+unique to your app.</p>
+<h2 id="process">Process<a class="headerlink" href="#process" title="Permanent link">&para;</a></h2>
+<h3 id="1-scaffold">1. Scaffold<a class="headerlink" href="#1-scaffold" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>apps/&lt;name&gt;/<span class="o">{</span>defaults,tasks,meta,files<span class="o">}</span>
+</code></pre></div>
+<h3 id="2-defaultsmainyml-the-whole-interface">2. <code>defaults/main.yml</code> — the whole interface<a class="headerlink" href="#2-defaultsmainyml-the-whole-interface" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nn">---</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">app_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp</span><span class="w">          </span><span class="c1"># the ONLY required value</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">app_port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9000</span><span class="w">           </span><span class="c1"># no derivation exists for this</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">app_service_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp</span><span class="w">  </span><span class="c1"># defaults to app_name; set only if they differ</span>
+</code></pre></div>
+<h3 id="3-metamainyml-declare-the-dependency-not-the-playbook">3. <code>meta/main.yml</code> — declare the dependency, not the playbook<a class="headerlink" href="#3-metamainyml-declare-the-dependency-not-the-playbook" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nn">---</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">dependencies</span><span class="p">:</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python</span>
+</code></pre></div>
+<p>Ansible runs a role's dependencies before its own tasks, so <code>common/python</code>
+prepares the guest first. <strong>This is what lets a new app avoid editing any
+playbook.</strong> Verified: including an application runs all nine <code>common/python</code> tasks with
+<code>python</code> named nowhere in the playbook.</p>
+<h3 id="4-build-artifacts">4. Build artifacts<a class="headerlink" href="#4-build-artifacts" title="Permanent link">&para;</a></h3>
+<p>Only for <code>kind: repo</code>. For <code>kind: package</code> the wheel already exists on PyPI and
+<code>appctl build myapp</code> says so and exits non-zero rather than failing silently.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>appctl<span class="w"> </span>build<span class="w"> </span>myapp<span class="w">                </span><span class="c1"># wheel + pinned lockfile + BUILDINFO</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>appctl<span class="w"> </span>build<span class="w"> </span>myapp<span class="w"> </span>--check<span class="w">        </span><span class="c1"># verify committed artifacts, build nothing</span>
+</code></pre></div>
+<p><code>defaults.python_version</code> in <code>app.yaml</code> must match the interpreter the lockfile
+was compiled for. <code>appctl build</code> refuses any lock entry without a sha256, which
+is the same condition <code>--require-hashes</code> enforces at install time — caught at
+build time it names the package; caught at install time pip names nothing.</p>
+<p>What is committed: the lockfile only. The wheel and BUILDINFO are gitignored,
+because the wheel changes on every commit and BUILDINFO records the sha256 the
+role checks before installing anything.</p>
+<h3 id="5-configuration">5. Configuration<a class="headerlink" href="#5-configuration" title="Permanent link">&para;</a></h3>
+<p>If the application has settings, write them as YAML. No code.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># app.yaml</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">config</span><span class="p">:</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_state_dir</span><span class="nv"> </span><span class="s">}}/config.json"</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">apps/myapp/config.yml</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">vars</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> port</span><span class="p">:</span><span class="w"> </span><span class="nv">9000</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># apps/myapp/config.yml</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">server</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> port</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">port</span><span class="nv"> </span><span class="s">}}"</span><span class="p p-Indicator">,</span><span class="nt"> token</span><span class="p">:</span><span class="w"> </span><span class="s">"${MYAPP_TOKEN}"</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p><code>appctl render</code> turns that into JSON under <code>tmp/rendered/&lt;app&gt;/</code>, and
+<code>common/python</code> copies it to <code>target</code>. Set <code>app_config_target</code> in the role's
+<code>defaults/main.yml</code> so the framework knows where to put it.</p>
+<p>Expect the file to be <strong>partial</strong>. Applications merge their own defaults into
+whatever they are given — many applications do it themselves — so only what
+differs from a default belongs in the YAML.</p>
+<p><strong>Never write a script that runs on the guest to produce configuration.</strong> That
+was tried here: a script merged settings into config.json on every play. The
+application already does that merge itself, so the script was a second
+implementation of the application's behaviour, shipped to every guest, free to
+drift from it. A two-key config.json boots the service.</p>
+<p>Use <code>{{ name }}</code> for values <code>appctl</code> substitutes on the controller, and <code>${NAME}</code>
+for secrets the application resolves at runtime from its EnvironmentFile. The
+second form is what keeps a secret out of the repository, the rendered file and
+the logs.</p>
+<h3 id="6-tasksmainyml">6. <code>tasks/main.yml</code><a class="headerlink" href="#6-tasksmainyml" title="Permanent link">&para;</a></h3>
+<p>Copy the closest existing role. <code>apps/example-app/</code> is the reference: a wheel
+install, a systemd unit, a config merge, secrets, and the postconditions that
+prove the service answers.</p>
+<p>Keep every postcondition — see below. They are the point of the role, not
+boilerplate.</p>
+<p><strong>Two mistakes that cost a run each, and that the reference role now avoids:</strong></p>
+<p><em>pip runs on the guest, so the lockfile must be copied there first.</em> Pointing
+pip at <code>{{ role_path }}/files/requirements.lock</code> — a path on the controller —
+fails with "Could not open requirements file". That message names a missing
+file rather than a file that is present, on a different machine, and it looks
+like a broken lockfile rather than a path problem. Copy the file to
+<code>{{ app_dir }}/requirements.lock</code> and point pip at that.</p>
+<p><em>The import check needs a module name, not the application name.</em> An
+application name may contain a hyphen, and <code>import example-app</code> is a <em>syntax
+error</em>, not a missing module — so the check fails for a reason that has
+nothing to do with the install, and the real problem is never reached. Name the
+module separately (<code>app_module</code>), and point the unit's <code>PYTHONPATH</code> at the
+install root where it lives.</p>
+<p><strong>End the role by reporting what it proved.</strong> A <code>debug</code> task named
+<code>Report the checks that passed</code>, whose <code>msg</code> is a list of one line per check,
+becomes the <code>check:</code> lines in the operator's summary. Without it the summary
+reports a task count, which is not evidence:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Report the checks that passed</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">ansible.builtin.debug</span><span class="p">:</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">msg</span><span class="p">:</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">app_name</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">installed</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">answering</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">port</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_port</span><span class="nv"> </span><span class="s">}}"</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"import</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_module</span><span class="nv"> </span><span class="s">}}:</span><span class="nv"> </span><span class="s">ok"</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"endpoint</span><span class="nv"> </span><span class="s">/:</span><span class="nv"> </span><span class="s">HTTP</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">app_endpoint.status</span><span class="nv"> </span><span class="s">}}"</span>
+</code></pre></div>
+<h3 id="7-name-the-target">7. Name the target<a class="headerlink" href="#7-name-the-target" title="Permanent link">&para;</a></h3>
+<p>Every application says where it runs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># app.yaml</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nt">applications</span><span class="p">:</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">myapp</span><span class="p">:</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nt">target</span><span class="p">:</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">      </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">proxmox_lxc</span><span class="w">      </span><span class="c1"># the only implemented target</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">      </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">        </span><span class="nt">hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">        </span><span class="nt">vmid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">121</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">        </span><span class="nt">bind_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span><span class="w">  </span><span class="c1"># 0.0.0.0 exposes the service to the network</span>
+</code></pre></div>
+<p><code>kind</code> must be a registered target. <code>vm</code> and <code>docker_vm</code> are planned and fail
+before anything is built, so an application that names one cannot be deployed
+yet. Run <code>appctl targets</code> to see the current list.</p>
+<p><strong>The manifest's pin and the role's pin must agree.</strong> <code>source.package</code> in
+<code>app.yaml</code> is what the operator reviews; the role pins the same thing in its
+own <code>defaults/main.yml</code>, because a role has to be able to say what it installs
+without reading the manifest. Those are two files, and they drift.</p>
+<p><code>appctl</code> passes the manifest's pin into the play as <code>appctl_source_package</code> and
+<code>appctl_source_version</code>. A role should refuse to run when they disagree:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refuse to install a package the manifest does not name</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">ansible.builtin.assert</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">that</span><span class="p">:</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">appctl_source_package == app_package_name</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">appctl_source_version == app_package_version</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="nt">fail_msg</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">      </span><span class="no">The manifest pins {{ appctl_source_package }}=={{ appctl_source_version }},</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">      </span><span class="no">but this role installs {{ app_package_name }}=={{ app_package_version }}.</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="nt">quiet</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p><strong>The application's name is not its package name.</strong> <code>example-app</code> is what the
+guest calls the service; <code>bottle</code> is what gets installed to serve it. Keep the
+two in separate variables, or the comparison above compares a name with
+itself.</p>
+<p><code>options</code> belongs to the target. The shared schema does not read inside it, so
+a misspelled key there is caught by the target, not by the schema.</p>
+<h3 id="8-wire-it-up-and-deploy">8. Wire it up and deploy<a class="headerlink" href="#8-wire-it-up-and-deploy" title="Permanent link">&para;</a></h3>
+<p>Configuring the application in <code>app.yaml</code> does <strong>not</strong> deploy it. It is deployed
+when its name is in some guest's <code>app_roles</code> — that is what <code>appctl list</code> shows
+in its DEPLOYED column.</p>
+<p>Add <code>&lt;name&gt;</code> to the guest's <code>app_roles</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># inventory/group_vars/&lt;group&gt;/main.yml</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">app_roles</span><span class="p">:</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp</span>
+</code></pre></div>
+<p>The guest itself is one block in <code>inventory/hosts.yml</code> under <code>lxc</code>, plus a group
+that holds it. <strong>Name the group without hyphens, and do not let a group and a
+host share a name</strong> — Ansible rejects both with a warning that is easy to miss
+among a long inventory. <code>ex</code> and <code>example-app</code> is the pair to copy.</p>
+<p>The guest block carries <code>ansible_user</code>, <code>lxc_vmid</code> and <code>lxc_hostname</code>. Leave the
+address out: Proxmox leases one and <code>common/lxc</code> reads it back.</p>
+<h4 id="if-inventory-does-not-exist-yet">If <code>inventory/</code> does not exist yet<a class="headerlink" href="#if-inventory-does-not-exist-yet" title="Permanent link">&para;</a></h4>
+<p><strong><code>inventory/</code> is gitignored.</strong> It names the operator's own Proxmox host, the
+guest IDs and the addresses of machines only they can reach — no credential in
+it, but not public either. A fresh clone has no inventory, and that is the
+expected state, not a broken checkout.</p>
+<p>The committed templates are in <code>inventory.example/</code>. Create the real inventory
+from them:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>inventory/group_vars
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>cp<span class="w"> </span>inventory.example/hosts.yml<span class="w"> </span>inventory/hosts.yml
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>cp<span class="w"> </span>-r<span class="w"> </span>inventory.example/group_vars/.<span class="w"> </span>inventory/group_vars/
+</code></pre></div>
+<p>Then edit the two files the quickstart names:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What to change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inventory/hosts.yml</code></td>
+<td><code>ansible_host</code> and <code>ansible_port</code> for the <code>proxmox</code> group; the guest blocks under <code>lxc</code></td>
+</tr>
+<tr>
+<td><code>inventory/group_vars/all/main.yml</code></td>
+<td><code>lxc_ssh_public_key</code> — the operator's own public SSH key</td>
+</tr>
+</tbody>
+</table>
+<p>The template's <code>hosts.yml</code> already carries one example guest and one example
+group, so the shape is visible before anything is edited.</p>
+<p><strong>Do not commit <code>inventory/</code>.</strong> It is in <code>.gitignore</code>; <code>git add inventory/</code>
+would need <code>-f</code>, and the reason it is ignored is that it is the operator's own
+topology. If a file from it ever does land in a commit, treat it as a leak:
+the host names and guest IDs are not secret, but they are not public either.</p>
+<h4 id="the-shape-of-inventoryhostsyml">The shape of <code>inventory/hosts.yml</code><a class="headerlink" href="#the-shape-of-inventoryhostsyml" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>all:
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  children:
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    proxmox:
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>      hosts:
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        pve:                    # the Proxmox node itself
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>          ansible_host: ...
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>          ansible_port: 6022
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>          ansible_user: root
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    lxc:
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>      hosts:
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>        &lt;guest&gt;:                # each guest the repository provisions
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>          ansible_user: root
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>          lxc_vmid: 121
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>          lxc_hostname: &lt;guest&gt;
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>    &lt;group&gt;:                   # a group per guest, holding its app_roles
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>      hosts:
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>        &lt;guest&gt;:
+</code></pre></div>
+<p>Two rules that cost an afternoon to learn:</p>
+<ul>
+<li><strong>The group name and the host name must differ.</strong> Ansible rejects a group
+  that shares its name with a host, and the warning is easy to miss in a long
+  inventory. <code>ex</code> / <code>example-app</code> is the pair to copy; <code>mygrp</code> / <code>my-app</code> is
+  the other.</li>
+<li><strong>The group name carries no hyphen.</strong> Ansible rejects a hyphen in a group
+  name outright.</li>
+</ul>
+<p><code>appctl</code> reads <code>app_roles</code> out of <code>inventory/group_vars/</code> with a shallow scan,
+so the group does not have to be listed in <code>all.children</code> for <code>appctl list</code> to
+report the application as deployed — but Ansible needs it there for the play
+to reach the host, so put it in both.</p>
+<h3 id="9-secrets">9. Secrets<a class="headerlink" href="#9-secrets" title="Permanent link">&para;</a></h3>
+<p>Declare the names in <code>app.yaml</code> under the application, then:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>appctl<span class="w"> </span>secrets<span class="w"> </span>init<span class="w">                    </span><span class="c1"># writes .env (0600) and .env.example</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>myapp_api_key<span class="w"> </span><span class="s1">'...'</span><span class="w">  </span><span class="c1"># or: appctl secrets set NAME --generate</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>appctl<span class="w"> </span>secrets<span class="w"> </span>check<span class="w">                   </span><span class="c1"># exit 1 while any is unset</span>
+</code></pre></div>
+<p><code>appctl install</code> refuses to start while a required secret is absent, and names
+the missing keys. Never put a secret in <code>app.yaml</code>, in <code>group_vars</code>, or in a
+role default.</p>
+<h3 id="10-prove-it">10. Prove it<a class="headerlink" href="#10-prove-it" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>myapp<span class="w">     </span><span class="c1"># first run: expect several changed</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>appctl<span class="w"> </span>install<span class="w"> </span>myapp<span class="w">     </span><span class="c1"># second run: MUST be changed=0</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>appctl<span class="w"> </span>list<span class="w">                     </span><span class="c1"># DEPLOYED must show myapp, not "no guest"</span>
+</code></pre></div>
+<p><strong>The second run reaching <code>changed=0</code> is the acceptance test.</strong> A role that
+reports <code>changed</code> every run reinstalls the tree each time and tells you nothing
+about its own state. See "Sentinels" below — a broken sentinel is the most
+common reason this test fails.</p>
+<p>Then inject drift and confirm one re-run repairs it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>rm<span class="w"> </span>-f<span class="w"> </span>/opt/myapp/app/venv/bin/myapp<span class="w">     </span><span class="c1"># deleted entrypoint</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>systemctl<span class="w"> </span>stop<span class="w"> </span>myapp<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>systemctl<span class="w"> </span>disable<span class="w"> </span>myapp
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>rm<span class="w"> </span>-rf<span class="w"> </span>/opt/myapp/state<span class="w">                  </span><span class="c1"># mutable state must survive</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>appctl<span class="w"> </span>install<span class="w"> </span>myapp
+</code></pre></div>
+<p>For a shipped-tree application the entrypoint lives in the tree instead of the
+venv — delete a file the controller still has and check that rsync puts it back.
+Then run the play once more and require <code>changed=0</code> again: drift repair that
+leaves the next run reporting changes has fixed the symptom and not the
+sentinel.</p>
+<h2 id="an-application-that-is-not-a-python-wheel">An application that is not a Python wheel<a class="headerlink" href="#an-application-that-is-not-a-python-wheel" title="Permanent link">&para;</a></h2>
+<p>Every step above assumes a wheel. An application that ships a JavaScript tree —
+or any prebuilt artifact with no <code>pyproject.toml</code> — needs the role to do the
+installing. <code>apps/deepseek-harness/</code> is the worked example, and it is the second
+kind of application this repository has.</p>
+<p><strong><code>appctl build</code> will fail on it and that is expected.</strong> <code>build</code> exports a git
+tree, optionally builds a <code>webui</code> bundle, then runs <code>uv build --wheel</code>. There is
+no path to "copy this tree". The <code>app.yaml</code> entry still needs a <code>build</code> block,
+because the schema requires one for <code>kind: repo</code> and <code>appctl list</code> prints it as
+the SOURCE column — say in a comment that it is inert, so the next reader does
+not go looking for a wheel. <code>appctl install</code> reads none of it: install runs the
+play and nothing else.</p>
+<p><strong>The build stays an operator act on the controller.</strong> <code>pnpm install</code> and
+<code>pnpm run build</code> are run by a person, not by the role, because a role that
+rebuilds on every play cannot tell "no changes" from "rebuilt". The role's job is
+to refuse to ship a tree whose install or build is older than its sources:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Read the newest source file in the checkout</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="c1"># git ls-files, not a find: lib/, dist/ and node_modules are gitignored, so</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="c1"># this is exactly the set that can invalidate the build, with no build output</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="c1"># counted as an edit.</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">ansible.builtin.shell</span><span class="p">:</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git -C {{ dsh_local_source | quote }} ls-files -z | xargs -0 -r stat -c %Y -- | sort -n | tail -1</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">delegate_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="nt">become</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</code></pre></div>
+<p>Fail with the exact command to run. Comparing ages is all that is available —
+there is no build receipt to check against — so use <code>stat</code>'s <code>mtime</code>, not
+<code>mtime_epoch</code> (see Gotchas).</p>
+<p><strong>Shipping the tree</strong> is one <code>ansible.posix.synchronize</code> from the controller:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nt">rsync_opts</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="no">--links --times --owner --group --chown={{ app_user }}:{{ app_user }}</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="no">--exclude=.git --exclude=**/tests</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="nt">delegate_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
+</code></pre></div>
+<p>Each flag is load-bearing and each failure is silent — see Gotchas for what
+happens without them. Exclude tests and fixtures wholesale: they are the largest
+block of source and nothing at run time resolves through them. Use <code>delete:
+true</code> so the guest cannot keep a file the controller dropped.</p>
+<p><strong>The runtime goes beside the tree, not inside it.</strong> <code>app_dir</code> is the install
+root and <code>common/python</code>'s venv already lives in it; put the shipped tree under
+it (<code>app_dir/src</code>) so the two never collide. <code>app_state_dir</code> stays where the
+framework put it, and nothing in the shipped tree is written at run time.</p>
+<p><strong>A runtime the template does not ship</strong> goes in as a pinned, checksummed
+release that the role verifies and unpacks — <code>get_url</code> with
+<code>checksum: "sha256:…"</code>, then <code>unarchive</code>. Both halves of that have a gotcha
+below. Read the installed version back and assert it, rather than trusting a
+stamp file beside it.</p>
+<p><strong>Guest shape cannot be set per application.</strong> <code>app.yaml</code>'s <code>guest:</code> block
+accepts only <code>hostname</code>, <code>vmid</code>, <code>ip_optional</code> and <code>bind_host</code>; anything else is
+rejected as an unknown key. Cores, memory and rootfs come from <code>app.yaml</code>
+<code>defaults</code> or from the guest's own <code>group_vars</code>, which is the only per-guest
+override.</p>
+<p><strong>Never run two installs against one guest.</strong> They share apt and dpkg, and the
+second fails on <code>Could not get lock /var/lib/dpkg/lock-frontend</code>, which names
+nothing about what actually collided.</p>
+<h2 id="an-application-built-from-a-source-checkout">An application built from a source checkout<a class="headerlink" href="#an-application-built-from-a-source-checkout" title="Permanent link">&para;</a></h2>
+<p>The second kind of shipped tree is one the controller <strong>builds</strong> rather than
+installs: a fork, a development branch, or any tree with no published
+artifact. <code>apps/omniroute/</code> is the worked example — OmniRoute from <code>main</code>,
+built on a build host and served from a guest.</p>
+<p>This is the shape the rest of this section assumes, with three differences.</p>
+<p><strong>The version is a commit, not a tag.</strong> A published release pins
+<code>omniroute@3.8.51</code>; a source build pins the <strong>sha</strong> the controller built from.
+Never pin a branch name: <code>main</code> moves, and a play that builds <code>main</code> twice
+reports two different artifacts. Read the sha out of the checkout and write it
+into the build receipt, so the guest can be asked what it is actually running.</p>
+<p><strong>The build must produce something the guest can run, and the role must prove
+it.</strong> A source tree usually has a <code>dist/</code> that is gitignored, so a checkout
+alone is not deployable — the build is part of the artifact. The receipt
+therefore records the sha <strong>and</strong> the artifact it produced, and the role
+refuses to ship a tree whose receipt is missing, stale, or does not match the
+sha it was asked for.</p>
+<p><strong>The dependency tree is part of the artifact, not of the install.</strong> A published
+npm release brings its own dependencies. A source build has to <code>npm ci</code> before
+it can run at all, and the <code>node_modules</code> that results is what gets shipped.
+That tree is large, symlink-based, and must be transferred with the flags
+<code>ansible.posix.synchronize</code> needs (<code>--links</code>, <code>--times</code>) or it arrives broken
+or is re-transferred forever.</p>
+<p><strong>The role's job is to refuse, not to build.</strong> Rebuilding on every play cannot
+tell "no changes" from "rebuilt", so the build is an operator act on the
+controller and the role's job is to refuse to ship a tree that is older than
+its sources. Fail with the exact command to run.</p>
+<p>The receipt is what makes the second run reach <code>changed=0</code>. Without it the role
+has nothing to compare and either reinstalls every time or trusts a mtime.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Read the build receipt</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span><span class="nt">ansible.builtin.stat</span><span class="p">:</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">om_build_receipt</span><span class="nv"> </span><span class="s">}}"</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span><span class="nt">delegate_to</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">  </span><span class="nt">become</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">  </span><span class="nt">register</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">om_receipt_stat</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Refuse to ship a tree that was not built from the requested commit</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="w">  </span><span class="nt">ansible.builtin.fail</span><span class="p">:</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="w">    </span><span class="nt">msg</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="w">      </span><span class="no">{{ om_build_receipt }} is missing or does not name</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="w">      </span><span class="no">{{ om_source_ref }}. Build it on the controller:</span>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="w">      </span><span class="no">cd {{ om_local_source }} &amp;&amp; git checkout {{ om_source_ref }} &amp;&amp;</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a><span class="w">      </span><span class="no">npm ci &amp;&amp; npm run build:release</span>
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;-</span>
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a><span class="w">    </span><span class="no">not om_receipt_stat.stat.exists or</span>
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="w">    </span><span class="no">(om_receipt_stat.stat.content | from_json).commit != om_source_sha</span>
+</code></pre></div>
+<h2 id="an-application-whose-purpose-is-to-build-another-application">An application whose purpose is to build another application<a class="headerlink" href="#an-application-whose-purpose-is-to-build-another-application" title="Permanent link">&para;</a></h2>
+<p>The third kind of application is a <strong>toolchain</strong>: a guest that installs no
+service, publishes no port, and exists so other applications can be compiled
+on it. <code>apps/builder/</code> is the worked example.</p>
+<p>It is worth writing because the alternative is to describe that guest as one
+of the two kinds that exist for shipped applications, and both are lies. A
+<code>package</code> source claims something comes from a registry — nothing does. A
+<code>repo</code> source claims there is a checkout to build — there is not one, and the
+schema demands a <code>build:</code> block that would do nothing.</p>
+<p>So there is a third source kind, and it says exactly what it is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nt">builder</span><span class="p">:</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">the guest other applications are built on</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">proxmox_lxc</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">      </span><span class="nt">hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">builder</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">      </span><span class="nt">vmid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">      </span><span class="nt">bind_host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">127.0.0.1</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">toolchain</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="w">  </span><span class="nt">secrets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+</code></pre></div>
+<p><strong>The role must not depend on <code>common/python</code>.</strong> That dependency is what
+asserts <code>app_port is defined</code>, and a toolchain serves nothing. A role with
+no dependency still runs — play 2 loops over each host's <code>app_roles</code> and
+<code>include_role</code>s it — so no playbook changes. Write <code>dependencies: []</code> and say
+why in a comment, because an empty list in a role that otherwise has one
+looks like an oversight.</p>
+<p><strong>The postconditions are the whole role.</strong> A toolchain's product is a machine
+that can build something, so every assertion is about the machine rather than
+about an install:</p>
+<table>
+<thead>
+<tr>
+<th>Assertion</th>
+<th>What it catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>uname -m</code> is <code>x86_64</code></td>
+<td>a builder running under emulation, where esbuild's Go runtime faults</td>
+</tr>
+<tr>
+<td>the runtime reports the pinned version</td>
+<td>a runtime the tree was not built against</td>
+</tr>
+<tr>
+<td>≥ 24 GB of RAM</td>
+<td>a guest that thrashes during the build</td>
+</tr>
+<tr>
+<td>≥ 40 GB free on the workspace</td>
+<td>a build that fails on "No space left on device"</td>
+</tr>
+<tr>
+<td>the package registry is reachable</td>
+<td>a build that fails at <code>npm ci</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Assert the minimums, not the current values.</strong> A toolchain that is too small
+does not fail at install — it fails hours later, during a build, with an error
+that names a memory limit rather than the guest. Measured: a 12 GB builder
+ran a build to 11.5 GB RSS, stopped answering SSH entirely, and left
+<code>pct exec</code> failing with "Cannot allocate memory - Failed to clone attached
+process". The play that launched it was green.</p>
+<p><strong>Publish the address; do not name the guest.</strong> Guest hostnames do not resolve
+from the controller — Proxmox's resolver is not the controller's — so a script
+that needs to reach the guest has to read the lease from somewhere. The
+<code>lxc</code> role already discovers it with <code>pct exec &lt;vmid&gt; -- hostname -I</code>; the
+toolchain role writes it to a file under <code>tmp/</code>, which is gitignored because
+the address is a DHCP lease and changes when the guest is rebuilt.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>tmp/builders/builder.endpoint
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>host=10.0.0.80
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>user=root
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>node_dir=/opt/builder/node
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>work=/var/lib/builder/work
+</code></pre></div>
+<p><strong>Put the user in the file, not in the script.</strong> A build script that reads
+<code>host</code> and leaves the user out gets <code>$USER</code> from ssh, which is not <code>root</code> on
+the controller, and the connection fails with "Too many authentication
+failures" — an error that looks like a credential problem and is not one.</p>
+<p><strong>A toolchain's runtime is pinned in one place.</strong> If the build script also
+installs the runtime, there are two copies of the version and they drift. The
+role installs it, checksummed, and the build script <em>asserts</em> it is there and
+fails with a named error. That is the difference between an environment that
+is provisioned and one that is whatever <code>apt-get</code> returned that day.</p>
+<h2 id="postconditions-non-negotiable">Postconditions: non-negotiable<a class="headerlink" href="#postconditions-non-negotiable" title="Permanent link">&para;</a></h2>
+<p>Every role must assert the result, not the exit code. These four caught real
+bugs that a green play hid:</p>
+<table>
+<thead>
+<tr>
+<th>Assert</th>
+<th>Guards against</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the CLI runs (<code>myapp --version</code>)</td>
+<td>a deleted entrypoint with the package intact</td>
+</tr>
+<tr>
+<td>the package imports (<code>python -c "import myapp"</code>)</td>
+<td>a half-installed tree that still has a console script</td>
+</tr>
+<tr>
+<td>the app's own data exists (a row, a file)</td>
+<td>a running server with nothing to log in to</td>
+</tr>
+<tr>
+<td><code>ss -ltn</code> shows the requested address</td>
+<td>the process listening somewhere you did not ask for</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Assert the authority the process reports, not the one you asked for.</strong> The
+strongest form of the last row: read the listener's own URL from its log, and
+fail unless it carries the address the role configured. Rebuilding the URL from
+a variable asserts what the role already believes and proves nothing about what
+is running. Do that read inside the guest, in one shell step, when the value is
+a credential — the launch token of an authenticated service is a live credential
+for the life of the process, and a task that interpolates it puts it in the
+controller's log.</p>
+<p><strong>Wait for the service before asserting on it.</strong> <code>systemd</code> returns from <code>start</code>
+when it accepts the job, which is seconds before a composed application binds.
+<code>wait_for</code> on the port, and on the state file, so the assertions that follow read
+a running service. An empty <code>ss</code> reading during boot is indistinguishable from
+address drift, and a drift check that cannot tell the difference restarts a
+service that was starting correctly.</p>
+<p><strong>Do not use <code>--force</code> on an app's init command.</strong> A failed init leaves a
+half-written state directory and refuses to run again; <code>--force</code> destroys the
+database on top of that. Recovery means deleting the state directory.</p>
+<p><strong>Pass secrets through the environment, never <code>argv</code>.</strong> <code>ps</code> is world-readable
+on the guest.</p>
+<h2 id="sentinels-the-four-ways-to-break-changed0">Sentinels: the four ways to break <code>changed=0</code><a class="headerlink" href="#sentinels-the-four-ways-to-break-changed0" title="Permanent link">&para;</a></h2>
+<p>Every one of these shipped green. All were found by running the play twice and
+asking why the second run still reported changes. Read this section before
+writing the checks in <code>tasks/main.yml</code>.</p>
+<p><strong>A sentinel that can never succeed is worse than no sentinel.</strong> It looks like a
+guard, it passes review, and it silently keeps a gate permanently open so the
+role reinstalls itself forever.</p>
+<table>
+<thead>
+<tr>
+<th>Trap</th>
+<th>Why it is always wrong</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'changed' in stdout</code></td>
+<td>matches <code>"unchanged"</code>. Use <code>== 'changed'</code> after a <code>trim</code>.</td>
+</tr>
+<tr>
+<td>an import of a name that does not exist</td>
+<td>the class may live in a different module. Verify the import on the guest before trusting it.</td>
+</tr>
+<tr>
+<td>a glob consumed by <code>next()</code> twice</td>
+<td><code>next(g, None) and (next(g) / 'f')</code> takes the only match on the first call and raises <code>StopIteration</code> on the second. Materialise with <code>list()</code>.</td>
+</tr>
+<tr>
+<td>a <code>changed_when</code> test that is true when nothing changed</td>
+<td>always compare the whole value, not a substring</td>
+</tr>
+</tbody>
+</table>
+<h3 id="greedy-regexes-and-block-scalars">Greedy regexes and block scalars<a class="headerlink" href="#greedy-regexes-and-block-scalars" title="Permanent link">&para;</a></h3>
+<p>Both of these cost real time and neither raises an error.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># WRONG: greedy, matches up to the LAST colon, so '127.0.0.1:18790' -&gt; '18790'</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="p p-Indicator">|</span><span class="err"> map('regex_replace', '^.*:', '')</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="c1"># WRONG: a YAML block scalar is literal, so Jinja reads \d as an escaped</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="c1"># backslash and the regex matches a literal backslash. Strips nothing.</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="p p-Indicator">|</span><span class="err"> map('regex_replace', ':\\d+$', '')</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="c1"># RIGHT: strip by the numeric port, then trim</span>
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="p p-Indicator">|</span><span class="err"> map('trim')</span>
+<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="p p-Indicator">|</span><span class="err"> map('regex_replace', ':\d+$', '')</span>
+</code></pre></div>
+<p>A trailing newline survives unless you <code>trim</code>, and a trimmed value still fails
+to equal an untrimmed expectation. Check both sides.</p>
+<h2 id="gotchas-all-measured-on-this-host">Gotchas, all measured on this host<a class="headerlink" href="#gotchas-all-measured-on-this-host" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>The framework must have no default for <code>app_name</code> or <code>app_port</code>.</strong> A role's
+  <code>meta</code> dependency has its defaults applied <em>after</em> the including role's own,
+  so a default in <code>common/python</code> silently overrides the application's and the
+  guest gets the wrong paths. It stayed hidden while there was one application,
+  because its name happened to equal the default. Do not add one back.</li>
+<li><strong><code>.j2</code> files belong in <code>templates/</code>, not <code>files/</code>.</strong> <code>ansible.builtin.template</code>
+  resolves <code>src</code> from <code>templates/</code>; in <code>files/</code> it fails with "Could not find or
+  access". The <code>.j2</code> suffix is the tell.</li>
+<li><strong><code>playbook_dir</code> is <code>playbooks/</code>, not the repo root.</strong> Use <code>lxc_repo_root</code> from
+  <code>group_vars/all</code> for controller paths. A role default will not do: it does not
+  exist on <code>localhost</code>, which is where <code>delegate_to: localhost</code> puts the lookup.</li>
+<li><strong><code>app_name</code> must be a valid path segment.</strong> It is interpolated into
+  <code>app_home</code>, <code>app_dir</code> and <code>app_venv</code> without sanitising.</li>
+<li><strong><code>virtualenv_command</code> is a command line, not a path.</strong> Use
+  <code>"{{ app_venv }}/bin/python -m venv"</code>. Hardcoding <code>/usr/bin/python3</code> lets the
+  interpreter and the venv drift apart silently.</li>
+<li><strong>The pip module takes <code>requirements:</code>, never <code>name:</code></strong> for a lockfile path.
+  <code>name</code> parses its argument as a requirement and rejects a path.</li>
+<li><strong><code>--no-deps</code> is required</strong> alongside <code>--require-hashes</code>. With hashes present
+  pip cannot resolve, so every package must already be named in the file.</li>
+<li><strong>Gate the install on the lockfile changing or the package being absent.</strong>
+  The pip module reports <code>changed</code> every time it runs, which is what stops a
+  settled play from reinstalling 200 wheels on each run.</li>
+<li><strong>Playwright's cache is <code>chromium-1243</code>, not <code>chromium_headless_shell-*</code>.</strong>
+  A sentinel using the headless-shell name never matches and re-downloads 115 MB
+  every run. Assert on a versioned directory, not on the cache root.</li>
+<li><strong><code>playwright install-deps</code> takes no <code>--with-deps</code></strong> and reports <code>changed</code> on
+  every invocation. Gate it on a library it must install, e.g.
+  <code>dpkg-query -W -f=${Status} libnss3</code>.</li>
+<li><strong>Pin <code>PLAYWRIGHT_BROWSERS_PATH</code></strong> to the account the service runs as, or the
+  browser lands in root's cache where the service cannot see it.</li>
+<li><strong>A venv left by an older template is a trap.</strong> It installs wheels for the
+  interpreter it was built with and fails at the first compiled import.
+  <code>common/python</code> asserts the version and fails loudly; keep that check.</li>
+<li><strong><code>unarchive</code> defaults to the controller, not the guest.</strong> Fetching a tarball
+  with <code>get_url</code> and then unpacking it needs <code>remote_src: true</code>, or the module
+  looks for the path on the controller and fails with "Could not find or access
+  … on the Ansible Controller" while the file sits on the guest. <code>remote_src</code>
+  then makes it refuse a <code>dest</code> that does not exist, so create the directory
+  first — the two errors name the wrong thing.</li>
+<li><strong><code>synchronize</code> skips symlinks and resets mtimes.</strong> Both are fatal for a
+  JavaScript tree and neither is reported. Without <code>--links</code>, a pnpm <code>node_modules</code>
+  arrives with its packages but an empty <code>node_modules/@deepseek-ai/</code>, and every
+  entry point fails <code>ERR_MODULE_NOT_FOUND</code> for a package that is present.
+  Without <code>--times</code>, <code>synchronize</code>'s own <code>--delay-updates</code> stages each file under
+  a temporary name and renames it at the end of the run, which gives every file a
+  fresh mtime — so the next run's quick check sees the whole tree as different and
+  transfers all of it again, reporting <code>changed</code> forever. The play never settles.</li>
+<li><strong><code>stat</code> has no <code>mtime_epoch</code> on ansible-core 2.16.</strong> It returns float seconds
+  in <code>mtime</code>. Asking for the removed key fails the conditional with "'dict
+  object' has no attribute 'mtime_epoch'", which reads like a missing file rather
+  than a missing field.</li>
+<li><strong>The stock Ubuntu template ships no <code>curl</code>.</strong> A shell assertion that probes the
+  service with it retries to its timeout against "command not found" and reports
+  a broken service that is serving perfectly well. Install it in the role, or use
+  <code>ansible.builtin.uri</code>.</li>
+<li><strong>A runtime installed under a version directory is not on <code>PATH</code>, and its own
+  bin shims then fail.</strong> Every <code>bin/*</code> entry of such a runtime is
+  <code>#!/usr/bin/env node</code>, so running <code>{{ dsh_node_dir }}/bin/corepack</code> dies with
+  <code>env: 'node': No such file or directory</code> before the tool starts. Invoke the
+  interpreter by absolute path on the tool's JS entry instead. The same applies
+  to any <code>package.json</code> <code>bin</code> a guest should expose: a symlink to it runs
+  whatever <code>node</code> <code>PATH</code> finds, which on a stock guest is nothing at all — write
+  a wrapper that names the pinned interpreter, <code>DSH_HOME</code> and the state the tool
+  expects.</li>
+<li><strong>Read a version from the artifact that was built, not from a second copy of
+  it.</strong> A package manager version belongs in the project's own <code>packageManager</code>
+  field; a guest that hard-codes it can end up holding a tool the tree was never
+  built with, and the mismatch surfaces at use, not at install.</li>
+<li><strong>A host with no fixed address cannot be asserted by name.</strong> Assert the address
+  the process reports it bound, not a configured one, or the assertion tests the
+  inventory rather than the service.</li>
+<li><strong><code>df --output=avail -B M</code> prints a unit suffix, and <code>| int</code> on <code>55579M</code> is 0.</strong>
+  A disk assertion that reads 0 MB free fails for the wrong reason, and the
+  message says "too small" when the disk is full of room. Use <code>-B1</code> and divide,
+  or strip the suffix.</li>
+<li><strong><code>df --output</code> prints a header row above the value.</strong> The value is the last
+  line of stdout, not the whole of it.</li>
+<li><strong>The <code>command</code> module never runs a shell.</strong> <code>df … | tail -1</code> arrives as
+  two arguments named <code>|</code> and <code>tail</code> and fails with a non-zero exit. Pipe in
+  Jinja, or make the command print one value and nothing else.</li>
+<li><strong>A regex inside a YAML string inside a Jinja expression needs four layers
+  of escaping</strong>, and it fails as <code>NoneType has no attribute group</code> rather
+  than as a syntax error. When a value has to be parsed, make the command
+  print a bare number: <code>awk '/^MemTotal:/ {print $2}' /proc/meminfo</code> beats a
+  <code>regex_search</code> on <code>grep MemTotal /proc/meminfo</code>.</li>
+<li><strong><code>get_url</code> is only idempotent if the file stays.</strong> A task that downloads a
+  tarball, unpacks it and then deletes the tarball re-downloads 31 MB on every
+  run and reports <code>changed</code> forever. Keep the download in a cache directory.</li>
+<li><strong>A <code>set_fact</code> whose value is a plain integer string fails the play</strong> with
+  "Conditional result (True) was derived from value of type 'str'". Pipe it
+  through <code>| bool</code> or compare against a typed value.</li>
+</ul>
+<h2 id="adding-a-guest-not-an-app">Adding a guest, not an app<a class="headerlink" href="#adding-a-guest-not-an-app" title="Permanent link">&para;</a></h2>
+<p>Different task. One block in <code>inventory/hosts.yml</code>, no address — Proxmox leases
+one and <code>common/lxc</code> reads it back:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nt">lxc</span><span class="p">:</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span><span class="nt">hosts</span><span class="p">:</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">    </span><span class="nt">my-app</span><span class="p">:</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">      </span><span class="nt">ansible_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">      </span><span class="nt">lxc_vmid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">121</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="w">      </span><span class="nt">lxc_hostname</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-app</span>
+</code></pre></div>
+<p>Plus a group that holds it, and a <code>group_vars/&lt;group&gt;/main.yml</code> that says what
+the guest runs. Remember the group name and the host name must differ, and the
+group name carries no hyphen.</p>
+<p><strong><code>inventory/</code> is gitignored</strong> — it holds the operator's own topology, not the
+project's. If it does not exist, create it from <code>inventory.example/</code> first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>mkdir<span class="w"> </span>-p<span class="w"> </span>inventory/group_vars
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>cp<span class="w"> </span>inventory.example/hosts.yml<span class="w"> </span>inventory/hosts.yml
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>cp<span class="w"> </span>-r<span class="w"> </span>inventory.example/group_vars/.<span class="w"> </span>inventory/group_vars/
+</code></pre></div>
+<p>Do not commit it. See "If <code>inventory/</code> does not exist yet" above for the full
+procedure.</p>
+<p>Read <code>docs/PLAN-proxmox-lxc-ansible.md</code> before changing anything in
+<code>common/</code>. Section 8 is a list of failures that passed review and only showed up
+under test; several of them produce a green play and a broken service.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../security/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Security">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Security
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../reference/" class="md-footer__link md-footer__link--next" aria-label="Next: Index">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Index
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../assets/javascripts/panzoom.min.js"></script>
+      
+        <script src="../../assets/javascripts/zoompan.js"></script>
+      
+    
+  </body>
+</html>
