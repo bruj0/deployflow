@@ -11,6 +11,7 @@
   <a href="#features">Features</a> ·
   <a href="#glossary">Glossary</a> ·
   <a href="#requirements">Requirements</a> ·
+  <a href="#your-installation-record">Your installation record</a> ·
   <a href="#documentation">Documentation</a>
 </p>
 
@@ -551,7 +552,7 @@ Every feature, what it gives you, and the file that holds it.
 | **Deterministic flow** | `appctl` drives the same order every run — validate, check secrets, render, then play — and exits non-zero on failure. | [`src/appctl/cli.py`](src/appctl/cli.py) |
 | **Agentic skill** | The contract, the scaffold and the checklist, so an agent writes a role that matches the others. | [`.agents/skills/deployflow-add-app/SKILL.md`](.agents/skills/deployflow-add-app/SKILL.md) |
 | **App manifest** | One file describes every application: source, config, secrets, destination. Unknown keys are an error, so a typo fails loudly. | [`app.example.yaml`](app.example.yaml) |
-| **Private inventory** | Your hosts, guest IDs and addresses stay out of git. The repository ships templates and the skill documents how to build the real one. | [`inventory.example/`](inventory.example/) |
+| **Private inventory** | Your hosts, guest IDs and addresses stay out of *this* repository, and are recorded in a private one that `scripts/sync_state.sh` keeps current. The templates are committed here. | [`inventory.example/`](inventory.example/) |
 | **Pinned artifacts** | Every dependency pinned by hash. The build refuses a lockfile without one, and the role checks the manifest and the role agree on the version. | [`src/appctl/build.py`](src/appctl/build.py) |
 | **Application-level checks** | Each app checks that it imports, is active, listens where it was asked to, and answers a request. The result is printed as `check:` lines, so the summary is evidence rather than a task count. | [`apps/example-app/tasks/main.yml`](apps/example-app/tasks/main.yml) |
 | **Idempotency** | A second install reports `changed=0`, which proves the run is repeatable rather than reinstalling itself. | [`src/appctl/install.py`](src/appctl/install.py) |
@@ -619,6 +620,44 @@ all:
           ansible_user: root
 ```
 
+## Your installation record
+
+Two files describe everything running on your machines, and neither is in this
+repository: `app.yaml` (applications, targets, pins, secret names, and the
+`state:` block each build and install writes back) and `inventory/` (your
+Proxmox host, guest IDs, groups). They name machines only you can reach, so they
+are gitignored — right for a public repository, and wrong for durability,
+because the machine that dies takes the only description of what is running with
+it.
+
+Keep them in a **private** repository of your own, cloned beside your checkout:
+
+```bash
+gh repo create <you>/deployflow-state --private --add-readme --clone=false
+git clone git@github.com:<you>/deployflow-state.git ../deployflow-state
+./scripts/sync_state.sh            # copy, commit, push
+./scripts/sync_state.sh --check    # exit 1 if the record has drifted
+```
+
+The sync is the last step of the
+[add-app skill](.agents/skills/deployflow-add-app/SKILL.md), so every change that
+touches those files ends with it. It copies nothing else: `.env` holds the only
+credentials and the script never reads it, and it refuses to stage `.env`, key
+material or a PEM block.
+
+Restoring is the same two files, copied back:
+
+```bash
+cp ../deployflow-state/app.yaml .
+cp -r ../deployflow-state/inventory .
+appctl secrets check     # names the keys to re-enter
+appctl list              # applications, guests, last install
+```
+
+That recovers *what was there*, not a runnable machine — the secrets are
+deliberately not in the record. To check a restored machine end to end, follow
+the [init skill](.agents/skills/deployflow-init/SKILL.md).
+
 ## Documentation
 
 | | |
@@ -633,6 +672,7 @@ all:
 | [apps/omniroute/](apps/omniroute/) | A working application built from a source checkout: the role, and what building it taught |
 | [apps/builder/](apps/builder/) | A working build host: the `toolchain` application |
 | [AGENTS.md](AGENTS.md) | The rules for changing this repository |
+| [.agents/skills/deployflow-init/SKILL.md](.agents/skills/deployflow-init/SKILL.md) | The preflight: access to Proxmox, the inventory, guest addresses, secrets, and the private state repository |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and what a change must preserve |
 
 The same documents are published as a site, with the essay as its home page:

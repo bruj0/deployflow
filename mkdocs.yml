@@ -76,6 +76,7 @@ nav:
       - Contributing: project/contributing.md
       - Security: project/security.md
       - Add-app skill: project/add-app-skill.md
+      - Init skill: project/init-skill.md
   - Reference:
       - Index: reference/index.md
       - Overview: reference/overview.md

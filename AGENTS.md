@@ -23,8 +23,9 @@ apps/           one directory per application
   builder/      a toolchain: a guest that exists to build other applications
 src/appctl/     the appctl package
   targets/      where an application runs; proxmox_lxc is the only one built
-inventory/      the operator's own guests. GITIGNORED, and absent on a fresh
-                clone; inventory.example/ holds the templates.
+inventory/      the operator's own guests. GITIGNORED here, and absent on a
+                fresh clone; inventory.example/ holds the templates. Recorded in
+                the private deployflow-state repository — see below.
 ```
 
 `roles_path = common:apps`. A role's `meta` dependency declares what it needs,
@@ -110,7 +111,18 @@ sentinel traps.
 
 The short version: one directory under `apps/`, an entry in `app.yaml`, and
 `changed=0` on the second `appctl install`. Nothing in `common/` or
-`playbooks/` changes.
+`playbooks/` changes. The skill's last step records the result in the private
+state repository — see *The inventory and the manifest are not in this git*
+below.
+
+## Setting up a machine
+
+Read [`.agents/skills/deployflow-init/SKILL.md`](.agents/skills/deployflow-init/SKILL.md)
+first. It is the preflight for a machine rather than for an application: the
+toolchain and GitHub access, the inventory and the four values it cannot know,
+SSH access to the Proxmox host, which VMIDs are free, the addresses Proxmox has
+leased to each guest, the secrets a run needs, and the first sync of the state
+repository. On a machine that is already configured it only checks and reports.
 
 ## Rules that are not stylistic
 
@@ -214,36 +226,69 @@ because the built tree crosses the link.
 - `git status` must not show `.env`, `tmp/`, `apps/*/files/dist/`, `tools/`, or
   `inventory/`
 - `appctl install <app>` twice: the second must be `changed=0`
-- `git diff app.yaml` shows only the `state:` block changed, never the comments
+- `scripts/sync_state.sh --check` reports no difference — the private record is
+  current
+- after an install, the state repository's diff shows only the `state:` block
+  changed, never the comments in `app.yaml`
 - `pytest tests` passes
 - `python scripts/build_site_docs.py --clean && mkdocs build --strict` — if you
   changed a document, a link, or a diagram. `python scripts/serve_docs.py`
   does the same and watches the sources.
 
-## The inventory is not in git
+## The inventory and the manifest are not in this git
 
-`inventory/` is gitignored. It names the operator's own Proxmox host, the guest
-IDs and the addresses of machines only they can reach.
+Two files describe every install on this machine, and both are gitignored:
 
-Nothing in it is a credential, and none of it is public either — which is
-exactly why it does not belong in a repository that a stranger can clone. The
-committed templates are in `inventory.example/`, and a fresh clone creates the
-real inventory from them:
+| File | Holds |
+|---|---|
+| `app.yaml` | the applications, their targets, source pins, secret **names**, and the `state:` block each build and install writes back |
+| `inventory/` | the operator's own Proxmox host, guest IDs, groups, `app_roles`, per-guest sizing |
+
+`inventory/` names machines only the operator can reach; `app.yaml` names their
+VMIDs and their credentials by name. Nothing in either is a credential, and none
+of it is public either — which is exactly why neither belongs in a repository
+that a stranger can clone.
+
+The committed templates are `inventory.example/` and `app.example.yaml`, and a
+fresh clone creates the real files from them:
 
 ```bash
 mkdir -p inventory/group_vars
 cp inventory.example/hosts.yml inventory/hosts.yml
 cp -r inventory.example/group_vars/. inventory/group_vars/
+cp app.example.yaml app.yaml
 ```
 
-Two things follow from the directory being absent on a fresh clone, and both
+Three things follow from the files being absent on a fresh clone, and all three
 are expected rather than broken:
 
 - `appctl list` reports every application as "no guest", because it finds no
   `app_roles`. That is the truth about a clone with no inventory.
+- There is nothing to deploy: no manifest means no application to name.
 - The CI syntax check runs against `inventory.example/hosts.yml`, which
   exercises the same playbook and the same role paths.
 
-**Do not commit `inventory/`.** It is in `.gitignore`, so `git add inventory/`
-would need `-f` — and if a file from it ever lands in a commit, treat it as a
+### Where they are actually recorded
+
+Ignored is not the same as unrecorded. Both files are synced to the operator's
+**private** `deployflow-state` repository by `scripts/sync_state.sh`, which
+copies them, commits what changed, and pushes. The record survives this machine;
+a fresh clone of this repository does not.
+
+**Any change to `app.yaml` or `inventory/` ends with a sync.** The
+`deployflow-add-app` skill runs it as its last step; an agent changing either
+file without that skill runs the script itself.
+
+```bash
+./scripts/sync_state.sh --check    # exit 1 if the record has drifted
+./scripts/sync_state.sh            # record it
+```
+
+The script copies nothing else. `.env` holds the only credentials and is never
+read by it, and it refuses to stage `.env`, key material or a PEM block. It
+never creates the repository — that is `deployflow-init`'s job — and a push that
+fails leaves the commit on the local clone for the next run to push.
+
+**Do not commit either file here.** Both are in `.gitignore`, so `git add`
+would need `-f` — and if a file from either lands in a commit, treat it as a
 leak. The host names and guest IDs are not secret, but they are not public.

@@ -23,6 +23,10 @@ nothing in `playbooks/site.yml` changes when you add one. If your change touches
 either, stop — you are about to put application knowledge in the framework, which
 is the one thing this layout exists to prevent.
 
+**Any change to `app.yaml` or `inventory/` ends with `./scripts/sync_state.sh`**
+(step 11). Both files are gitignored here; the private `deployflow-state`
+repository is what makes the record survive this machine.
+
 ## The two roots
 
 | Root | Knows about | Contains |
@@ -345,6 +349,31 @@ venv — delete a file the controller still has and check that rsync puts it bac
 Then run the play once more and require `changed=0` again: drift repair that
 leaves the next run reporting changes has fixed the symptom and not the
 sentinel.
+
+### 11. Sync the installation record
+
+```bash
+./scripts/sync_state.sh
+```
+
+`app.yaml` and `inventory/` are gitignored here, so the record of what you just
+installed lives only on this machine until it is copied into the private
+`deployflow-state` repository. This step is what makes it survive.
+
+- It runs **last**, after step 10 passed. The record should describe an install
+  that worked, not one that was still being debugged.
+- It exits 0 when there was nothing to record. A non-zero exit means the copy or
+  the push failed — read it, do not ignore it.
+- It refuses `.env`, key material and PEM blocks. If it refuses, remove the file;
+  the guard is not the thing to work around.
+
+Any later edit to `app.yaml` or `inventory/` — a new guest, a changed pin, a
+resized container — ends the same way:
+
+```bash
+./scripts/sync_state.sh --check    # exit 1 if the record has drifted
+./scripts/sync_state.sh            # record it
+```
 
 ## An application that is not a Python wheel
 

@@ -49,6 +49,7 @@ PAGES: dict[str, str] = {
     "CONTRIBUTING.md": "project/contributing.md",
     "SECURITY.md": "project/security.md",
     ".agents/skills/deployflow-add-app/SKILL.md": "project/add-app-skill.md",
+    ".agents/skills/deployflow-init/SKILL.md": "project/init-skill.md",
     "docs/README.md": "reference/index.md",
     "docs/overview.md": "reference/overview.md",
     "docs/architecture.md": "reference/architecture.md",
