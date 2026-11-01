@@ -1,0 +1,478 @@
+---
+# Install one XERJ node into a guest and prove that it works.
+#
+# The checks at the end are the point of this role. A play that ends green
+# proves that Ansible ran, not that the node is usable. Each check below stands
+# in for a failure a green play would otherwise hide:
+#
+#   the binary's version matches the pin   a stale or rolled-back binary
+#   the unit is active                     systemd accepted the unit, the process died
+#   three ports are listening              the process is up but bound elsewhere
+#   GET / answers 200 with the key         listening but not authenticating
+#   GET /_cluster/health answers          serving HTTP but not an index
+#   the admin key exists at 0600           auth is on, and the key is not world-readable
+#   the firewall is active with the rule   the LAN bind is restricted as claimed
+#   there is free space for an index       an ingest that would fail part-way through
+#
+# This role assumes common/python has already run for the same application.
+#
+# `app_port` is the ES-compatible listener and the base for its two siblings:
+# rest = N+1, grpc = N+2. Nothing here hard-codes 9200 twice.
+
+# ---------------------------------------------------------------------------
+# The interface, before anything is downloaded
+# ---------------------------------------------------------------------------
+
+- name: Refuse to install without an application name and port
+  # app_name and app_port have no defaults on purpose: an undefined variable
+  # deep inside a templated path is harder to read than one clear message.
+  ansible.builtin.assert:
+    that:
+      - app_name is defined
+      - app_name | length > 0
+      - app_port is defined
+    fail_msg: >-
+      app_name and app_port must be set in apps/xerj/defaults/main.yml.
+    quiet: true
+    success_msg: "installing {{ app_name }}"
+
+- name: Refuse a network bind that was not declared insecure
+  # XERJ refuses this combination itself at startup. Asserting it here means the
+  # play fails at a named task with a readable reason, before a binary is
+  # downloaded, rather than in journalctl after a successful install.
+  ansible.builtin.assert:
+    that:
+      - xerj_bind_host in ['127.0.0.1', '::1'] or xerj_allow_insecure_bind | bool
+    fail_msg: >-
+      xerj_bind_host is {{ xerj_bind_host }} and xerj_allow_insecure_bind is
+      false. XERJ serves plain HTTP when TLS is off, so a non-loopback bind
+      would put the Authorization header of every request on the network in
+      the clear, and it refuses to start. Either set
+      xerj_allow_insecure_bind: true and accept that exposure, or bind
+      127.0.0.1 and reach the node through a tunnel.
+    quiet: true
+
+- name: Refuse to install a release the manifest does not name
+  # The manifest says where the application comes from and the role says what it
+  # installs. Those are two files, and they can drift. `appctl` passes the
+  # manifest's pin in as appctl_source_* so this cannot pass silently.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == 'xerj'
+      - appctl_source_version == xerj_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs xerj=={{ xerj_version }}. Change one of them.
+    quiet: true
+
+- name: Refuse a digest that is not a sha256
+  # A placeholder or a truncated value in defaults would otherwise reach get_url
+  # and fail there with a message about a checksum format rather than about the
+  # variable that is wrong.
+  ansible.builtin.assert:
+    that:
+      - xerj_sha256 is match('^[0-9a-f]{64}$')
+    fail_msg: >-
+      xerj_sha256 is not 64 lowercase hex characters. Capture it from the
+      release's .sha256 asset:
+      https://github.com/xerj-org/xerj/releases/download/v{{ xerj_version }}/{{ xerj_archive }}.sha256
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The binary
+# ---------------------------------------------------------------------------
+
+- name: Read the installed binary's version
+  # The binary's own answer, not a stamp file beside it. A stamp can disagree
+  # with the file it describes — a half-finished copy, a directory left behind
+  # by an interrupted play — and then every later task skips the install that
+  # would have repaired it.
+  ansible.builtin.command:
+    argv: ["{{ xerj_bin }}", "--version"]
+  changed_when: false
+  failed_when: false
+  register: xerj_installed
+
+- name: Work out whether the release has to be installed
+  # One decision, read once, so no later task can disagree with another about
+  # whether the install still has to happen.
+  ansible.builtin.set_fact:
+    xerj_needs_install: >-
+      {{
+        (xerj_installed.rc | default(257)) != 0
+        or (xerj_installed.stdout | default('') | trim) != 'xerj v' ~ xerj_version
+      }}
+
+- name: Fetch the pinned release archive
+  # `checksum` is sha256:<value>, which get_url verifies before keeping the file
+  # and only re-downloads when it is absent or wrong. Without it this task
+  # reports changed on every play and the second run cannot be changed=0.
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/xerj-org/xerj/releases/download/v{{ xerj_version }}/{{ xerj_archive }}
+    dest: "{{ xerj_archive_path }}"
+    checksum: "sha256:{{ xerj_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: xerj_needs_install | bool
+
+- name: Create the binary directory
+  ansible.builtin.file:
+    path: "{{ app_dir }}/bin"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0750"
+
+- name: Unpack the archive
+  # remote_src, because the tarball is already on the guest: get_url put it
+  # there. Without it the module looks for the path on the controller and fails
+  # with "Could not find or access ... on the Ansible Controller" while the file
+  # sits on the guest, which reads as a failed download.
+  #
+  # `creates` is the idempotency: a second play does not re-extract over a
+  # binary the unit is executing.
+  ansible.builtin.unarchive:
+    src: "{{ xerj_archive_path }}"
+    dest: "{{ app_home }}"
+    remote_src: true
+    creates: "{{ xerj_unpacked }}/xerj"
+  when: xerj_needs_install | bool
+
+- name: Install the binary
+  # root-owned and 0755: the service account executes it and cannot replace it.
+  # copy compares checksums, so an unchanged binary is not reported as changed.
+  ansible.builtin.copy:
+    src: "{{ xerj_unpacked }}/xerj"
+    dest: "{{ xerj_bin }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Prove the installed binary is the pinned release
+  # Without this a rollback leaves the old binary in place, every later task
+  # passes, and the node answers while being a different version than the
+  # manifest reviewed.
+  ansible.builtin.command:
+    argv: ["{{ xerj_bin }}", "--version"]
+  changed_when: false
+  failed_when: false
+  register: xerj_version_check
+
+- name: Refuse a binary that is not the pinned release
+  ansible.builtin.assert:
+    that:
+      - xerj_version_check.rc == 0
+      - (xerj_version_check.stdout | trim) == 'xerj v' ~ xerj_version
+    fail_msg: >-
+      {{ xerj_bin }} reports "{{ xerj_version_check.stdout | default('') | trim }}"
+      but the role pins xerj v{{ xerj_version }}. The archive may have been
+      replaced in place, or a rollback left the old binary behind.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# Directories
+# ---------------------------------------------------------------------------
+
+- name: Create the data directory
+  # 0700 and owned by the service account: it holds the index, the WAL and the
+  # admin key. common/python created app_state_dir and never touches it again,
+  # so a redeploy cannot discard an index.
+  ansible.builtin.file:
+    path: "{{ xerj_data_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0700"
+
+- name: Create the corpus directory
+  # Empty on purpose. A fresh guest has nothing to index; this is where a synced
+  # corpus can land without becoming a parent of the data directory.
+  ansible.builtin.file:
+    path: "{{ xerj_corpus_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0750"
+
+# ---------------------------------------------------------------------------
+# Configuration and unit
+# ---------------------------------------------------------------------------
+
+- name: Template the node configuration
+  ansible.builtin.template:
+    src: xerj.toml.j2
+    dest: "{{ xerj_config }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0640"
+    # A backup gives a failed start something to compare against, and the file
+    # holds no secret — the admin key is generated into the data directory.
+    backup: true
+  register: xerj_config_file
+
+- name: Template the systemd unit
+  ansible.builtin.template:
+    src: xerj.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: xerj_unit_file
+
+# ---------------------------------------------------------------------------
+# Firewall — only when the node is reachable off the guest
+# ---------------------------------------------------------------------------
+
+- name: Decide whether the firewall applies
+  ansible.builtin.set_fact:
+    xerj_firewall_applies: >-
+      {{
+        xerj_manage_firewall | bool
+        and xerj_bind_host not in ['127.0.0.1', '::1']
+      }}
+
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: false
+  when: xerj_firewall_applies | bool
+
+- name: Read the firewall state
+  # `verbose`, not plain `status`: it carries the default policies as well as the
+  # rules, which is what the two tasks below need in order to decide whether
+  # they have anything to do.
+  ansible.builtin.command:
+    argv: [ufw, status, verbose]
+  changed_when: false
+  when: xerj_firewall_applies | bool
+  register: xerj_ufw_before
+
+- name: Deny incoming traffic by default
+  # Guarded by the policy actually read above, not by the command's output.
+  #
+  # Measured: `ufw default deny incoming` prints "Default incoming policy changed
+  # to 'deny'" on EVERY call, including one that changes nothing. A changed_when
+  # on that phrase reports a change on every play — the second run was 2 changed
+  # for exactly these two tasks before this guard existed. The phrase is not a
+  # sentinel; the status line is.
+  ansible.builtin.command:
+    argv: [ufw, default, deny, incoming]
+  when:
+    - xerj_firewall_applies | bool
+    - "'Default: deny (incoming)' not in xerj_ufw_before.stdout"
+
+- name: Allow outgoing traffic by default
+  ansible.builtin.command:
+    argv: [ufw, default, allow, outgoing]
+  when:
+    - xerj_firewall_applies | bool
+    - "'allow (outgoing)' not in xerj_ufw_before.stdout"
+
+- name: Keep SSH reachable before the firewall is enabled
+  # Enabled before anything else, and from any source, deliberately: a wrong
+  # xerj_lan_cidr would otherwise lock the operator out of their own guest
+  # mid-play, and recovering means `pct exec`. SSH access is already governed by
+  # the network boundary and by key authentication.
+  ansible.builtin.command:
+    argv: [ufw, allow, "22/tcp"]
+  when: xerj_firewall_applies | bool
+  register: xerj_ufw_ssh
+  changed_when: >-
+    'Rules updated' in xerj_ufw_ssh.stdout
+    or 'Rules added' in xerj_ufw_ssh.stdout
+
+- name: Expose only the node's port, and only to the LAN
+  # argv, not a shell string: the CIDR and port are values, and a shell would
+  # re-parse them.
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ xerj_lan_cidr }}"
+      - to
+      - any
+      - port
+      - "{{ app_port }}"
+      - proto
+      - tcp
+  when: xerj_firewall_applies | bool
+  register: xerj_ufw_port
+  changed_when: >-
+    'Rules updated' in xerj_ufw_port.stdout
+    or 'Rules added' in xerj_ufw_port.stdout
+
+- name: Enable the firewall
+  # Only when it is inactive: `ufw --force enable` on an active firewall prints
+  # the same success line, so it cannot be used as its own sentinel.
+  ansible.builtin.command:
+    argv: [ufw, --force, enable]
+  when:
+    - xerj_firewall_applies | bool
+    - "'Status: inactive' in xerj_ufw_before.stdout"
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+
+- name: Reload systemd for the new or changed unit
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: xerj_unit_file is changed
+
+- name: Enable and start the node
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    state: started
+    enabled: true
+
+- name: Restart the node when its configuration changed
+  # Not a handler: the checks below must see the running configuration, and a
+  # handler runs after them. On a first install this is a second start, which
+  # costs a second and cannot pass silently.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    state: restarted
+  when:
+    - xerj_config_file is changed or xerj_unit_file is changed
+
+- name: Wait for the ES-compatible listener
+  # The node opens its ports after WAL replay and index open, not at exec, so a
+  # health check that runs immediately would race a healthy start.
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ app_port }}"
+    timeout: 120
+
+# ---------------------------------------------------------------------------
+# Proving it
+# ---------------------------------------------------------------------------
+
+- name: Read the unit's state
+  ansible.builtin.command:
+    argv: [systemctl, is-active, "{{ app_service_name }}"]
+  changed_when: false
+  register: xerj_active
+  failed_when: false
+
+- name: Read the listening sockets
+  ansible.builtin.command:
+    argv: [ss, -lnt]
+  changed_when: false
+  register: xerj_sockets
+
+- name: Stat the admin key the node generated
+  # The key is not read here. It is read once, for the two requests below, with
+  # no_log on every task that touches it.
+  ansible.builtin.stat:
+    path: "{{ xerj_data_dir }}/admin.key"
+  register: xerj_admin_key_file
+
+- name: Report the free space on the root filesystem
+  ansible.builtin.command:
+    argv: [df, --output=avail, -k, /]
+  changed_when: false
+  register: xerj_df
+
+- name: Read the generated admin key
+  # slurp, not a shell `$(cat …)`: the value never reaches argv, so it is not
+  # visible in `ps`, and no_log keeps it out of the run log.
+  ansible.builtin.slurp:
+    src: "{{ xerj_data_dir }}/admin.key"
+  register: xerj_admin_key
+  no_log: true
+
+- name: Ask the node for its root document
+  # The request goes to loopback on the guest itself, so the check proves
+  # authentication without depending on how the guest is exposed.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/"
+    headers:
+      Authorization: "ApiKey {{ xerj_admin_key.content | b64decode | trim }}"
+    status_code: 200
+    return_content: true
+  register: xerj_root
+  no_log: true
+
+- name: Ask the node for cluster health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/_cluster/health"
+    headers:
+      Authorization: "ApiKey {{ xerj_admin_key.content | b64decode | trim }}"
+    status_code: 200
+    return_content: true
+  register: xerj_health
+  no_log: true
+
+- name: Read the firewall state after the rules were applied
+  ansible.builtin.command:
+    argv: [ufw, status, verbose]
+  changed_when: false
+  when: xerj_firewall_applies | bool
+  register: xerj_ufw_after
+
+- name: Refuse a node that is running but not serving
+  # Every condition here is a failure that a green play would otherwise hide.
+  ansible.builtin.assert:
+    that:
+      - xerj_active.stdout | trim == 'active'
+      - (":" ~ app_port) in xerj_sockets.stdout
+      - (":" ~ (app_port | int + 1)) in xerj_sockets.stdout
+      - (":" ~ (app_port | int + 2)) in xerj_sockets.stdout
+      - xerj_admin_key_file.stat.exists
+      - xerj_admin_key_file.stat.pw_name == app_user
+      - xerj_admin_key_file.stat.mode == '0600'
+      - xerj_root.status == 200
+      - xerj_health.status == 200
+      - (xerj_health.content | from_json).status is defined
+      - (xerj_df.stdout_lines | last | trim | int) >= (xerj_min_free_gb | int * 1024 * 1024)
+    fail_msg: >-
+      The node did not pass its checks. unit={{ xerj_active.stdout | trim }},
+      key={{ xerj_admin_key_file.stat.exists }}/{{ xerj_admin_key_file.stat.mode | default('absent') }},
+      free_kb={{ xerj_df.stdout_lines | last | default('?') }}.
+      Read `journalctl -u {{ app_service_name }} -n 100` on the guest.
+    quiet: true
+
+- name: Refuse a firewall that was claimed but not applied
+  # A LAN bind with no firewall is exactly the "plausible but broken" state this
+  # repository exists to refuse. It is a separate assertion from the one above
+  # so the message names the firewall rather than the node.
+  ansible.builtin.assert:
+    that:
+      - "'Status: active' in xerj_ufw_after.stdout"
+      - "'Default: deny (incoming)' in xerj_ufw_after.stdout"
+      - "'allow (outgoing)' in xerj_ufw_after.stdout"
+      - "app_port | string in xerj_ufw_after.stdout"
+      - "xerj_lan_cidr in xerj_ufw_after.stdout"
+    fail_msg: >-
+      The node is bound to {{ xerj_bind_host }} and the firewall is not
+      restricting port {{ app_port }} to {{ xerj_lan_cidr }}. Set
+      xerj_manage_firewall: false if another control filters this guest, or
+      fix the rule. `ufw status` reported:
+      {{ xerj_ufw_after.stdout | default('not run') }}
+    quiet: true
+  when: xerj_firewall_applies | bool
+
+- name: Report the checks that passed
+  # This becomes the `check:` lines in the operator's summary. Without it the
+  # summary reports a task count, which is not evidence.
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "binary reports {{ xerj_version_check.stdout | trim }}"
+      - "unit {{ app_service_name }}: {{ xerj_active.stdout | trim }}"
+      - "ports {{ app_port }}/{{ app_port | int + 1 }}/{{ app_port | int + 2 }} are listening"
+      - "GET / and /_cluster/health: HTTP 200 with the generated admin key"
+      - "admin key {{ xerj_data_dir }}/admin.key is 0600, owner {{ app_user }}"
+      - >-
+        {{ 'firewall active; port ' ~ app_port ~ ' allowed from ' ~ xerj_lan_cidr
+           if xerj_firewall_applies | bool
+           else 'loopback bind; no firewall needed' }}
+      - "free space on /: {{ (xerj_df.stdout_lines | last | trim | int) // 1024 }} MiB"

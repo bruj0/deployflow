@@ -79,3 +79,30 @@ applications:
   #     - omniroute_release_storage_encryption_key
   #     - omniroute_release_initial_password
   #     - omniroute_release_ws_bridge_secret
+
+  # A single-binary release, installed from a pinned archive rather than from
+  # PyPI or npm. Two things are worth copying even if you never run XERJ:
+  #
+  # `==` is load-bearing. `appctl` splits `name==version` and passes both into
+  # the play as `appctl_source_package` and `appctl_source_version`, which is
+  # what lets a role refuse to install something the manifest did not name. A
+  # `name@version` form (as omniroute-release uses) carries no comparison and
+  # the role cannot check it.
+  #
+  # There is no `config:` block on purpose. `appctl render` emits exactly one
+  # JSON document; an application whose configuration is TOML, dotenv or
+  # anything else writes the file from its own role. There is also no secret:
+  # the node generates its own admin key on the guest.
+  #
+  # xerj:
+  #   description: the XERJ search node, from a pinned release archive
+  #   target:
+  #     kind: proxmox_lxc
+  #     options:
+  #       hostname: xerj
+  #       vmid: 124
+  #       bind_host: 0.0.0.0    # LAN; the role adds a firewall rule for the port
+  #   source:
+  #     kind: package
+  #     package: "xerj==1.0.0-rc.100"
+  #   secrets: []

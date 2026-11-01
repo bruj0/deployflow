@@ -1,0 +1,43 @@
+# The systemd unit for {{ app_name }}.
+#
+# It runs as the service account common/python created, never as root. The
+# binary is root-owned and 0755 so the account can execute it but not replace it.
+[Unit]
+Description={{ app_name }} — search node
+Documentation=https://xerj.org/llms.txt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_home }}
+
+# One flag. Everything the node can be configured with is in the file it names,
+# so there is no second place for a setting to disagree with this unit.
+ExecStart={{ xerj_bin }} --config {{ xerj_config }}
+
+Restart=on-failure
+RestartSec=2
+
+# A node holds many segment files open at once. The stock 1024 is low enough that
+# a large index fails at open() rather than at a task boundary.
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+# ProtectSystem=strict is deliberately NOT set in this version. The node
+# publishes $HOME/.xerj/by-port/<port>.data-dir and its admin-key pointer on
+# every start, which is what makes "no node is listening" diagnosable rather
+# than a guess. A read-only /opt breaks that diagnostic, not the service — a
+# failure that would look like a broken node. If it is added later, the writable
+# paths are {{ app_state_dir }} and {{ app_home }}/.xerj.
+#
+# UMask is not set either: the engine writes admin.key itself at 0600 and the
+# data directory is created by the role at 0700, so a umask here would only
+# change files the engine creates for other purposes.
+
+[Install]
+WantedBy=multi-user.target

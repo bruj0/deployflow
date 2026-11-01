@@ -1,0 +1,117 @@
+---
+# XERJ, installed from a pinned release archive and served by systemd.
+#
+# XERJ is one Rust binary, not a wheel and not an npm package. `appctl build`
+# has no path to it and `appctl install` reads no build block, so this role does
+# the installing itself — the same shape as omniroute-release, and the reason
+# there is no `build` block in this application's manifest entry.
+#
+# `app_name` is what the guest sees: it derives the service account (xerj), the
+# install root (/opt/xerj), the state directory and the unit name. Nothing below
+# invents a path that does not follow from it.
+#
+# The data directory is the boundary. It holds the index, the WAL, the segments
+# and the admin key the node generates for itself, and it lives under
+# app_state_dir so reinstalling the binary never destroys an index. It must not
+# be inside any folder passed to `xerj autoindex`: data/ is not in XERJ's
+# built-in ignore list, so a data directory inside a corpus would be indexed.
+
+app_name: xerj
+app_service_name: xerj
+
+# The Elasticsearch-compatible listener. XERJ derives the other two from a base
+# port, and a config file sets them individually so nothing here has to guess:
+# ES-compat is N, native REST is N+1, gRPC is N+2.
+app_port: 9200
+
+# ---------------------------------------------------------------------------
+# Exposure
+# ---------------------------------------------------------------------------
+#
+# 0.0.0.0 publishes the node on the guest's network. XERJ refuses that bind
+# while TLS is off unless server.allow_insecure_network_bind is true, because
+# every request — the Authorization: ApiKey header included — would cross the
+# network in the clear.
+#
+# The role refuses the same combination independently, so the exposure has to be
+# written down twice before it happens. Both refusals are deliberate: one is the
+# engine's, one is this role's, and neither can be satisfied by accident.
+#
+# With TLS off, the admin key is the only control. It is a single shared
+# credential: XERJ has no per-agent key and no rotation path short of replacing
+# <data_dir>/admin.key and restarting. That is the cost of this posture, and
+# xerj_manage_firewall below is what keeps the exposure off the rest of the
+# network.
+#
+# The variable is `xerj_bind_host`, not `app_bind_host`, and that is not
+# cosmetic. common/python defines `app_bind_host: 127.0.0.1` too, and a
+# meta-dependency's defaults are applied AFTER the including role's — the
+# trap documented in common/python/defaults/main.yml. A role that sets
+# `app_bind_host: 0.0.0.0` here is silently given the framework's loopback
+# value, so the node would never be reachable and nothing would say why.
+xerj_bind_host: 0.0.0.0
+xerj_allow_insecure_bind: true
+
+# The firewall this role owns, applied only when the bind is not loopback.
+#
+# It denies incoming by default, keeps SSH reachable, and allows the node's port
+# from xerj_lan_cidr only. `10.0.0.0/8` is the range common/lxc puts guest vnet0
+# on, so on its own it documents intent rather than restricting anything —
+# narrow it to the operator's own subnet to actually limit who can reach 9200.
+#
+# Set false only if something outside this guest already filters it, or if `ufw`
+# cannot run in the container. The role then says so in its report rather than
+# quietly claiming a restriction it did not apply.
+xerj_manage_firewall: true
+xerj_lan_cidr: "10.0.0.0/8"
+
+# ---------------------------------------------------------------------------
+# The release
+# ---------------------------------------------------------------------------
+#
+# Pinned by version and digest, never `latest`. The archive and its .sha256 are
+# published side by side in the same GitHub release; the digest proves the
+# archive matches the one published beside it, which is an integrity check and
+# not a provenance statement or a signature. A floating tag would make two plays
+# of the same role install different code, which is the opposite of what a
+# pinned role is for.
+#
+# The gnu target, not musl: the guest is stock Ubuntu 26.04, and the gnu build is
+# the one that also ships a .deb (unused here — the .deb would install to
+# /usr/bin and fight the pin).
+xerj_version: "1.0.0-rc.100"
+xerj_target: x86_64-unknown-linux-gnu
+xerj_sha256: "25aec3e84b904c995bd2d58abe4f83badb8a6f9d1d56dbe2f22180bada9b00cc"
+
+xerj_archive: "xerj-{{ xerj_version }}-{{ xerj_target }}.tar.gz"
+xerj_archive_path: "{{ app_home }}/{{ xerj_archive }}"
+xerj_unpacked: "{{ app_home }}/xerj-{{ xerj_version }}-{{ xerj_target }}"
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+xerj_bin: "{{ app_dir }}/bin/xerj"
+xerj_config: "{{ app_dir }}/xerj.toml"
+xerj_data_dir: "{{ app_state_dir }}/data"
+
+# Created empty. A fresh guest has nothing to index; whether it stays empty
+# (clients push documents through the API) or holds a synced corpus is an
+# operator decision, and the directory is what makes the second shape a sync
+# rather than a re-architecture.
+xerj_corpus_dir: "{{ app_state_dir }}/corpus"
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+#
+# lexical, not neural. `lexical` is the built-in feature-hashing embedder: no
+# model, no download, no network at startup, and not semantics. `neural` loads
+# a ~90 MB BERT model at startup and refuses to start if that load fails, which
+# would turn a first run into a HuggingFace availability test. The mode is fixed
+# per index at ingest time, so changing it later does not re-embed anything.
+xerj_embed_mode: lexical
+
+# Refused before the unit starts, so a full rootfs fails at a task boundary
+# instead of part-way through an ingest. This is a floor, not a capacity plan.
+xerj_min_free_gb: 8

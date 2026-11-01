@@ -1,0 +1,57 @@
+# The XERJ node's configuration. Written by apps/xerj, and the only place the
+# node's settings live: the unit passes `--config` and no other flags, because
+# flags and a config file are two sources of truth and this role cannot afford
+# that.
+#
+# Why a template and not appctl render: `appctl render` emits exactly one JSON
+# document, and XERJ's configuration is TOML. There is nothing for the framework
+# to render, which is the same reason omniroute-release writes its own env files.
+#
+# Every key below is a real key in engine/xerj.default.toml. The parser rejects
+# unknown keys, so a misspelling fails at startup rather than silently changing
+# nothing — which is what makes this file safe to read as the interface.
+
+[server]
+# The index, the WAL, the segments and the generated admin key. Under
+# app_state_dir, so replacing the binary never touches an index.
+data_dir = "{{ xerj_data_dir }}"
+
+# {{ xerj_bind_host }} comes from the role. A non-loopback value is refused by
+# XERJ unless allow_insecure_network_bind below is true, and refused by the role
+# unless xerj_allow_insecure_bind says so. Two independent refusals on purpose.
+bind_address = "{{ xerj_bind_host }}"
+
+# ES-compat is the base; the other two are derived so a changed app_port moves
+# the whole block instead of colliding on a hard-coded sibling.
+es_compat_port = {{ app_port }}
+rest_port = {{ app_port | int + 1 }}
+grpc_port = {{ app_port | int + 2 }}
+
+# Stated rather than defaulted: a taken port must stay a fatal startup error. If
+# it were true, a node that failed to bind 9200 could quietly publish 9201 and
+# every client would keep talking to whatever holds 9200.
+auto_port = false
+
+# TLS is off, so this is the acknowledgement XERJ requires before it will serve
+# plain HTTP on a network interface.
+allow_insecure_network_bind = {{ 'true' if xerj_allow_insecure_bind else 'false' }}
+
+[auth]
+# On. An admin key is generated on first start into <data_dir>/admin.key (0600)
+# and every request must carry `Authorization: ApiKey <key>`.
+#
+# admin_api_key is deliberately unset. Setting it would put a credential in this
+# file, in the repository, or in the service environment; the generated file
+# does not.
+enabled = true
+
+[tls]
+# Explicit, not merely defaulted. Turning this on is a different posture and
+# needs a cert_path and key_path the role does not provision.
+enabled = false
+
+[embedding]
+# lexical = the built-in feature-hashing embedder: offline, no model, and not
+# neural. neural would load a ~90 MB BERT model at startup and refuse to start
+# if that load failed.
+mode = "{{ xerj_embed_mode }}"
