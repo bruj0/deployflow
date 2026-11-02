@@ -92,4 +92,5 @@ nav:
       - omniroute-release: apps/omniroute-release.md
       - omniroute: apps/omniroute.md
       - builder: apps/builder.md
+      - xerj: apps/xerj.md
       - Building OmniRoute from source: apps/omniroute-building-from-source.md

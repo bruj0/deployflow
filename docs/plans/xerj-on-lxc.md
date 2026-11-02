@@ -330,43 +330,75 @@ the check and nothing depends on D1.
 ## 6. Client wiring
 
 On the guest, `xerj autoindex` and `xerj mcp` discover `admin.key` themselves
-(loopback only). From your laptop, neither can, so both need the URL and the
+(loopback only). From the controller, neither can, so both need the URL and the
 header:
 
 ```bash
-scp root@xerj:/opt/xerj/state/data/admin.key ./xerj-admin.key   # once; chmod 600
-export XERJ_URL=http://xerj:9200
-export XERJ_AUTH="ApiKey $(cat ./xerj-admin.key)"
-xerj autoindex ~/projects/xerj --prefix xerj
+scp root@<guest>:/opt/xerj/state/data/admin.key ~/.config/xerj/admin.key
+chmod 600 ~/.config/xerj/admin.key
+export XERJ_URL=http://10.0.0.81:9200
+export XERJ_AUTH="ApiKey $(cat ~/.config/xerj/admin.key)"
+xerj autoindex ~/projects/something --prefix something --url "$XERJ_URL" --api-key "$XERJ_AUTH"
 ```
 
-VS Code (`~/.config/Code/User/mcp.json`), with a stdio proxy on the laptop that
-points at the guest:
+The guest's address is a DHCP lease, so `10.0.0.81` above is what it is
+today. Read the current one with
+`ssh -p 6022 root@kvm.bruj0.net 'pct exec 124 -- hostname -I'`.
+
+**The key is read from a file, not passed as an argument.** `ps` on the
+controller is readable by every local user, so a key in `argv` is a key on
+display. The MCP entries therefore point at a wrapper, `~/.local/bin/xerj-mcp-lxc`:
+
+```sh
+#!/bin/sh
+KEY_FILE="${XERJ_ADMIN_KEY_FILE:-$HOME/.config/xerj/admin.key}"
+XERJ_URL="${XERJ_URL:-http://10.0.0.81:9200}"
+XERJ_AUTH="ApiKey $(cat "$KEY_FILE")"
+export XERJ_AUTH
+exec "$HOME/.local/bin/xerj" mcp --url "$XERJ_URL" "$@"
+```
+
+Both hosts read the same entry, in their own schema:
 
 ```jsonc
+// ~/.copilot/mcp-config.json — the Copilot CLI / extension
 {
-  "servers": {
+  "mcpServers": {
     "xerj": {
       "type": "stdio",
-      "command": "/home/bruj0/.local/bin/xerj",
-      "args": ["mcp"],
-      "env": {
-        "XERJ_URL": "http://xerj:9200",
-        "XERJ_AUTH": "ApiKey <the key>"
-      }
+      "command": "/Users/<you>/.local/bin/xerj-mcp-lxc",
+      "tools": ["*"]
     }
   }
 }
 ```
 
-Two honest notes. `xerj mcp` is a proxy and does not start a node — that is
+```jsonc
+// ~/Library/Application Support/Code/User/mcp.json — VS Code on macOS
+{
+  "servers": {
+    "xerj": {
+      "type": "stdio",
+      "command": "/Users/<you>/.local/bin/xerj-mcp-lxc"
+    }
+  }
+}
+```
+
+Three honest notes. `xerj mcp` is a proxy and does not start a node — that is
 stated in its `--help` and in its error when nothing answers. And the key is one
 shared admin credential: XERJ has no per-agent key and no rotation path short of
 replacing the file and restarting. That is a reason to prefer A or C, and it is
 the strongest argument against B.
 
+The third is about the corpus, and it is the one that costs time. The search
+tools default to the prefix `ax`, and this node has no `ax-*` dataset. A
+search without an explicit prefix returns nothing, with no error and no
+warning — which reads exactly like "the corpus has nothing on this". Always
+pass `prefix: "deployflow"`.
+
 Under D1=A the same thing works with
-`ssh -N -L 9200:127.0.0.1:9200 root@xerj` in a terminal, and
+`ssh -N -L 9200:127.0.0.1:9200 root@<guest>` in a terminal, and
 `XERJ_URL=http://127.0.0.1:9200` in the config.
 
 ---
@@ -448,16 +480,48 @@ changes the role:
    at `0 changed`. The remaining items are operational choices, not unfinished
    work.
 2. **`xerj_lan_cidr`.** `10.0.0.0/8` is the whole `vnet0` range, so it restricts
-   nothing today. Set it to the subnet your workstation is on if you want the
-   firewall rule to mean something.
+   nothing today. The operator's decision on 2026-11-02 was to **keep the
+   `/8`**: the range is the guest network this operator's own machines live
+   on, and a narrower rule would lock out a second workstation rather than
+   stop an attacker. The rule still denies everything outside `vnet0`.
 3. **If `ufw` cannot run in the container.** The role fails rather than
    installing a LAN-reachable node it cannot restrict. Set
    `xerj_manage_firewall: false` only if another control filters the guest; the
    run then reports that no firewall was applied instead of claiming one.
-4. **The first corpus.** Point `xerj autoindex` at something (`--prefix` per
-   folder). Until then the node is reachable and empty, which is the correct
-   state rather than a broken one.
+4. **The first corpus.** **Done on 2026-11-02.** The repository itself is
+   indexed under the prefix `deployflow`: four datasets, 843 records, and 453
+   brain edges. Two things about that are worth writing down, because both
+   look like failures and are not:
+
+   - the corpus was first indexed from a Linux checkout of the same
+     repository, at a different path. The index records the folder it came
+     from, and a run from a different path refuses rather than overwriting
+     it. `--replace-prefix` retires the earlier datasets on purpose;
+   - the MCP search tools default to the prefix `ax`, which this node does
+     not have. A search without an explicit `prefix: "deployflow"` returns
+     nothing, with no error.
+
+   The admin key is now copied to the controller at
+   `~/.config/xerj/admin.key` (mode 0600), and the MCP entries point at a
+   wrapper that reads it from there rather than putting it in `argv`.
 5. **The admin key is shared.** One credential for every client, no rotation
    path short of replacing `<data_dir>/admin.key` and restarting. If more than
    one person or agent ever needs access, option C (TLS) is the next step, not a
    second key.
+
+### A trap this deployment found
+
+`scripts/sync_state.sh` required `flock`, which is a Linux tool. On the
+operator's macOS machine the script exited 2 before doing anything, so the
+installation record never synced — and the drift was invisible, because the
+script's failure was a missing tool rather than a report of a difference. The
+lock now falls back to an atomic `mkdir`, and the tool check no longer lists
+`flock`.
+
+The same shape of failure happened in the record itself. The state repository
+was reconstructed from an October template rather than carried forward, so it
+held the new `xerj` entry but had **regressed** two fixes from 30 October: the
+release role's scoped secret names (`omniroute_release_*`) and the
+`omniroute==3.8.51` package pin. The second one was wrong in a way nothing
+would have caught: `omniroute-release` does not exist on npm. A record that is
+copied rather than merged loses whatever the copy was not made from.

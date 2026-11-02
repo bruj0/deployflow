@@ -63,6 +63,7 @@ PAGES: dict[str, str] = {
     "apps/omniroute/README.md": "apps/omniroute.md",
     "apps/omniroute-release/README.md": "apps/omniroute-release.md",
     "apps/builder/README.md": "apps/builder.md",
+    "apps/xerj/README.md": "apps/xerj.md",
     "apps/omniroute/docs/BUILDING-FROM-SOURCE.md": "apps/omniroute-building-from-source.md",
 }
 
@@ -72,6 +73,7 @@ DIRECTORY_DOCS: dict[str, str | None] = {
     "apps/omniroute": "apps/omniroute.md",
     "apps/omniroute-release": "apps/omniroute-release.md",
     "apps/builder": "apps/builder.md",
+    "apps/xerj": "apps/xerj.md",
     "docs": "reference/index.md",
 }
 

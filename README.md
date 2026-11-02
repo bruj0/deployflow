@@ -178,9 +178,9 @@ appctl targets      # which destinations exist, and which are not built yet
 appctl list         # what this repository has configured
 ```
 
-### The other three applications
+### The other four applications
 
-`example-app` is the smallest thing that works. Three others ship as worked
+`example-app` is the smallest thing that works. Four others ship as worked
 examples of the shapes that are harder:
 
 | Application | What it shows | What it costs |
@@ -188,9 +188,14 @@ examples of the shapes that are harder:
 | [`omniroute-release`](apps/omniroute-release/) | an application installed from a **published release** | five generated secrets, no build |
 | [`omniroute`](apps/omniroute/) | an application **built from a checkout** | a checkout, a build host, ~28 min |
 | [`builder`](apps/builder/) | the **build host** the second one needs | 24 GB of RAM on the host |
+| [`xerj`](apps/xerj/) | an application installed from a **pinned release archive**, serving on the LAN | a firewall, and one shared admin key |
 
 `omniroute-release` is the one to run next if you want a real service: it
 needs no builder and no compile.
+
+`xerj` is the third shape: a single Rust binary from a GitHub release, pinned
+by version *and* digest, with a LAN bind whose exposure is written down in
+both the manifest and the role.
 
 ## How it works
 
@@ -485,8 +490,8 @@ The worked example is [`apps/builder/`](apps/builder/).
 
 ## Ready-to-use applications
 
-The repository ships four applications that work, not three that illustrate.
-`example-app` is covered in [Try it](#try-it) above; the other three cover
+The repository ships five applications that work, not four that illustrate.
+`example-app` is covered in [Try it](#try-it) above; the other four cover
 the shapes that are harder.
 
 ### `omniroute-release` — an application installed from a published release
@@ -529,6 +534,31 @@ controller's — and a build script that cannot find the machine cannot use it.
 
 See [`apps/builder/`](apps/builder/).
 
+### `xerj` — a search node from a pinned release archive
+
+[XERJ](https://github.com/xerj-org/xerj) is one Rust binary that serves an
+Elasticsearch-compatible search API. It is not a wheel and not an npm
+package, so it is the third shape: the role downloads a pinned release
+archive, verifies its sha256, installs the binary and writes the unit and
+the configuration itself.
+
+```bash
+appctl install xerj
+appctl install xerj        # must report changed=0
+```
+
+It is also the only application here that **publishes on the LAN**, and that
+is stated in three places — the manifest's `bind_host`, the role's
+`xerj_allow_insecure_bind`, and the engine's own refusal to start on a
+non-loopback bind with TLS off. The role applies a `ufw` rule that restricts
+the port to a CIDR and then asserts it applied, so a claimed-but-unapplied
+firewall fails the play rather than reporting success.
+
+It declares no secret: the node generates its own admin key into
+`<data_dir>/admin.key` at mode `0600`.
+
+See [`apps/xerj/`](apps/xerj/).
+
 ## What you get when the agent does it
 
 A reviewer reading the diff sees the intent, not a wall of generated YAML:
@@ -560,7 +590,7 @@ Every feature, what it gives you, and the file that holds it.
 | **Pluggable targets** | A target interface separates "what the application is" from "where it runs". One target ships today. | [`src/appctl/targets/base.py`](src/appctl/targets/base.py) |
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
-| **Four working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, and the build host that builds it. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/) |
+| **Five working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, and a search node from a pinned release archive. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/) |
 
 ## Glossary
 
@@ -671,6 +701,7 @@ the [init skill](.agents/skills/deployflow-init/SKILL.md).
 | [docs/secrets.md](docs/secrets.md) | How a secret reaches the server |
 | [apps/omniroute/](apps/omniroute/) | A working application built from a source checkout: the role, and what building it taught |
 | [apps/builder/](apps/builder/) | A working build host: the `toolchain` application |
+| [apps/xerj/](apps/xerj/) | A working search node: a pinned release archive, and what a LAN bind costs |
 | [AGENTS.md](AGENTS.md) | The rules for changing this repository |
 | [.agents/skills/deployflow-init/SKILL.md](.agents/skills/deployflow-init/SKILL.md) | The preflight: access to Proxmox, the inventory, guest addresses, secrets, and the private state repository |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute, and what a change must preserve |

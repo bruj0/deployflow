@@ -48,9 +48,13 @@ case "${1:-}" in
   *) echo "sync_state: unknown argument: $1" >&2; exit 2 ;;
 esac
 
-for tool in rsync git flock cmp; do
+for tool in rsync git cmp; do
   # A missing tool must not read as "nothing differs", which is what every
   # `|| true` below would turn it into.
+  #
+  # `flock` is deliberately not in this list: it is a Linux tool and does not
+  # exist on macOS, where this script is run. The lock below falls back to an
+  # atomic `mkdir` there, which gives the same guarantee.
   command -v "$tool" >/dev/null || { echo "sync_state: $tool is not installed" >&2; exit 2; }
 done
 
@@ -143,10 +147,43 @@ fi
 
 # One sync at a time. The lock lives in .git/, which is never tracked, so it
 # cannot become part of the record.
-exec 9>"$STATE_DIR/.git/deployflow-sync.lock"
-if ! flock -n 9; then
-  echo "sync_state: another sync is running; nothing done"
-  exit 0
+#
+# `flock` on Linux, an atomic `mkdir` everywhere else. macOS has no `flock`,
+# and refusing to run there meant the script never ran on the machine it is
+# written for — the record silently drifted instead. `mkdir` is atomic on every
+# POSIX filesystem, so it is the same guarantee.
+#
+# The two mechanisms use different names, because they need different file
+# types: `flock` wants a regular file it can lock, and `mkdir` wants a
+# directory it can create atomically. One shared name would leave a directory
+# where `flock` expects a file, and the next run on the other platform would
+# fail on a lock it cannot open.
+LOCK_DIR="$STATE_DIR/.git/deployflow-sync.lock.d"
+LOCK_FILE="$STATE_DIR/.git/deployflow-sync.lock"
+
+if command -v flock >/dev/null; then
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    echo "sync_state: another sync is running; nothing done"
+    exit 0
+  fi
+else
+  # A lock left by a killed process would block every later run for ever, so
+  # one older than an hour is treated as abandoned and reclaimed.
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+      rmdir "$LOCK_DIR" 2>/dev/null || true
+      if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo "sync_state: another sync is running; nothing done"
+        exit 0
+      fi
+    else
+      echo "sync_state: another sync is running; nothing done"
+      exit 0
+    fi
+  fi
+  # The lock is a directory here, so `rmdir` removes it rather than `rm -f`.
+  trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 fi
 
 # `-a` preserves the mtime, so a copy that changes nothing leaves the clone's
