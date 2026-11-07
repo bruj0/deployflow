@@ -17,6 +17,31 @@
 # This role assumes common/python has already run for the same application.
 
 # ---------------------------------------------------------------------------
+# The pin
+# ---------------------------------------------------------------------------
+
+- name: Refuse to install a release the manifest does not name
+  # The manifest says where the application comes from and the role says what it
+  # installs. Those are two files, and they can drift — which is exactly how
+  # this role ended up pinned to 3.8.51 while the manifest named 3.8.53.
+  #
+  # `appctl` passes the manifest's pin in as appctl_source_* so this cannot
+  # pass silently. The package name has to be the one on npm: `omniroute` is
+  # the published name, and `omniroute-release` does not exist there, so a
+  # manifest written with the `@` form names a package nothing can install.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == 'omniroute'
+      - appctl_source_version == omr_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs omniroute=={{ omr_version }}. Change one of them.
+    quiet: true
+
+# ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------
 #

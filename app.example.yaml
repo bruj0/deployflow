@@ -72,7 +72,11 @@ applications:
   #       bind_host: 0.0.0.0       # published on the LAN; secrets are required
   #   source:
   #     kind: package
-  #     package: "omniroute-release@3.8.51"
+  #     # `==` and the published package name, not `@` and the role's name.
+  #     # `appctl` splits this into appctl_source_package and
+  #     # appctl_source_version, which is what lets the role refuse a version
+  #     # the manifest did not name. `omniroute-release` is not on npm.
+  #     package: "omniroute==3.8.53"
   #   secrets:
   #     - omniroute_release_jwt_secret
   #     - omniroute_release_api_key_secret
@@ -86,8 +90,7 @@ applications:
   # `==` is load-bearing. `appctl` splits `name==version` and passes both into
   # the play as `appctl_source_package` and `appctl_source_version`, which is
   # what lets a role refuse to install something the manifest did not name. A
-  # `name@version` form (as omniroute-release uses) carries no comparison and
-  # the role cannot check it.
+  # `name@version` form carries no comparison and the role cannot check it.
   #
   # There is no `config:` block on purpose. `appctl render` emits exactly one
   # JSON document; an application whose configuration is TOML, dotenv or

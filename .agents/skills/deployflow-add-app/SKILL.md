@@ -455,7 +455,7 @@ built on a build host and served from a guest.
 This is the shape the rest of this section assumes, with three differences.
 
 **The version is a commit, not a tag.** A published release pins
-`omniroute@3.8.51`; a source build pins the **sha** the controller built from.
+`omniroute@3.8.53`; a source build pins the **sha** the controller built from.
 Never pin a branch name: `main` moves, and a play that builds `main` twice
 reports two different artifacts. Read the sha out of the checkout and write it
 into the build receipt, so the guest can be asked what it is actually running.

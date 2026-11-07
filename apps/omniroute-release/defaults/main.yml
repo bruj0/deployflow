@@ -63,7 +63,7 @@ app_bind_host: 0.0.0.0
 # own Node is below this application's floor. The published package ships the
 # prebuilt Next.js standalone bundle the server process runs (dist/server.js),
 # so there is no compile step to own.
-omr_version: "3.8.51"
+omr_version: "3.8.53"
 
 # Where `npm install --global --prefix` puts it, and where the package itself
 # lands inside that prefix. Under app_dir rather than a system npm prefix: the

@@ -14,7 +14,7 @@ except the install itself.
 | | |
 |---|---|
 | Guest | `omniroute`, CT 120 |
-| Release | `omniroute@3.8.51` from npm, pinned |
+| Release | `omniroute@3.8.53` from npm, pinned |
 | Runtime | Node 24.14.1, pinned and checksummed, under `app_home/node` |
 | Unit | `omniroute.service` |
 | Port | 20128 — dashboard, `/v1` proxy, MCP/A2A and management API together |
