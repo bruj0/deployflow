@@ -143,6 +143,35 @@ with the directory it describes — a half-finished install, a directory left
 behind by an interrupted play — and then every task that trusts it skips the
 install that would have repaired it.
 
+## A version bump restarts the unit
+
+The release is installed into the guest's own tree, and the unit runs from
+that tree. So a bump replaces the files **under a process that is still
+running**, and the process does not notice on its own.
+
+What that looks like is worse than a stale process. The old server serves the
+HTML it reads off the new disk, while its asset manifest — read into memory
+at start-up — still names the files the old release had. The dashboard comes
+back as a page whose every static asset is a 404, with no error anywhere:
+the page loads, the API answers, and `omniroute doctor` reports a healthy
+install.
+
+Measured on the 3.8.51 to 3.8.53 upgrade: the play installed the release,
+reported `changed`, and left a server from nine days earlier running against
+it. The dashboard was blank.
+
+So the restart is gated on the install, not only on the rendered files:
+
+| Changed | Restarts |
+|---|---|
+| the credentials file | yes |
+| the `.env` file | yes |
+| the systemd unit | yes |
+| **the installed release** | **yes** |
+| nothing | no |
+
+The last row is the one that keeps a settled play at `changed=0`.
+
 ## The compile toolchain is off
 
 `omr_install_build_toolchain: false`. `better-sqlite3` ships a prebuild for

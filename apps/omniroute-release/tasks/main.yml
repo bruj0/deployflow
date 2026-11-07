@@ -384,6 +384,10 @@
   become: true
   become_user: root
   register: omr_npm_install
+  # Explicit, because the restart below reads this as its signal. A command
+  # reports changed by default, but a default nobody wrote down is a default
+  # that gets refactored away.
+  changed_when: true
   when: omr_needs_install | bool
 
 - name: Read back the OmniRoute release that is now installed
@@ -669,9 +673,23 @@
   # stopped after a reboot, which looks exactly like a crash loop on the next
   # visit.
   #
-  # Restarted rather than started only when a rendered file actually changed.
-  # Both templates are byte-identical on a settled play, which is what keeps the
-  # steady state at changed=0 instead of bouncing the service every run.
+  # Restarted rather than started only when something it is serving actually
+  # changed. Both templates are byte-identical on a settled play, which is what
+  # keeps the steady state at changed=0 instead of bouncing the service every
+  # run.
+  #
+  # The release itself is in that set, and it has to be. A version bump
+  # replaces the whole installed tree under {{ omr_prefix }} while the running
+  # process keeps serving from the old one — and the result is a dashboard
+  # that returns a page whose every static asset is a 404, because the HTML
+  # comes off the new disk while the asset manifest in the old process's memory
+  # names files the new release does not have. Measured on the 3.8.51 to
+  # 3.8.53 upgrade: the play installed the release, reported changed, and left
+  # a server from nine days earlier running against it.
+  #
+  # `omr_npm_install` is the signal, not the version: it is registered by the
+  # install task, which only runs when the installed release was not the
+  # pinned one.
   ansible.builtin.systemd:
     name: "{{ app_service_name }}"
     enabled: true
@@ -679,7 +697,8 @@
       {{ 'restarted'
          if (omr_secrets_written.changed | default(false)
              or omr_env_written.changed | default(false)
-             or omr_unit.changed | default(false))
+             or omr_unit.changed | default(false)
+             or omr_npm_install.changed | default(false))
          else 'started' }}
     daemon_reload: true
   become: true
