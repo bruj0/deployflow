@@ -1,0 +1,1962 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/apps/xerj/">
+      
+      
+        <link rel="prev" href="../builder/">
+      
+      
+        <link rel="next" href="../homarr/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>xerj - DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/panzoom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <meta name="panzoom-theme" content="material">
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#xerj" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              xerj
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/readme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/add-app-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/init-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    xerj
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    xerj
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deployed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deployed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-kind-package-for-a-rust-binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why kind: package for a Rust binary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#there-is-no-config-block-and-there-is-no-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        There is no config: block, and there is no secret
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-bind-is-0000-with-tls-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the bind is 0.0.0.0 with TLS off
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why the bind is 0.0.0.0 with TLS off">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-firewall" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The firewall
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-binary-is-pinned-by-version-and-digest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The binary is pinned by version and digest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-unit-passes-config-and-no-other-flag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The unit passes --config and no other flag
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-data-directory-is-the-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The data directory is the boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-role-refuses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the role refuses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-embedding-mode-is-lexical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The embedding mode is lexical
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reaching-the-node-from-the-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reaching the node from the controller
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-corpus-is-empty-on-purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The corpus is empty on purpose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-sizing-is-an-estimate-not-a-measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The sizing is an estimate, not a measurement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#traps-this-role-is-written-around" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traps this role is written around
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../homarr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    homarr
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute-building-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deployed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deployed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-kind-package-for-a-rust-binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why kind: package for a Rust binary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#there-is-no-config-block-and-there-is-no-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        There is no config: block, and there is no secret
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-bind-is-0000-with-tls-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the bind is 0.0.0.0 with TLS off
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why the bind is 0.0.0.0 with TLS off">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-firewall" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The firewall
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-binary-is-pinned-by-version-and-digest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The binary is pinned by version and digest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-unit-passes-config-and-no-other-flag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The unit passes --config and no other flag
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-data-directory-is-the-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The data directory is the boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-role-refuses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the role refuses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-embedding-mode-is-lexical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The embedding mode is lexical
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reaching-the-node-from-the-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reaching the node from the controller
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-corpus-is-empty-on-purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The corpus is empty on purpose
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-sizing-is-an-estimate-not-a-measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The sizing is an estimate, not a measurement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#traps-this-role-is-written-around" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traps this role is written around
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="xerj">xerj<a class="headerlink" href="#xerj" title="Permanent link">&para;</a></h1>
+<p>XERJ, <strong>the search node</strong>, served by one systemd unit on one guest.</p>
+<p>XERJ is one Rust binary from a GitHub release — not a wheel, not an npm
+package. That makes this the third application shape in this repository:
+<code>example-app</code> installs a wheel, <code>omniroute-release</code> installs a published npm
+release, <code>builder</code> installs no service at all, and this one installs a pinned
+release archive and does the installing itself.</p>
+<h2 id="what-is-deployed">What is deployed<a class="headerlink" href="#what-is-deployed" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Guest</td>
+<td><code>xerj</code>, CT 124</td>
+</tr>
+<tr>
+<td>Release</td>
+<td><code>xerj==1.0.0-rc.100</code>, a pinned archive with its sha256 committed</td>
+</tr>
+<tr>
+<td>Install root</td>
+<td><code>/opt/xerj/app</code>, beside the inert Python venv</td>
+</tr>
+<tr>
+<td>Binary</td>
+<td><code>/opt/xerj/app/bin/xerj</code>, root-owned and <code>0755</code></td>
+</tr>
+<tr>
+<td>Configuration</td>
+<td><code>/opt/xerj/app/xerj.toml</code>, written by this role</td>
+</tr>
+<tr>
+<td>Unit</td>
+<td><code>xerj.service</code></td>
+</tr>
+<tr>
+<td>Port</td>
+<td>9200 — Elasticsearch-compatible, 9201 native REST, 9202 gRPC</td>
+</tr>
+<tr>
+<td>State</td>
+<td><code>/opt/xerj/state/data</code> — the index, the WAL, the segments and the admin key</td>
+</tr>
+<tr>
+<td>Corpus</td>
+<td><code>/opt/xerj/state/corpus</code>, created empty</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>none. The node generates its own admin key</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install-it">Install it<a class="headerlink" href="#install-it" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>xerj
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>appctl<span class="w"> </span>install<span class="w"> </span>xerj<span class="w">        </span><span class="c1"># must report changed=0</span>
+</code></pre></div>
+<p>The manifest key is <code>xerj</code> and the role directory is <code>apps/xerj/</code>. They match:
+<code>appctl install</code> selects the role with <code>--tags lxc,&lt;key&gt;</code>, and a key that is
+not a role name selects nothing — the play runs, changes nothing and reports
+success.</p>
+<h2 id="why-kind-package-for-a-rust-binary">Why <code>kind: package</code> for a Rust binary<a class="headerlink" href="#why-kind-package-for-a-rust-binary" title="Permanent link">&para;</a></h2>
+<p>The manifest schema has three source kinds and requires a <code>build:</code> block for
+<code>repo</code>. <code>package</code> is its word for "a released artifact pinned by version",
+which is what <code>omniroute-release</code> already uses for an npm release.</p>
+<p>The benefit is concrete rather than convenient. <code>appctl</code> splits
+<code>xerj==1.0.0-rc.100</code> and passes both halves into the play as
+<code>appctl_source_package</code> and <code>appctl_source_version</code>, so the role can assert
+that the manifest and its own pin agree. A <code>name@version</code> form carries no
+comparison, and the assertion silently checks nothing.</p>
+<h2 id="there-is-no-config-block-and-there-is-no-secret">There is no <code>config:</code> block, and there is no secret<a class="headerlink" href="#there-is-no-config-block-and-there-is-no-secret" title="Permanent link">&para;</a></h2>
+<p>Both are deliberate, and both are the reason this role writes files itself.</p>
+<p><code>appctl render</code> emits exactly one JSON document. XERJ reads TOML, so there is
+nothing for the framework to render — the role templates <code>xerj.toml</code> and the
+unit instead. This is the same shape as <code>omniroute-release</code>, whose dotenv file
+is also not renderable.</p>
+<p>There is no secret either. The node generates its own admin key on first start
+and writes it to <code>&lt;data_dir&gt;/admin.key</code> at mode <code>0600</code>. Putting a key in
+<code>.env</code>, in the unit's <code>Environment=</code>, or in the TOML would be a regression: it
+would have to live in this repository or in the process environment, and the
+generated file does not.</p>
+<h2 id="why-the-bind-is-0000-with-tls-off">Why the bind is <code>0.0.0.0</code> with TLS off<a class="headerlink" href="#why-the-bind-is-0000-with-tls-off" title="Permanent link">&para;</a></h2>
+<p>XERJ ships loopback-only, auth on, TLS off, and it <em>refuses to start</em> on a
+non-loopback bind while TLS is off unless
+<code>server.allow_insecure_network_bind = true</code>. That refusal is a test in the
+engine, not a comment.</p>
+<p>This role refuses the same combination independently, so the exposure has to
+be written down twice before it happens:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the operator's choice</td>
+<td><code>bind_host: 0.0.0.0</code> in <code>app.yaml</code></td>
+</tr>
+<tr>
+<td>the engine's refusal</td>
+<td><code>allow_insecure_network_bind</code> in <code>xerj.toml</code></td>
+</tr>
+<tr>
+<td>this role's refusal</td>
+<td><code>xerj_allow_insecure_bind</code> in the role's defaults</td>
+</tr>
+<tr>
+<td>the restriction</td>
+<td>a <code>ufw</code> rule the role owns and asserts it applied</td>
+</tr>
+</tbody>
+</table>
+<p>The bind is a LAN bind with the admin key as the only control. The key is a
+single shared credential: XERJ has no per-agent key and no rotation path short
+of replacing <code>&lt;data_dir&gt;/admin.key</code> and restarting. That is the cost of this
+posture, and the firewall is what keeps the exposure off the rest of the
+network.</p>
+<p>To keep the node loopback-only, set <code>bind_host: 127.0.0.1</code> in the manifest and
+<code>xerj_allow_insecure_bind: false</code> in the role. Then nothing is exposed and no
+firewall is applied.</p>
+<h3 id="the-firewall">The firewall<a class="headerlink" href="#the-firewall" title="Permanent link">&para;</a></h3>
+<p><code>ufw</code> denies incoming by default, keeps SSH reachable, and allows the node's
+port from <code>xerj_lan_cidr</code> only. <code>10.0.0.0/8</code> is the range <code>common/lxc</code> puts
+guest <code>vnet0</code> on, so on its own the rule documents intent rather than
+restricting anyone.</p>
+<p>Set <code>xerj_manage_firewall: false</code> only if something outside this guest
+already filters it. The role then says so in its report rather than quietly
+claiming a restriction it did not apply — a claimed-but-unapplied firewall
+is exactly the "plausible but broken" state this repository exists to refuse.</p>
+<h2 id="the-binary-is-pinned-by-version-and-digest">The binary is pinned by version <em>and</em> digest<a class="headerlink" href="#the-binary-is-pinned-by-version-and-digest" title="Permanent link">&para;</a></h2>
+<p><code>xerj_version</code> is never <code>latest</code>, and <code>xerj_sha256</code> is the digest published
+beside the archive in the same release. A floating tag makes two plays of the
+same role install different code, which is the opposite of what a pinned role
+is for.</p>
+<p>The digest proves the archive matches the <code>.sha256</code> published next to it. It
+is an integrity check, not a signature and not a provenance statement.</p>
+<p>The role then reads the installed binary's own <code>--version</code> and refuses a
+binary that disagrees with the pin. That is what catches a rollback which
+left the old one in place — otherwise every later task passes and the stale
+binary keeps serving.</p>
+<h2 id="the-unit-passes-config-and-no-other-flag">The unit passes <code>--config</code> and no other flag<a class="headerlink" href="#the-unit-passes-config-and-no-other-flag" title="Permanent link">&para;</a></h2>
+<p>Flags and a config file are two sources of truth, and this role cannot afford
+a second place for a setting to disagree. So the TOML carries the bind
+address, the three ports, the data directory and the embedding mode, and the
+unit carries nothing but the path.</p>
+<p><code>auto_port = false</code> is stated rather than defaulted. If it were true, a node
+that failed to bind 9200 could quietly publish 9201, and every client would
+keep talking to whatever holds 9200.</p>
+<h2 id="the-data-directory-is-the-boundary">The data directory is the boundary<a class="headerlink" href="#the-data-directory-is-the-boundary" title="Permanent link">&para;</a></h2>
+<p>It holds the index, the WAL, the segments and the generated admin key, and it
+lives under <code>app_state_dir</code> so replacing the binary never destroys an index.</p>
+<p>It must not sit inside any folder passed to <code>xerj autoindex</code>: <code>data/</code> is not
+in XERJ's built-in ignore list, so a data directory inside a corpus would be
+indexed. It is a sibling of the corpus directory, never a parent.</p>
+<h2 id="what-the-role-refuses">What the role refuses<a class="headerlink" href="#what-the-role-refuses" title="Permanent link">&para;</a></h2>
+<p>Each of these is a failure a green play would otherwise hide:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the manifest's pin matches the role's</td>
+<td>two places naming different versions</td>
+</tr>
+<tr>
+<td>the digest is 64 lowercase hex characters</td>
+<td>a placeholder reaching <code>get_url</code></td>
+</tr>
+<tr>
+<td>the installed binary reports the pinned version</td>
+<td>a stale or rolled-back binary</td>
+</tr>
+<tr>
+<td><code>admin.key</code> exists, <code>0600</code>, owned by the service account</td>
+<td>the node started with auth misconfigured</td>
+</tr>
+<tr>
+<td>the listeners are on the configured address</td>
+<td>the process is up but bound elsewhere</td>
+</tr>
+<tr>
+<td><code>GET /</code> with the admin key returns 200</td>
+<td>listening but not authenticating</td>
+</tr>
+<tr>
+<td><code>GET /_cluster/health</code> returns 200</td>
+<td>serving HTTP but not an index</td>
+</tr>
+<tr>
+<td>free space on <code>/</code> is at least 8 GB</td>
+<td>an ingest that fails part-way through</td>
+</tr>
+<tr>
+<td>the firewall is active and restricts the port</td>
+<td>a claimed-but-unapplied firewall</td>
+</tr>
+</tbody>
+</table>
+<p>The key is read with <code>slurp</code> and used with <code>uri</code> under <code>no_log: true</code>, so it
+never appears in <code>argv</code> — and <code>ps</code> on the guest is world-readable. The request
+goes to <code>http://127.0.0.1:{{ app_port }}/</code> on the guest itself, so nothing is
+exposed by the check and nothing depends on the bind address.</p>
+<h2 id="the-embedding-mode-is-lexical">The embedding mode is lexical<a class="headerlink" href="#the-embedding-mode-is-lexical" title="Permanent link">&para;</a></h2>
+<p><code>lexical</code> is the built-in feature-hashing embedder: no model, no download, no
+network at startup, and not semantics. <code>neural</code> loads a ~90 MB BERT model at
+startup and refuses to start if that load fails, which would turn a first run
+into a HuggingFace availability test.</p>
+<p>The mode is fixed per index at ingest time, so changing it later does not
+re-embed anything. A corpus indexed lexically stays lexical.</p>
+<h2 id="reaching-the-node-from-the-controller">Reaching the node from the controller<a class="headerlink" href="#reaching-the-node-from-the-controller" title="Permanent link">&para;</a></h2>
+<p>The node is on the LAN and the guest's address is a DHCP lease, so the address
+is discovered rather than written down. <code>pct exec &lt;vmid&gt; hostname -I</code> on the
+Proxmox host reads it back.</p>
+<p>The admin key lives on the guest. Copy it across once, and keep it out of
+this repository:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>scp<span class="w"> </span>root@&lt;guest-address&gt;:/opt/xerj/state/data/admin.key<span class="w"> </span>./xerj-admin.key
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>./xerj-admin.key
+</code></pre></div>
+<p>Then point a client at it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">XERJ_URL</span><span class="o">=</span>http://&lt;guest-address&gt;:9200
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">XERJ_AUTH</span><span class="o">=</span><span class="s2">"ApiKey </span><span class="k">$(</span>cat<span class="w"> </span>./xerj-admin.key<span class="k">)</span><span class="s2">"</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>xerj<span class="w"> </span>autoindex<span class="w"> </span>~/projects/something<span class="w"> </span>--prefix<span class="w"> </span>something<span class="w"> </span>--url<span class="w"> </span><span class="s2">"</span><span class="nv">$XERJ_URL</span><span class="s2">"</span><span class="w"> </span>--api-key<span class="w"> </span><span class="s2">"</span><span class="nv">$XERJ_AUTH</span><span class="s2">"</span>
+</code></pre></div>
+<p><code>xerj mcp</code> is a proxy and does not start a node — that is stated in its
+<code>--help</code> and in its error when nothing answers. On the guest itself, <code>xerj
+autoindex</code> and <code>xerj mcp</code> discover <code>admin.key</code> on their own, because the
+node's own tooling reads <code>&lt;data_dir&gt;/admin.key</code> for a loopback bind.</p>
+<h2 id="the-corpus-is-empty-on-purpose">The corpus is empty on purpose<a class="headerlink" href="#the-corpus-is-empty-on-purpose" title="Permanent link">&para;</a></h2>
+<p>A fresh guest has nothing to index. The role creates
+<code>{{ app_state_dir }}/corpus</code> so the local-corpus shape is a later sync rather
+than a re-architecture.</p>
+<p>Three shapes are available, and they are not exclusive: clients push
+documents through the API; a folder is synced into the corpus directory and
+indexed with <code>xerj autoindex &lt;folder&gt; --prefix &lt;name&gt;</code>; or a host bind-mount
+is used, which the target does not model today.</p>
+<p>Move to a larger disk before the first real corpus. The 32 GB below is sized
+for code and documentation, not for a log archive, and the role refuses to
+start a node with less than 8 GB free on <code>/</code>.</p>
+<h2 id="the-sizing-is-an-estimate-not-a-measurement">The sizing is an estimate, not a measurement<a class="headerlink" href="#the-sizing-is-an-estimate-not-a-measurement" title="Permanent link">&para;</a></h2>
+<p>The guest gets 4 cores, 4096 MB of RAM and a 32 GB rootfs, set in
+<code>inventory/group_vars/xj/main.yml</code> rather than in the framework defaults.</p>
+<p>No benchmark of XERJ at any corpus size was run on this hardware for this
+deployment. These are starting allocations chosen to leave room for a
+code-and-docs corpus. The project's own scale ticket is still open, so raise
+the values there rather than by hand — a resized guest is otherwise a fact
+only the Proxmox host knows.</p>
+<h2 id="traps-this-role-is-written-around">Traps this role is written around<a class="headerlink" href="#traps-this-role-is-written-around" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>A sentinel that matches <code>unchanged</code>.</strong> <code>'changed' in stdout</code> is true for
+  <code>"unchanged"</code>; the version check compares against <code>== 'changed'</code> after a
+  trim.</li>
+<li><strong><code>get_url</code> without <code>checksum</code></strong> re-downloads on every play and reports
+  <code>changed</code>, which is the most common way a second run stops being
+  <code>changed=0</code>.</li>
+<li><strong><code>unarchive</code> without <code>creates:</code></strong> re-extracts every run and changes the
+  mtime of the binary the unit is running.</li>
+<li><strong>A read-only <code>$HOME</code></strong> breaks <code>~/.xerj/by-port/</code>, not the service, and the
+  symptom is a misleading "no node is listening" hint.</li>
+<li><strong><code>ufw default</code> is not a sentinel.</strong> <code>ufw default deny incoming</code> prints
+  <em>"Default incoming policy changed to 'deny'"</em> on <strong>every</strong> call, including
+  one that changes nothing. A <code>changed_when</code> on that phrase reported 2
+  changed on every play — this role's second run was exactly that until the
+  task was guarded by reading <code>ufw status verbose</code> and comparing
+  <code>Default: deny (incoming)</code> first. <code>ufw allow</code> <em>is</em> idempotent;
+  <code>ufw default</code> is not.</li>
+</ul>
+<h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
+<p>The design, the four decisions and the measured run are written up in
+<a href="https://github.com/bruj0/deployflow/blob/main/docs/plans/xerj-on-lxc.md"><code>docs/plans/xerj-on-lxc.md</code></a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../builder/" class="md-footer__link md-footer__link--prev" aria-label="Previous: builder">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                builder
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../homarr/" class="md-footer__link md-footer__link--next" aria-label="Next: homarr">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                homarr
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../assets/javascripts/panzoom.min.js"></script>
+      
+        <script src="../../assets/javascripts/zoompan.js"></script>
+      
+    
+  </body>
+</html>
