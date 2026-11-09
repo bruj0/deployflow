@@ -93,4 +93,5 @@ nav:
       - omniroute: apps/omniroute.md
       - builder: apps/builder.md
       - xerj: apps/xerj.md
+      - homarr: apps/homarr.md
       - Building OmniRoute from source: apps/omniroute-building-from-source.md

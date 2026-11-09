@@ -1,0 +1,143 @@
+---
+# Homarr, the dashboard, as one container on one guest.
+#
+# Homarr is a single image: a Next.js server, an internal Redis and an nginx
+# front end, all started by the image's own entrypoint. There is no database
+# server to run beside it — SQLite is the default and lives inside /appdata —
+# so this is the simplest container application in this repository, and the
+# role is correspondingly short.
+#
+# `app_name` is what the guest sees: it derives the service account (homarr),
+# the install root (/opt/homarr), the state directory and the unit name.
+# Nothing below invents a path that does not follow from it.
+#
+# The data directory is the boundary. It holds the SQLite database, the Redis
+# dump and any trusted certificates, and it lives under app_state_dir so
+# reinstalling the container never destroys the board. It is bind-mounted
+# rather than left as a Docker named volume, because a named volume lives in
+# /var/lib/docker on the guest's rootfs and is invisible to a backup.
+
+app_name: homarr
+app_service_name: homarr
+
+# The port the container publishes. Homarr's nginx listens on 7575 and proxies
+# to the Next.js server on loopback inside the container; 7575 is the only port
+# that needs publishing.
+app_port: 7575
+
+# ---------------------------------------------------------------------------
+# Exposure
+# ---------------------------------------------------------------------------
+#
+# 0.0.0.0 publishes the dashboard on the guest's network, which is the point of
+# a dashboard: a board reachable only from its own guest is not a dashboard.
+#
+# The variable is `homarr_bind_host`, not `app_bind_host`, and that is not
+# cosmetic. common/python defines `app_bind_host: 127.0.0.1` too, and a
+# meta-dependency's defaults are applied AFTER the including role's — the trap
+# documented in common/python/defaults/main.yml. A role that sets
+# `app_bind_host: 0.0.0.0` here is silently given the framework's loopback
+# value, so the board would never be reachable and nothing would say why.
+homarr_bind_host: "0.0.0.0"
+
+# The firewall this role owns, applied only when the bind is not loopback.
+#
+# It is a DOCKER-USER rule, NOT a ufw rule, and that distinction is the whole
+# point. Docker installs its own chains in nat/filter and evaluates them before
+# ufw's INPUT chain, so a ufw rule that denies a published port is reported as
+# applied by `ufw status` and enforced by nothing. Measured on vmid 107 on this
+# host: ufw reports `inactive`, DOCKER-USER is empty, and published ports are
+# reachable regardless.
+#
+# 10.0.0.0/8 is the range common/lxc puts guest vnet0 on, so on its own it
+# documents intent rather than restricting anything — narrow it to the
+# operator's own subnet to make it a real limit.
+homarr_manage_firewall: true
+homarr_lan_cidr: "10.0.0.0/8"
+
+# ---------------------------------------------------------------------------
+# The image
+# ---------------------------------------------------------------------------
+#
+# Pinned by DIGEST, not by tag. `latest` and `v2.12.0` resolved to this digest
+# on 2026-11-09, which is convenient and temporary: a tag is a moving name and
+# the digest is the thing. `--pull never` on the compose invocation below is
+# what makes the pin real, because without it `up` fetches whatever the tag
+# names today.
+#
+# The image is public: an anonymous pull token from ghcr.io resolves it, so the
+# guest needs no registry credentials.
+homarr_image: >-
+  ghcr.io/homarr-labs/homarr@sha256:44c480afe9df57ce9de44cb664aec53199ea19926ebdd4e590c7b2c2c0a5ef79
+homarr_version: "2.12.0"
+
+# ---------------------------------------------------------------------------
+# The engine
+# ---------------------------------------------------------------------------
+#
+# Docker CE from Docker's own apt repository. Measured on 2026-11-09: the
+# `resolute` distribution (Ubuntu 26.04) carries docker-ce 29.4.0 and
+# docker-compose-plugin 5.1.0, so the guest's stock template is supported.
+#
+# The engine is deliberately NOT version-pinned. It is not the thing being
+# deployed, and a pinned engine that apt no longer carries is a worse failure
+# than a patched one.
+homarr_docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+homarr_docker_apt_repo: "https://download.docker.com/linux/ubuntu"
+homarr_docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+#
+# The Compose project lives under app_dir, which a reinstall replaces. The data
+# lives under app_state_dir, which no role ever removes. A database inside
+# app_dir would be deleted by the next install.
+homarr_project_dir: "{{ app_dir }}/project"
+homarr_compose_file: "{{ homarr_project_dir }}/docker-compose.yml"
+homarr_env_file: "{{ homarr_project_dir }}/.env"
+
+homarr_data_dir: "{{ app_state_dir }}/appdata"
+
+# The timezone the board renders times in. UTC is the guest's own default and
+# the honest one for a server; override it in the guest's group_vars to
+# localise the board without editing the role.
+homarr_timezone: UTC
+
+# ---------------------------------------------------------------------------
+# The Docker socket
+# ---------------------------------------------------------------------------
+#
+# OFF by default, and that is a security decision rather than a convenience.
+# Mounting /var/run/docker.sock into a container gives that container root on
+# the guest: it can start a privileged container, mount the host filesystem and
+# read every other container's environment. Homarr uses it only for its Docker
+# integration — discovering containers to show as board tiles — so a board that
+# does not need that integration should not carry the capability.
+#
+# Turn it on deliberately, in the guest's group_vars, when the integration is
+# wanted.
+homarr_mount_docker_socket: false
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+#
+# Refused before the container starts, so a guest that is too small fails at a
+# task boundary instead of part-way through a database migration. Homarr's own
+# prerequisites page states 500 MB of RAM and 600 MB of free disk for the
+# image; the numbers below are that floor with room for the SQLite database and
+# the image layers, not a measurement of this deployment.
+homarr_min_memory_mb: 1024
+homarr_min_cores: 1
+homarr_min_free_gb: 5
+
+# Seconds to wait for /api/health/live after `docker compose up`. The
+# entrypoint runs the database migrations before the server binds, and a first
+# boot on a cold image is tens of seconds rather than one.
+homarr_health_timeout: 300

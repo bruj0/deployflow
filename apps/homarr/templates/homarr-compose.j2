@@ -1,0 +1,47 @@
+# Homarr — the Compose project this role owns.
+#
+# Homarr publishes no Compose file to fetch: its documentation gives an inline
+# snippet, so there is nothing to pin by commit and checksum the way proxcenter
+# pins the vendor's file. The whole project is written here instead, which is
+# also why there is no override file — there is no upstream file to overlay.
+#
+# Three things are load-bearing:
+#
+#   1. the image is pinned by DIGEST, so `docker compose up` cannot fetch a
+#      different build than the one this role verified;
+#   2. /appdata is a BIND MOUNT under app_state_dir, not a Docker named volume.
+#      A named volume lives in /var/lib/docker on the guest's rootfs, where a
+#      backup cannot see it and a rebuilt guest destroys it. /appdata holds the
+#      SQLite database, the Redis dump and the trusted certificates;
+#   3. the environment comes from a file, not from `environment:` entries, so
+#      the encryption key never appears in this file, in the rendered project,
+#      or in `docker inspect` output that a `ps`-equivalent can read.
+
+services:
+  homarr:
+    container_name: {{ app_name }}
+    image: {{ homarr_image }}
+    restart: unless-stopped
+
+    env_file:
+      - {{ homarr_env_file }}
+
+    volumes:
+      - {{ homarr_data_dir }}:/appdata
+{% if homarr_mount_docker_socket | bool %}
+      # The Docker integration. This is root on the guest, handed to a
+      # container: it can start a privileged container, mount the host
+      # filesystem and read every other container's environment. Enabled
+      # deliberately through homarr_mount_docker_socket, never by default.
+      - /var/run/docker.sock:/var/run/docker.sock
+{% endif %}
+
+    ports:
+      # The bind address is explicit. Compose's short form `"7575:7575"` binds
+      # 0.0.0.0 regardless of what the role believes it configured, so a
+      # loopback-only deployment would silently be published on the network.
+      - "{{ homarr_bind_host }}:{{ app_port }}:7575"
+
+    # The image ships its own HEALTHCHECK against /api/health/live, so nothing
+    # is declared here. A second one would be a second opinion about the same
+    # endpoint, and the role asserts on the endpoint directly anyway.
