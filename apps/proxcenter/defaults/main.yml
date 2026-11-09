@@ -1,0 +1,164 @@
+---
+# ProxCenter, the Proxmox management plane, as a Docker Compose stack on a
+# guest.
+#
+# This is the first application in this repository that is not a wheel, not an
+# npm release and not a single binary: it is a Next.js server plus PostgreSQL,
+# shipped as two container images. The framework has no opinion about Docker,
+# so this role owns the engine, the images, the Compose project and the proof
+# that the stack answers.
+#
+# `app_name` is what the guest sees: it derives the service account
+# (proxcenter), the install root (/opt/proxcenter), the state directory and the
+# unit name. Nothing below invents a path that does not follow from it.
+#
+# The data directory is the boundary. It holds the PostgreSQL cluster and the
+# frontend's uploaded branding, and it lives under app_state_dir so reinstalling
+# the stack never destroys either. It is bind-mounted rather than left as a
+# Docker named volume, because a named volume lives in /var/lib/docker on the
+# guest's rootfs and is invisible to a backup.
+
+app_name: proxcenter
+app_service_name: proxcenter
+
+# The port the stack publishes. The upstream Compose file maps
+# "${HTTP_BIND:-3000}:3000"; the vendor installer overrides HTTP_BIND to 80 on
+# a fresh install. This role keeps 3000, so the UI is reachable without
+# competing for a privileged port and without a self-signed certificate on 443.
+app_port: 3000
+
+# ---------------------------------------------------------------------------
+# Exposure
+# ---------------------------------------------------------------------------
+#
+# 0.0.0.0 publishes the UI on the guest's network. ProxCenter holds a Proxmox
+# API token and, through it, the ability to change every guest on this host, so
+# this is a stated exposure rather than a default.
+#
+# The variable is `proxcenter_bind_host`, not `app_bind_host`, and that is not
+# cosmetic. common/python defines `app_bind_host: 127.0.0.1` too, and a
+# meta-dependency's defaults are applied AFTER the including role's — the trap
+# documented in common/python/defaults/main.yml. A role that sets
+# `app_bind_host: 0.0.0.0` here is silently given the framework's loopback
+# value, so the UI would never be reachable and nothing would say why.
+proxcenter_bind_host: "0.0.0.0"
+
+# The firewall this role owns, applied only when the bind is not loopback.
+#
+# It is a DOCKER-USER rule, NOT a ufw rule, and that distinction is the whole
+# point. Docker installs its own chains in nat/filter and evaluates them before
+# ufw's INPUT chain, so a ufw rule that denies a published port is reported as
+# applied by `ufw status` and enforced by nothing. Measured on vmid 107 on this
+# host: ufw reports `inactive`, DOCKER-USER is empty, and published ports are
+# reachable regardless.
+#
+# 10.0.0.0/8 is the range common/lxc puts guest vnet0 on, so on its own it
+# documents intent rather than restricting anything — narrow it to the
+# operator's own subnet to make it a real limit.
+proxcenter_manage_firewall: true
+proxcenter_lan_cidr: "10.0.0.0/8"
+
+# The name the UI is reached on, used for NEXTAUTH_URL and APP_URL. A DHCP lease
+# can move; a hostname does not. The record lives in the intranet.local zone,
+# which the Proxmox SDN registers guest hostnames in.
+proxcenter_public_host: proxcenter.intranet.local
+
+# ---------------------------------------------------------------------------
+# The upstream artifacts
+# ---------------------------------------------------------------------------
+#
+# The Compose file is fetched from a COMMIT URL, not a branch URL. The vendor
+# installer uses .../main/docker-compose.community.yml, which means the file
+# that runs on the guest is whatever upstream had that minute. The sha256 below
+# is of that exact file at that exact commit, measured on 2026-11-09.
+#
+# `get_url` with a checksum is also what makes the download idempotent: it skips
+# the transfer when the file on disk already hashes to the expected value, so a
+# second run reports unchanged. A `get_url` without one re-downloads on every
+# play and reports changed.
+proxcenter_upstream_commit: "ff87fe01fb936b856ba158b79e767f8d251433ae"
+proxcenter_compose_url: >-
+  https://raw.githubusercontent.com/adminsyspro/proxcenter-ui/{{ proxcenter_upstream_commit }}/docker-compose.community.yml
+proxcenter_compose_sha256: "1993a8dbce576ee73ff1df55d1d3cf6143816acea8646f61248b0d40bd291852"
+
+# ---------------------------------------------------------------------------
+# The images
+# ---------------------------------------------------------------------------
+#
+# Both pinned by digest. A tag is a moving name; the digest is the thing. On
+# 2026-11-09 `latest` and `1.4.14` resolved to the same digest, which is
+# convenient and temporary — pin the digest, not the tag.
+#
+# The frontend image is public: an anonymous pull token from ghcr.io resolves
+# it, so the guest needs no registry credentials.
+proxcenter_frontend_image: >-
+  ghcr.io/adminsyspro/proxcenter-frontend@sha256:0ff8006e3ab9b4f8143e3e8fd89ba3067b89d69a7fbf4ac835600e07785ad3de
+proxcenter_frontend_version: "1.4.14"
+
+# postgres:16-alpine, resolved from Docker Hub on 2026-11-09.
+proxcenter_postgres_image: >-
+  postgres@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+
+# ---------------------------------------------------------------------------
+# The engine
+# ---------------------------------------------------------------------------
+#
+# Docker CE from Docker's own apt repository. Measured on 2026-11-09: the
+# `resolute` distribution (Ubuntu 26.04) carries docker-ce 29.4.0 and
+# docker-compose-plugin 5.1.0, so the guest's stock template is supported.
+#
+# The engine is deliberately NOT version-pinned. It is not the thing being
+# deployed, and a pinned engine that apt no longer carries is a worse failure
+# than a patched one.
+proxcenter_docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+proxcenter_docker_apt_repo: "https://download.docker.com/linux/ubuntu"
+proxcenter_docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+#
+# The Compose project lives under app_dir, which a reinstall replaces. The data
+# lives under app_state_dir, which no role ever removes. A database inside
+# app_dir would be deleted by the next install.
+proxcenter_project_dir: "{{ app_dir }}/project"
+proxcenter_compose_file: "{{ proxcenter_project_dir }}/docker-compose.yml"
+proxcenter_compose_override: "{{ proxcenter_project_dir }}/docker-compose.override.yml"
+proxcenter_env_file: "{{ proxcenter_project_dir }}/.env"
+
+proxcenter_data_dir: "{{ app_state_dir }}/data"
+proxcenter_postgres_dir: "{{ app_state_dir }}/postgres"
+
+# The uid the frontend container runs as (the `nextjs` user in its Dockerfile).
+# A bind-mounted /app/data owned by root makes the container fail to write, and
+# the symptom is a permission error in the container's log rather than a failed
+# health check.
+proxcenter_frontend_uid: 1001
+
+# The uid the postgres image runs as. The image's entrypoint chowns an EMPTY
+# PGDATA and then drops to this uid, so on a second run — when the directory is
+# no longer empty — the chown is skipped and a root-owned directory leaves the
+# server unable to open its own files. The role owns the directory as this uid
+# so that is never the case.
+proxcenter_postgres_uid: 70
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+#
+# Refused before the stack starts, so a guest that is too small fails at a task
+# boundary instead of part-way through a database migration. Upstream's own
+# matrix puts a cluster of this size in the "Small" row: 2 vCPU, 4 GB, 40 GB.
+proxcenter_min_memory_mb: 4096
+proxcenter_min_cores: 2
+proxcenter_min_free_gb: 20
+
+# Seconds to wait for /api/health after `docker compose up`. The entrypoint
+# applies 75 Prisma migrations and an idempotent seed before the server binds,
+# so a first boot is minutes, not seconds.
+proxcenter_health_timeout: 600

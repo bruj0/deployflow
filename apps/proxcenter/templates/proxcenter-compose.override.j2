@@ -1,0 +1,39 @@
+# ProxCenter — the role's overlay on the vendor's Compose file.
+#
+# Two edits, and both are load-bearing:
+#
+#   1. the images are pinned by DIGEST, so a `docker compose up` cannot fetch a
+#      different build than the one this role verified;
+#   2. the two volumes the vendor declares `external: true` are replaced with
+#      bind mounts under app_state_dir.
+#
+# The second is not cosmetic. `external: true` means Compose will NOT create the
+# volume, so without either this override or two explicit `docker volume create`
+# calls the stack does not start at all. And a Docker named volume lives in
+# /var/lib/docker on the guest's rootfs, where a backup cannot see it and a
+# rebuilt guest destroys it.
+#
+# This file is applied with a SECOND -f flag:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+#
+# A single -f silently drops it, and the stack then runs the unpinned image with
+# a green play. Every compose invocation in this role passes both.
+
+services:
+  frontend:
+    image: {{ proxcenter_frontend_image }}
+    volumes:
+      - {{ proxcenter_data_dir }}:/app/data
+
+  postgres:
+    image: {{ proxcenter_postgres_image }}
+    volumes:
+      - {{ proxcenter_postgres_dir }}:/var/lib/postgresql/data
+
+# The vendor's file declares both of these `external: true`. Declaring them here
+# as null keeps the top-level key present (Compose validates the reference) while
+# making the bind mounts above the only thing that is actually used.
+volumes:
+  proxcenter_data: null
+  postgres_data: null

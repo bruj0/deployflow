@@ -1,0 +1,33 @@
+[Unit]
+Description=ProxCenter management plane (Docker Compose stack)
+Documentation=https://docs.proxcenter.io/
+# The engine has to be up before the stack can be started, and the stack needs
+# the network to reach the Proxmox API.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# The project directory, because `docker compose` resolves its files relative to
+# the working directory when no -f is given — and this unit always gives both.
+WorkingDirectory={{ proxcenter_project_dir }}
+
+# Both -f flags, always. A single -f drops the override, and the stack then runs
+# the unpinned image with a green play.
+#
+# `--pull never` is what makes the digest pin real: without it, `up` fetches the
+# tag the vendor's file names and the override's digest is never consulted.
+ExecStart=/usr/bin/docker compose -f {{ proxcenter_compose_file }} -f {{ proxcenter_compose_override }} up -d --pull never --remove-orphans
+ExecStop=/usr/bin/docker compose -f {{ proxcenter_compose_file }} -f {{ proxcenter_compose_override }} down
+
+# A stack that fails to come up should be retried, not left half-started. The
+# entrypoint runs migrations before the server binds, so a first boot is minutes.
+TimeoutStartSec={{ proxcenter_health_timeout }}
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,589 @@
+---
+# ProxCenter, the Proxmox management plane, as a Docker Compose stack.
+#
+# This role installs a container engine, two pinned images and a Compose
+# project. It builds nothing and fetches no artifact from a branch: the Compose
+# file is pinned by commit and checksum, and both images are pinned by digest.
+#
+# Everything the application writes lives under app_state_dir, which
+# common/python creates once and neither role touches again. Redeploying
+# therefore never discards the database and never invalidates the APP_SECRET
+# that encrypts the stored Proxmox token.
+#
+# This role assumes common/python has already run for the same application.
+
+# ---------------------------------------------------------------------------
+# The pin
+# ---------------------------------------------------------------------------
+
+- name: Refuse to install a release the manifest does not name
+  # The manifest says where the application comes from and the role says what it
+  # installs. Those are two files, and they can drift — which is exactly how
+  # omniroute-release ended up pinned to 3.8.51 while the manifest named 3.8.53.
+  #
+  # `appctl` passes the manifest's pin in as appctl_source_* so this cannot pass
+  # silently. `package` is a stretch for a container image, deliberately: it is
+  # the schema's word for "a released artifact pinned by version", and the `==`
+  # form is what makes appctl split it and pass the version through.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == 'proxcenter'
+      - appctl_source_version == proxcenter_frontend_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs proxcenter=={{ proxcenter_frontend_version }}. Change one of them.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The guest can host the stack
+# ---------------------------------------------------------------------------
+#
+# Asserted before anything is installed. A guest that is too small does not fail
+# at install — it fails hours later, during a migration, with an error that
+# names a memory limit rather than the guest.
+
+- name: Read the guest's memory and core count
+  ansible.builtin.set_fact:
+    proxcenter_guest_memory_mb: "{{ ansible_memtotal_mb | int }}"
+    proxcenter_guest_cores: "{{ ansible_processor_vcpus | int }}"
+
+- name: Refuse a guest that cannot host the stack
+  ansible.builtin.assert:
+    that:
+      - proxcenter_guest_memory_mb | int >= proxcenter_min_memory_mb | int
+      - proxcenter_guest_cores | int >= proxcenter_min_cores | int
+    fail_msg: >-
+      This guest has {{ proxcenter_guest_memory_mb }} MB and
+      {{ proxcenter_guest_cores }} cores; the stack needs at least
+      {{ proxcenter_min_memory_mb }} MB and {{ proxcenter_min_cores }} cores.
+      Raise lxc_memory / lxc_cores in inventory/group_vars/{{ group_names | first }}/main.yml
+      and re-run.
+    quiet: true
+
+- name: Read the free space on the root filesystem
+  ansible.builtin.command:
+    argv: [df, --output=avail, -BG, /]
+  changed_when: false
+  register: proxcenter_df
+
+- name: Refuse a guest with no room for the images and the database
+  ansible.builtin.assert:
+    that:
+      - (proxcenter_df.stdout_lines[1] | trim | regex_replace('G$', '') | int) >= proxcenter_min_free_gb | int
+    fail_msg: >-
+      / has {{ proxcenter_df.stdout_lines[1] | trim }} free; the stack needs at
+      least {{ proxcenter_min_free_gb }} GB for the image layers and the
+      database. Raise lxc_rootfs_gb and re-run.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The engine
+# ---------------------------------------------------------------------------
+#
+# Docker CE from Docker's own apt repository. The role installs; it does not
+# uninstall. The vendor's installer removes docker, containerd and runc before
+# installing them, which is fine on a fresh host and wrong on a guest that
+# already has a container runtime.
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker's apt signing key
+  ansible.builtin.get_url:
+    url: "{{ proxcenter_docker_apt_key_url }}"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the guest's distribution codename
+  # The repo path carries the codename, and Ubuntu 26.04 is `resolute`. Reading
+  # it rather than hard-coding it is what lets the same role run on a guest
+  # built from a different template.
+  ansible.builtin.command:
+    argv: [lsb_release, -cs]
+  changed_when: false
+  register: proxcenter_codename
+
+- name: Add Docker's apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: |
+      deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc] {{ proxcenter_docker_apt_repo }} {{ proxcenter_codename.stdout | trim }} stable
+    owner: root
+    group: root
+    mode: "0644"
+  register: proxcenter_docker_repo
+
+- name: Install the Docker engine
+  ansible.builtin.apt:
+    name: "{{ proxcenter_docker_packages }}"
+    state: present
+    update_cache: true
+  register: proxcenter_docker_install
+
+- name: Start the engine and make it survive a reboot
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Read the engine's own version
+  ansible.builtin.command:
+    argv: [docker, --version]
+  changed_when: false
+  register: proxcenter_docker_version
+
+# ---------------------------------------------------------------------------
+# The Compose project
+# ---------------------------------------------------------------------------
+
+- name: Create the project directory
+  ansible.builtin.file:
+    path: "{{ proxcenter_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Fetch the vendor's Compose file at the pinned commit
+  # The checksum is what makes this idempotent: get_url skips the transfer when
+  # the file on disk already hashes to the expected value. Without it the file
+  # is re-downloaded on every play and reported changed.
+  ansible.builtin.get_url:
+    url: "{{ proxcenter_compose_url }}"
+    dest: "{{ proxcenter_compose_file }}"
+    checksum: "sha256:{{ proxcenter_compose_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: proxcenter_compose_fetched
+
+- name: Write the role's overlay
+  # Two edits: the images pinned by digest, and the two `external: true` volumes
+  # replaced with bind mounts. See the template for why both matter.
+  ansible.builtin.template:
+    src: proxcenter-compose.override.j2
+    dest: "{{ proxcenter_compose_override }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: proxcenter_override_written
+
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+#
+# Four of the five credentials are generated here, once, and kept. The role
+# reads the existing .env first and reuses every value it finds, because a
+# regenerated POSTGRES_PASSWORD breaks the database and a regenerated
+# APP_SECRET breaks the stored Proxmox token — silently, in both cases.
+
+- name: Read the existing stack environment
+  ansible.builtin.slurp:
+    src: "{{ proxcenter_env_file }}"
+  register: proxcenter_env_existing
+  failed_when: false
+  changed_when: false
+
+- name: Work out which generated credentials already exist
+  # Parsed here rather than with a lookup, so the values never enter the play's
+  # variable space as a whole file and the ones that are kept are named.
+  #
+  # `regex_findall` returns a list of TUPLES, and `items2dict` requires a list of
+  # dicts — passing the tuples straight through fails with "items2dict requires a
+  # list of dictionaries, got [('APP_SECRET', '…'), …]". The `map('list')` is
+  # what converts each pair, and it is the whole reason this task exists as its
+  # own step rather than inline in the set_fact below.
+  ansible.builtin.set_fact:
+    proxcenter_existing_env: >-
+      {{ dict((proxcenter_env_existing.content | default('') | b64decode)
+              | regex_findall('^([A-Z_]+)=(.*)$', multiline=True)) }}
+
+- name: Generate the credentials that do not exist yet
+  ansible.builtin.set_fact:
+    proxcenter_app_secret: >-
+      {{ proxcenter_existing_env.APP_SECRET
+         | default(lookup('password', '/dev/null length=64 chars=hexdigits'), true) }}
+    proxcenter_nextauth_secret: >-
+      {{ proxcenter_existing_env.NEXTAUTH_SECRET
+         | default(lookup('password', '/dev/null length=64 chars=hexdigits'), true) }}
+    proxcenter_postgres_password: >-
+      {{ proxcenter_existing_env.POSTGRES_PASSWORD
+         | default(lookup('password', '/dev/null length=48 chars=hexdigits'), true) }}
+    proxcenter_setup_token: >-
+      {{ proxcenter_existing_env.PROXCENTER_SETUP_TOKEN
+         | default(lookup('password', '/dev/null length=64 chars=hexdigits'), true) }}
+
+- name: Work out the URL the UI is reached on
+  # A DHCP lease can move; a hostname does not. The name is a role default so
+  # the operator can change it in one place.
+  ansible.builtin.set_fact:
+    proxcenter_public_url: "http://{{ proxcenter_public_host }}:{{ app_port }}"
+
+- name: Write the stack environment
+  # Mode 0600 and root-owned. It holds the four generated credentials, and the
+  # container reads it through Compose's own env_file handling rather than
+  # through a process environment, so no value reaches argv.
+  ansible.builtin.template:
+    src: proxcenter.env.j2
+    dest: "{{ proxcenter_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  register: proxcenter_env_written
+
+- name: Write the Proxmox API token for the operator to paste
+  # The token is NOT part of the stack's environment. ProxCenter stores it in
+  # its own database, encrypted with APP_SECRET, when the first connection is
+  # created in the UI. Writing it here gives the operator one place to read it
+  # from without putting a credential into a container's environment.
+  ansible.builtin.copy:
+    dest: "{{ app_state_dir }}/pve-token"
+    content: "{{ proxcenter_pve_token }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  register: proxcenter_token_written
+
+# ---------------------------------------------------------------------------
+# Data directories
+# ---------------------------------------------------------------------------
+#
+# The frontend container runs as uid 1001 and writes its uploaded branding into
+# /app/data. A bind mount owned by root makes it fail to write, and the symptom
+# is a permission error in the container's log rather than a failed health
+# check.
+#
+# The Postgres directory is deliberately NOT pre-chowned: the postgres image's
+# entrypoint chowns an empty PGDATA itself, and pre-chowning it to 1001 would
+# break it.
+
+- name: Create the frontend data directory
+  ansible.builtin.file:
+    path: "{{ proxcenter_data_dir }}"
+    state: directory
+    owner: "{{ proxcenter_frontend_uid }}"
+    group: "{{ proxcenter_frontend_uid }}"
+    mode: "0750"
+
+- name: Create the Postgres data directory
+  # Owned by the postgres image's own uid (70), NOT by root and NOT by the
+  # frontend's 1001.
+  #
+  # The image's entrypoint chowns an EMPTY PGDATA and then drops to uid 70. On
+  # the first run that is enough. On the second run the directory is no longer
+  # empty, so the chown is skipped — and a root-owned 0700 directory means uid 70
+  # cannot even traverse into it. Measured on vmid 125: the second install left
+  # the stack running with
+  #   FATAL: could not open file "global/pg_filenode.map": Permission denied
+  # and /api/health answering 503 {"db":"unreachable"} while both containers
+  # reported `running`. The role owns the directory so the entrypoint's chown is
+  # a no-op rather than the only thing standing between a reinstall and a
+  # database that cannot be opened.
+  ansible.builtin.file:
+    path: "{{ proxcenter_postgres_dir }}"
+    state: directory
+    owner: "{{ proxcenter_postgres_uid }}"
+    group: "{{ proxcenter_postgres_uid }}"
+    mode: "0700"
+
+# ---------------------------------------------------------------------------
+# The images
+# ---------------------------------------------------------------------------
+
+- name: Pull the frontend image by digest
+  # By digest, not by tag. `--pull never` on the compose invocation below is
+  # what stops a later `up` from fetching the tag the vendor's file names.
+  ansible.builtin.command:
+    argv: [docker, pull, "{{ proxcenter_frontend_image }}"]
+  register: proxcenter_frontend_pull
+  changed_when: "'Downloaded newer image' in proxcenter_frontend_pull.stdout"
+
+- name: Pull the Postgres image by digest
+  ansible.builtin.command:
+    argv: [docker, pull, "{{ proxcenter_postgres_image }}"]
+  register: proxcenter_postgres_pull
+  changed_when: "'Downloaded newer image' in proxcenter_postgres_pull.stdout"
+
+- name: Assert the pulled images are the pinned ones
+  # The pull's own answer, not a stamp file beside it. A digest that does not
+  # match means the registry served something else, and every later assertion
+  # would be about the wrong image.
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{' }} .Id {{ '}}' }}", "{{ item }}"]
+  changed_when: false
+  loop:
+    - "{{ proxcenter_frontend_image }}"
+    - "{{ proxcenter_postgres_image }}"
+  register: proxcenter_image_ids
+
+# ---------------------------------------------------------------------------
+# The service
+# ---------------------------------------------------------------------------
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: proxcenter.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: proxcenter_unit
+
+- name: Reload systemd when the unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: proxcenter_unit.changed | default(false)
+
+- name: Start the stack and make it survive a reboot
+  # Restarted rather than started only when something it is serving actually
+  # changed. Both templates are byte-identical on a settled play, which is what
+  # keeps the steady state at changed=0 instead of bouncing the stack every run.
+  #
+  # The image pulls are in that set: a digest that moved means the running
+  # containers are serving the old build, and the symptom of not restarting is a
+  # UI that reports the new version while running the old code.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (proxcenter_env_written.changed | default(false)
+             or proxcenter_override_written.changed | default(false)
+             or proxcenter_unit.changed | default(false)
+             or proxcenter_frontend_pull.changed | default(false)
+             or proxcenter_postgres_pull.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+
+# ---------------------------------------------------------------------------
+# Postconditions
+# ---------------------------------------------------------------------------
+#
+# A green play that does not prove the stack works is the failure this
+# repository exists to prevent. Every assertion below is the application's own
+# answer about itself, not a count of tasks.
+
+- name: Read the containers the stack is running
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ proxcenter_compose_file }}"
+      - -f
+      - "{{ proxcenter_compose_override }}"
+      - ps
+      - --format
+      - "{{ '{{' }} .Service {{ '}}' }}:{{ '{{' }} .State {{ '}}' }}"
+  args:
+    chdir: "{{ proxcenter_project_dir }}"
+  changed_when: false
+  register: proxcenter_ps
+
+- name: Fail when a container is not running
+  ansible.builtin.fail:
+    msg: >-
+      The stack is not fully up:
+      {{ proxcenter_ps.stdout | default('') | trim | default('no output', true) }}.
+      Read the containers' output with
+      `docker compose -f {{ proxcenter_compose_file }} -f {{ proxcenter_compose_override }} logs`
+      on the guest.
+  when: >-
+    proxcenter_ps.stdout is not search('frontend:running')
+    or proxcenter_ps.stdout is not search('postgres:running')
+
+- name: Wait for the frontend to report itself healthy
+  # /api/health is the compose file's own healthcheck path, and it is exempt
+  # from the HTTPS redirect, so it answers in plain HTTP even with TLS enabled.
+  # The entrypoint applies 75 Prisma migrations and an idempotent seed before
+  # the server binds, so a first boot is minutes.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: proxcenter_health
+  until: proxcenter_health.status | default(0) == 200
+  retries: "{{ (proxcenter_health_timeout | int / 10) | int }}"
+  delay: 10
+  changed_when: false
+
+- name: Assert Postgres is accepting connections
+  # The compose file's own healthcheck, run through the container so it uses the
+  # same credentials the stack does.
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ proxcenter_compose_file }}"
+      - -f
+      - "{{ proxcenter_compose_override }}"
+      - exec
+      - -T
+      - postgres
+      - pg_isready
+      - -U
+      - proxcenter
+      - -d
+      - proxcenter
+  args:
+    chdir: "{{ proxcenter_project_dir }}"
+  changed_when: false
+  register: proxcenter_pg_ready
+
+- name: Assert the database has the schema
+  # The entrypoint applies Prisma migrations before the server starts. A
+  # non-empty _prisma_migrations table is what "the migrations ran" looks like
+  # from outside the container, and it is the difference between a server that
+  # answers /api/health and one that can serve a single page.
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ proxcenter_compose_file }}"
+      - -f
+      - "{{ proxcenter_compose_override }}"
+      - exec
+      - -T
+      - postgres
+      - psql
+      - -U
+      - proxcenter
+      - -d
+      - proxcenter
+      - -tAc
+      - "select count(*) from _prisma_migrations"
+  args:
+    chdir: "{{ proxcenter_project_dir }}"
+  changed_when: false
+  register: proxcenter_migrations
+
+- name: Fail when the database has no schema
+  ansible.builtin.fail:
+    msg: >-
+      _prisma_migrations holds
+      {{ proxcenter_migrations.stdout | default('0') | trim }} rows, so the
+      entrypoint's migration step did not run. Read the frontend container's
+      output with
+      `docker compose -f {{ proxcenter_compose_file }} -f {{ proxcenter_compose_override }} logs frontend`
+      on the guest.
+  when: (proxcenter_migrations.stdout | default('0') | trim | int) < 1
+
+- name: Read the address the guest is reachable on
+  ansible.builtin.shell:
+    cmd: "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1"
+  changed_when: false
+  failed_when: false
+  register: proxcenter_guest_address
+
+- name: Work out whether the controller can reach this guest
+  # The controller can only assert what a network peer can reach, which a
+  # loopback bind denies by design. Everything below is gated on this, so a
+  # lockdown is reported as a lockdown and not as a broken service.
+  ansible.builtin.set_fact:
+    proxcenter_lan_address: "{{ proxcenter_guest_address.stdout | default('') | trim }}"
+    proxcenter_reachable_from_controller: >-
+      {{ proxcenter_bind_host in ['0.0.0.0', '::']
+         and (proxcenter_guest_address.stdout | default('') | trim | length > 0) }}
+
+- name: Assert the UI answers on the guest's own address
+  # A container that answers on 127.0.0.1 and is published on 0.0.0.0 is a green
+  # play with an unreachable service. This is the assertion that catches it.
+  ansible.builtin.uri:
+    url: "http://{{ proxcenter_lan_address }}:{{ app_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: proxcenter_lan_health
+  until: proxcenter_lan_health.status | default(0) == 200
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: proxcenter_reachable_from_controller | bool
+
+- name: Assert the UI answers from the controller
+  # The last hop, and the one that catches a firewall rule Docker bypassed. A
+  # ufw rule that denies a published port reads as applied and enforces nothing;
+  # this is what proves the port is actually reachable from outside the guest.
+  ansible.builtin.uri:
+    url: "http://{{ proxcenter_lan_address }}:{{ app_port }}/api/health"
+    method: GET
+    status_code: 200
+  delegate_to: localhost
+  become: false
+  register: proxcenter_remote_health
+  until: proxcenter_remote_health.status | default(0) == 200
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: proxcenter_reachable_from_controller | bool
+
+# ---------------------------------------------------------------------------
+# The firewall
+# ---------------------------------------------------------------------------
+#
+# A DOCKER-USER rule, not a ufw rule. Docker evaluates its own chains before
+# ufw's INPUT, so a ufw rule on a published port is reported as applied and
+# enforced by nothing. DOCKER-USER is the chain Docker documents for exactly
+# this, and it is evaluated before the DNAT that publishes the port.
+
+- name: Read the current DOCKER-USER rules
+  ansible.builtin.command:
+    argv: [iptables, -S, DOCKER-USER]
+  changed_when: false
+  failed_when: false
+  register: proxcenter_docker_user_rules
+  when:
+    - proxcenter_manage_firewall | bool
+    - proxcenter_bind_host not in ['127.0.0.1', '::1']
+
+- name: Restrict the published port to the LAN
+  # Inserted at the top of DOCKER-USER so it is evaluated before any rule a
+  # later container might add. The RETURN at the end is what lets traffic that
+  # is not for this port continue to the rest of the chain.
+  ansible.builtin.command:
+    argv:
+      - iptables
+      - -I
+      - DOCKER-USER
+      - "1"
+      - -p
+      - tcp
+      - --dport
+      - "{{ app_port }}"
+      - "!"
+      - -s
+      - "{{ proxcenter_lan_cidr }}"
+      - -j
+      - DROP
+  changed_when: true
+  when:
+    - proxcenter_manage_firewall | bool
+    - proxcenter_bind_host not in ['127.0.0.1', '::1']
+    - proxcenter_docker_user_rules.stdout is not search('dport ' ~ app_port)
+
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "docker engine: {{ proxcenter_docker_version.stdout | default('unknown') | trim }}"
+      - "frontend image: {{ proxcenter_frontend_image | regex_replace('^.*@', '') }}"
+      - "postgres image: {{ proxcenter_postgres_image | regex_replace('^.*@', '') }}"
+      - "containers: {{ proxcenter_ps.stdout | default('') | trim | replace('\n', ', ') }}"
+      - "health /api/health: HTTP {{ proxcenter_health.status | default('?') }}"
+      - "postgres pg_isready: {{ 'ok' if proxcenter_pg_ready.rc | default(1) == 0 else 'failed' }}"
+      - "prisma migrations applied: {{ proxcenter_migrations.stdout | default('0') | trim }}"
+      - "reachable from controller: {{ proxcenter_reachable_from_controller | bool }}"
+      - "firewall: {{ 'DOCKER-USER ' ~ proxcenter_lan_cidr if proxcenter_manage_firewall | bool and proxcenter_bind_host not in ['127.0.0.1', '::1'] else 'not applied' }}"
