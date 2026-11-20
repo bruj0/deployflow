@@ -65,6 +65,7 @@ PAGES: dict[str, str] = {
     "apps/builder/README.md": "apps/builder.md",
     "apps/xerj/README.md": "apps/xerj.md",
     "apps/homarr/README.md": "apps/homarr.md",
+    "apps/aurral/README.md": "apps/aurral.md",
     "apps/omniroute/docs/BUILDING-FROM-SOURCE.md": "apps/omniroute-building-from-source.md",
 }
 
@@ -76,6 +77,7 @@ DIRECTORY_DOCS: dict[str, str | None] = {
     "apps/builder": "apps/builder.md",
     "apps/xerj": "apps/xerj.md",
     "apps/homarr": "apps/homarr.md",
+    "apps/aurral": "apps/aurral.md",
     "docs": "reference/index.md",
 }
 
@@ -90,6 +92,16 @@ ASSETS: dict[str, str] = {
     "docs/diagrams/deployflow-anatomy.html": "assets/diagrams/deployflow-anatomy.html",
     "docs/diagrams/deployflow-current-state.png": "assets/diagrams/deployflow-current-state.png",
     "docs/diagrams/deployflow-current-state.html": "assets/diagrams/deployflow-current-state.html",
+    # The vendored diagram viewer. Mermaid is pinned by version and sha256, and
+    # the site must not fetch a diagram renderer from a CDN at page load.
+    "docs/media/mermaid.min.js": "media/mermaid.min.js",
+    "docs/media/mermaid.LICENSE.txt": "media/mermaid.LICENSE.txt",
+    "docs/media/mermaid-theme-patch.js": "media/mermaid-theme-patch.js",
+    "docs/media/mermaid-card.css": "media/mermaid-card.css",
+    "docs/media/panzoom.min.js": "media/panzoom.min.js",
+    "docs/media/panzoom.LICENSE.txt": "media/panzoom.LICENSE.txt",
+    "docs/media/diagram-zoom.js": "media/diagram-zoom.js",
+    "docs/media/diagram-zoom.css": "media/diagram-zoom.css",
 }
 
 # Resolved repository paths that live outside this repository.

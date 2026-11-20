@@ -43,10 +43,29 @@ theme:
 
 plugins:
   - search
-  - panzoom:
-      key: "alt"
-      hint_location: "top"
-      full_screen: true
+
+# The diagram viewer is vendored, not a plugin and not a CDN. A plugin owns
+# the markup it wraps, and a CDN makes the site's diagrams depend on a third
+# party's uptime. The order below is load order and it matters: a script that
+# runs before its library finds no global and returns early.
+#
+#   mermaid.min.js       defines window.mermaid, which Material checks for
+#                        before it would fetch Mermaid from a CDN
+#   mermaid-theme-patch  corrects the label colours inside the closed shadow
+#                        root Material creates, which no stylesheet can reach
+#   panzoom.min.js       @panzoom/panzoom, the library the viewer drives
+#   diagram-zoom.js      the viewer itself
+extra_javascript:
+  - media/mermaid.min.js
+  - media/mermaid-theme-patch.js
+  - media/panzoom.min.js
+  - media/diagram-zoom.js
+
+extra_css:
+  # The fixed light card around each diagram.
+  - media/mermaid-card.css
+  # The viewer's own styles.
+  - media/diagram-zoom.css
 
 markdown_extensions:
   - admonition
@@ -94,4 +113,5 @@ nav:
       - builder: apps/builder.md
       - xerj: apps/xerj.md
       - homarr: apps/homarr.md
+      - aurral: apps/aurral.md
       - Building OmniRoute from source: apps/omniroute-building-from-source.md

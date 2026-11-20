@@ -15,6 +15,11 @@ What happens when you run `appctl install`. One question per diagram: what
 happens, in order; then where a secret goes.
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 200
+---
 flowchart TD
     CFG["app.yaml<br/>the one configuration file"]
     LOAD["config.load<br/>parse and validate"]

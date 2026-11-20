@@ -10,6 +10,7 @@ nowhere, and a link inside a code sample that must not be touched.
 from __future__ import annotations
 
 import fnmatch
+import functools
 import importlib.util
 import re
 import subprocess
@@ -103,6 +104,121 @@ class TestFrontmatter:
             ".agents/skills/deployflow-add-app/SKILL.md", "project/add-app-skill.md", text
         )
         assert result.startswith("# Heading")
+
+
+class TestDiagramAssets:
+    """The diagram renderer and its viewer are vendored, not fetched.
+
+    Three failures hide behind a site that still builds: a script that loads
+    before the library it uses, a Mermaid bundle that quietly changes, and a
+    Mermaid that measures a label box too narrow for its text. All three
+    render a page that looks nearly right.
+    """
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def site_config():
+        import yaml
+
+        class Loader(yaml.SafeLoader):
+            """MkDocs uses a Python tag for a fence formatter; keep it as text."""
+
+        Loader.add_multi_constructor(
+            "tag:yaml.org,2002:python/name:", lambda loader, suffix, node: suffix
+        )
+        return yaml.load(
+            (REPO_ROOT / "mkdocs.yml").read_text(encoding="utf-8"), Loader=Loader
+        )
+
+    def test_the_zoom_plugin_is_gone(self):
+        """A plugin owns the markup it wraps, so the viewer must not be one."""
+        names = [
+            name for name in self.site_config().get("plugins", []) if isinstance(name, str)
+        ]
+        assert "panzoom" not in names
+
+    def test_the_vendor_is_not_declared(self):
+        declared = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        assert "mkdocs-panzoom-plugin" not in declared
+
+    def test_the_scripts_load_in_order(self):
+        """A script that runs before its library finds no global."""
+        scripts = self.site_config().get("extra_javascript", [])
+        assert scripts == [
+            "media/mermaid.min.js",
+            "media/mermaid-theme-patch.js",
+            "media/panzoom.min.js",
+            "media/diagram-zoom.js",
+        ], scripts
+
+    def test_the_stylesheets_load_in_order(self):
+        assert self.site_config().get("extra_css", []) == [
+            "media/mermaid-card.css",
+            "media/diagram-zoom.css",
+        ]
+
+    def test_mermaid_is_pinned_to_the_documented_build(self):
+        import hashlib
+
+        bundle = REPO_ROOT / "docs" / "media" / "mermaid.min.js"
+        digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+        assert digest == "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f"
+
+    def test_every_vendored_file_keeps_its_licence(self):
+        media = REPO_ROOT / "docs" / "media"
+        for bundle in ("mermaid.min.js", "panzoom.min.js"):
+            licence = media / (bundle.replace(".min.js", ".LICENSE.txt"))
+            assert licence.is_file(), licence
+
+    def test_every_documented_application_has_a_page(self):
+        """An application with a README but no page is invisible on the site."""
+        documented = {
+            p.parent.name
+            for p in (REPO_ROOT / "apps").glob("*/README.md")
+        }
+        pages = {
+            path.split("/")[-1][:-3]
+            for path in generator.PAGES.values()
+            if path.startswith("apps/")
+        }
+        missing = sorted(documented - pages)
+        assert not missing, missing
+
+
+class TestDiagramLabels:
+    """A Mermaid label box must be at least as wide as the text in it.
+
+    Mermaid 12 lowered the default `wrappingWidth` from 200 to 120, and
+    Material's own theme CSS forces `overflow: visible` on the label's
+    foreign object. A box narrower than its text therefore spills the text
+    out of the node and over its neighbour, and nothing in the build says
+    so.
+
+    The fix is in the diagram source, so the check is on the source: every
+    flowchart that draws a node label carries the width it needs.
+    """
+
+    BLOCK = re.compile(r"```mermaid\n(.*?)```", re.DOTALL)
+
+    @pytest.mark.parametrize(
+        "document",
+        ["docs/architecture.md", "docs/rendering.md", "essay/software-delivery-needs-a-harness.md"],
+    )
+    def test_a_flowchart_declares_a_label_width(self, document):
+        text = (REPO_ROOT / document).read_text(encoding="utf-8")
+        blocks = [block for block in self.BLOCK.findall(text) if "flowchart" in block]
+        for block in blocks:
+            assert "wrappingWidth: 200" in block, f"{document} has a flowchart without a label width"
+
+    def test_no_flowchart_is_left_at_the_narrower_default(self):
+        """`wrappingWidth` absent means Mermaid 12 measures at 120."""
+        offenders = []
+        for document in sorted(REPO_ROOT.glob("docs/*.md")) + sorted(REPO_ROOT.glob("essay/*.md")):
+            text = document.read_text(encoding="utf-8")
+            for block in self.BLOCK.findall(text):
+                if "flowchart" in block and "wrappingWidth" not in block:
+                    offenders.append(document.name)
+        assert not offenders, offenders
 
 
 @pytest.fixture(scope="module")

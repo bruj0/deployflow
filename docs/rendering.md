@@ -6,6 +6,11 @@ why there is no per-application code.
 ## The path
 
 ```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 200
+---
 flowchart TD
     YAML["apps/app/config.yml<br/>committed"]
     RENDER["appctl render<br/>substitutes double-brace names"]

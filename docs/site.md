@@ -94,9 +94,43 @@ Mermaid blocks are rendered by Material's lazy loader, which replaces a
 package supplies that element — the stock superfences formatter wraps the
 diagram in `<code>`, and Mermaid cannot parse through the wrapper.
 
-The renderer loads Mermaid from a CDN at runtime, so a diagram needs the
-network. Every diagram in this repository is also readable as text, which is
-what a reader without the CDN gets.
+Material loads Mermaid from a CDN at render time unless `window.mermaid` is
+already defined. This site vendors the renderer instead, pinned to **Mermaid
+12.2.0** by version and sha256, so a diagram does not depend on a third
+party's uptime and the site renders the same on every visit. The bundle and
+its MIT licence live in `docs/media/` and the generator copies them into
+`site_src/media/`.
+
+Two further files sit beside it:
+
+- `mermaid-theme-patch.js` corrects the label colours inside the **closed**
+  shadow root Material creates for each diagram. A site stylesheet cannot
+  reach those rules, so the patch wraps `mermaid.initialize` and appends the
+  correction to the same `themeCSS` Material injects.
+- `mermaid-card.css` gives each diagram a light surface in both colour
+  schemes, so the corrected dark labels stay legible when the reader switches
+  to the slate scheme.
+
+### The pan and zoom viewer
+
+`diagram-zoom.js` puts a full-screen viewer behind every diagram: an
+`Expand` button above it, and a click on the diagram itself. The viewer
+opens the SVG in an overlay that pans and zooms, so a wide diagram can be
+read at its far edge instead of only at the size the page allows.
+
+The viewer and its library are **vendored**, not a plugin and not a CDN:
+
+- a plugin owns the markup it wraps, so changing the gesture or the overlay
+  means forking someone else's plugin;
+- a CDN script makes the site's diagrams fail when a third party is
+  unreachable, which is an outage this repository cannot fix.
+
+The zoom library is `@panzoom/panzoom` 4.6.2, MIT, with its licence kept
+beside it in `docs/media/`.
+
+The load order in `mkdocs.yml` is load order, and it matters. A consuming
+script that runs before its library finds no global and returns early, which
+looks exactly like a script that does nothing.
 
 ## Publishing
 

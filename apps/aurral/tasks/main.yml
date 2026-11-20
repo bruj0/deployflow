@@ -1,0 +1,670 @@
+---
+# Aurral, the self-hosted music app, as one container on one guest.
+#
+# This role installs the container engine, one pinned image and a Compose
+# project it writes itself. It builds nothing and fetches no artifact from a
+# branch: the image is pinned by digest and the Compose file is a template in
+# this role.
+#
+# Everything the application writes lives under app_state_dir, which
+# common/python creates once and neither role touches again. Redeploying
+# therefore never discards the database, the users, the settings or the
+# imported playlists.
+#
+# This role assumes common/python has already run for the same application.
+
+# ---------------------------------------------------------------------------
+# The pin
+# ---------------------------------------------------------------------------
+
+- name: Refuse to install a release the manifest does not name
+  # The manifest says where the application comes from and the role says what it
+  # installs. Those are two files, and they drift — which is exactly how
+  # omniroute-release ended up pinned to 3.8.51 while the manifest named
+  # 3.8.53.
+  #
+  # `appctl` passes the manifest's pin in as appctl_source_* so this cannot
+  # pass silently. The `==` form is what appctl splits, so the manifest has to
+  # use it.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == 'aurral'
+      - appctl_source_version == aurral_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs aurral=={{ aurral_version }}. Change one of them.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The guest can host the container
+# ---------------------------------------------------------------------------
+#
+# Asserted before anything is installed. A guest that is too small does not fail
+# at install — it fails later, when the container is OOM-killed, with a message
+# that names a process rather than the guest.
+
+- name: Read the guest's memory and core count
+  ansible.builtin.set_fact:
+    aurral_guest_memory_mb: "{{ ansible_memtotal_mb | int }}"
+    aurral_guest_cores: "{{ ansible_processor_vcpus | int }}"
+
+- name: Refuse a guest that cannot host the container
+  ansible.builtin.assert:
+    that:
+      - aurral_guest_memory_mb | int >= aurral_min_memory_mb | int
+      - aurral_guest_cores | int >= aurral_min_cores | int
+    fail_msg: >-
+      This guest has {{ aurral_guest_memory_mb }} MB and
+      {{ aurral_guest_cores }} cores; Aurral needs at least
+      {{ aurral_min_memory_mb }} MB and {{ aurral_min_cores }} cores.
+      Raise lxc_memory / lxc_cores in inventory/group_vars/{{ group_names | first }}/main.yml
+      and re-run.
+    quiet: true
+
+- name: Read the free space on the root filesystem
+  # `-BG` prints a unit suffix, so the value is stripped before it is compared.
+  # `df --output` also prints a header row above the value, which is why the
+  # value is stdout_lines[1] and not the whole of stdout.
+  ansible.builtin.command:
+    argv: [df, --output=avail, -BG, /]
+  changed_when: false
+  register: aurral_df
+
+- name: Refuse a guest with no room for the image and the database
+  ansible.builtin.assert:
+    that:
+      - (aurral_df.stdout_lines[1] | trim | regex_replace('G$', '') | int) >= aurral_min_free_gb | int
+    fail_msg: >-
+      / has {{ aurral_df.stdout_lines[1] | trim }} free; Aurral needs at least
+      {{ aurral_min_free_gb }} GB for the image layers and the database.
+      Raise lxc_rootfs_gb and re-run.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The engine
+# ---------------------------------------------------------------------------
+#
+# Docker CE from Docker's own apt repository. The role installs; it does not
+# uninstall. A guest that already has a container runtime keeps it.
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker's apt signing key
+  ansible.builtin.get_url:
+    url: "{{ aurral_docker_apt_key_url }}"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the guest's distribution codename
+  # The repo path carries the codename, and Ubuntu 26.04 is `resolute`. Reading
+  # it rather than hard-coding it is what lets the same role run on a guest
+  # built from a different template.
+  ansible.builtin.command:
+    argv: [lsb_release, -cs]
+  changed_when: false
+  register: aurral_codename
+
+- name: Add Docker's apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: |
+      deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc] {{ aurral_docker_apt_repo }} {{ aurral_codename.stdout | trim }} stable
+    owner: root
+    group: root
+    mode: "0644"
+  register: aurral_docker_repo
+
+- name: Install the Docker engine
+  ansible.builtin.apt:
+    name: "{{ aurral_docker_packages }}"
+    state: present
+    update_cache: true
+  register: aurral_docker_install
+
+- name: Start the engine and make it survive a reboot
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Read the engine's own version
+  ansible.builtin.command:
+    argv: [docker, --version]
+  changed_when: false
+  register: aurral_docker_version
+
+# ---------------------------------------------------------------------------
+# The data directories
+# ---------------------------------------------------------------------------
+#
+# Two directories, and the separation is the point.
+#
+# /config holds Aurral's own state: the database, the settings, the users and
+# the job queue. It also holds every stored integration credential, encrypted
+# with a key Aurral derives. A media server that can read it can read those
+# credentials, so it is never the same directory as the music.
+#
+# /data holds the music, and is the directory a second service has to share.
+
+- name: Create the state directory for the database
+  ansible.builtin.file:
+    path: "{{ aurral_config_dir }}"
+    state: directory
+    owner: "{{ aurral_uid }}"
+    group: "{{ aurral_gid }}"
+    mode: "0750"
+
+- name: Create the media directory
+  ansible.builtin.file:
+    path: "{{ aurral_media_dir }}/downloads/aurral"
+    state: directory
+    owner: "{{ aurral_uid }}"
+    group: "{{ aurral_gid }}"
+    mode: "0775"
+
+# ---------------------------------------------------------------------------
+# The admin API key
+# ---------------------------------------------------------------------------
+#
+# Generated on the guest once and kept. Aurral refuses to start when
+# AURRAL_API_KEY is set and shorter than 32 characters, and the key is the
+# admin API credential, so it lives in the environment file and never in the
+# compose file.
+#
+# The role reads the existing file before writing it. A regenerated key does
+# not fail the install — it invalidates every script that authenticates with
+# the old one, silently, with the symptom "the API key stopped working" rather
+# than "the install failed".
+
+- name: Read the existing container environment
+  ansible.builtin.slurp:
+    src: "{{ aurral_env_file }}"
+  register: aurral_env_existing
+  failed_when: false
+  changed_when: false
+
+- name: Work out which generated credentials already exist
+  # Parsed here rather than with a lookup, so the values never enter the play's
+  # variable space as a whole file and the ones that are kept are named.
+  #
+  # `regex_findall` returns a list of TUPLES, and `dict()` accepts them directly
+  # — unlike `items2dict`, which requires a list of dicts and fails with
+  # "items2dict requires a list of dictionaries, got [('KEY', '…'), …]".
+  ansible.builtin.set_fact:
+    aurral_existing_env: >-
+      {{ dict((aurral_env_existing.content | default('') | b64decode)
+              | regex_findall('^([A-Z_]+)=(.*)$', multiline=True)) }}
+
+- name: Generate the admin API key when it does not exist yet
+  # Hex, not base64: it is an API key and a hex string is safe in an env file,
+  # a URL and a shell without quoting. The length is aurral_api_key_length,
+  # which is above Aurral's own 32-character floor.
+  ansible.builtin.set_fact:
+    aurral_api_key: >-
+      {{ aurral_existing_env.AURRAL_API_KEY
+         | default(lookup('password', '/dev/null length=' ~ aurral_api_key_length
+                           ~ ' chars=0123456789abcdef'), true) }}
+
+- name: Fail when the admin API key is too short for Aurral to start
+  # Aurral refuses to boot on a short key with a message that names the
+  # variable. Asserting it here names the cause instead, and the key was
+  # generated by this role, so this should never fire.
+  ansible.builtin.assert:
+    that:
+      - aurral_api_key | string | length >= 32
+    fail_msg: >-
+      AURRAL_API_KEY is {{ aurral_api_key | string | length }} characters
+      long. Aurral requires at least 32 and refuses to start on a shorter one.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The Compose project
+# ---------------------------------------------------------------------------
+
+- name: Create the project directory
+  ansible.builtin.file:
+    path: "{{ aurral_project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the Compose project
+  ansible.builtin.template:
+    src: aurral-compose.j2
+    dest: "{{ aurral_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: aurral_compose_written
+
+- name: Write the container environment
+  # Mode 0600 and root-owned. It holds the admin API key, and the container
+  # reads it through Compose's own env_file handling rather than through a
+  # process environment, so no value reaches argv.
+  ansible.builtin.template:
+    src: aurral.env.j2
+    dest: "{{ aurral_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  register: aurral_env_written
+
+# ---------------------------------------------------------------------------
+# The image
+# ---------------------------------------------------------------------------
+
+- name: Pull the image by digest
+  # By digest, not by tag. `--pull never` on the compose invocation below is
+  # what stops a later `up` from fetching the tag the compose file names.
+  ansible.builtin.command:
+    argv: [docker, pull, "{{ aurral_image }}"]
+  register: aurral_image_pull
+  changed_when: "'Downloaded newer image' in aurral_image_pull.stdout"
+
+- name: Read the digests the guest holds for the image
+  # RepoDigests, NOT .Id. The pinned digest is an OCI INDEX digest — one entry
+  # covering amd64 and arm64 — and `docker pull` resolves it to the manifest
+  # for this platform. `.Id` is therefore the platform manifest's digest, which
+  # is a different string from the one this role pins, and comparing the two
+  # fails on a perfectly correct pull. RepoDigests records the index digest
+  # that was actually requested, which is the thing that was reviewed.
+  ansible.builtin.command:
+    argv: [docker, image, inspect, --format, "{{ '{{' }} json .RepoDigests {{ '}}' }}", "{{ aurral_image }}"]
+  changed_when: false
+  register: aurral_image_digests
+
+- name: Fail when the image on the guest is not the pinned digest
+  ansible.builtin.assert:
+    that:
+      - aurral_image in (aurral_image_digests.stdout | from_json)
+    fail_msg: >-
+      The guest holds {{ aurral_image_digests.stdout | default('nothing') | trim }},
+      which does not include the pinned {{ aurral_image }}. The registry served
+      a different build than the one that was reviewed.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The service
+# ---------------------------------------------------------------------------
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: aurral.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: aurral_unit
+
+- name: Reload systemd when the unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: aurral_unit.changed | default(false)
+
+- name: Start the container and make it survive a reboot
+  # Restarted rather than started only when something it is serving actually
+  # changed. Both templates are byte-identical on a settled play, which is what
+  # keeps the steady state at changed=0 instead of bouncing the container every
+  # run.
+  #
+  # The image pull is in that set: a digest that moved means the running
+  # container is serving the old build, and the symptom of not restarting is an
+  # app that reports the new version while running the old code.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (aurral_env_written.changed | default(false)
+             or aurral_compose_written.changed | default(false)
+             or aurral_unit.changed | default(false)
+             or aurral_image_pull.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+
+# ---------------------------------------------------------------------------
+# Postconditions
+# ---------------------------------------------------------------------------
+#
+# A green play that does not prove the container works is the failure this
+# repository exists to prevent. Every assertion below is the application's own
+# answer about itself, not a count of tasks.
+
+- name: Read the container the stack is running
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ aurral_compose_file }}"
+      - ps
+      - --format
+      - "{{ '{{' }} .Service {{ '}}' }}:{{ '{{' }} .State {{ '}}' }}"
+  args:
+    chdir: "{{ aurral_project_dir }}"
+  changed_when: false
+  register: aurral_ps
+
+- name: Fail when the container is not running
+  ansible.builtin.fail:
+    msg: >-
+      The container is not running:
+      {{ aurral_ps.stdout | default('') | trim | default('no output', true) }}.
+      Read its output with
+      `docker compose -f {{ aurral_compose_file }} logs` on the guest.
+  when: aurral_ps.stdout is not search('aurral:running')
+
+- name: Wait for Aurral to report itself alive
+  # /api/health/live is Aurral's own liveness endpoint. It answers 200 with
+  # {"status":"ok"} once the server is serving, so a 200 here is the
+  # application's own statement that it can serve — not merely that a process
+  # is listening.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/api/health/live"
+    method: GET
+    status_code: 200
+  register: aurral_health
+  until: aurral_health.status | default(0) == 200
+  retries: "{{ (aurral_health_timeout | int / 10) | int }}"
+  delay: 10
+  changed_when: false
+
+- name: Read the version Aurral reports for itself
+  # The bootstrap endpoint is public and carries the app version and the API
+  # version. Reading it proves the running container is the build that was
+  # installed, not a container left over from an earlier play.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_port }}/api/health/bootstrap"
+    method: GET
+    status_code: 200
+  register: aurral_bootstrap
+  changed_when: false
+
+- name: Read the address the guest is reachable on
+  ansible.builtin.shell:
+    cmd: "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1"
+  changed_when: false
+  failed_when: false
+  register: aurral_guest_address
+
+- name: Work out whether the controller can reach this guest
+  # The controller can only assert what a network peer can reach, which a
+  # loopback bind denies by design. Everything below is gated on this, so a
+  # lockdown is reported as a lockdown and not as a broken service.
+  ansible.builtin.set_fact:
+    aurral_lan_address: "{{ aurral_guest_address.stdout | default('') | trim }}"
+    aurral_reachable_from_controller: >-
+      {{ aurral_bind_host in ['0.0.0.0', '::']
+         and (aurral_guest_address.stdout | default('') | trim | length > 0) }}
+
+- name: Assert Aurral answers on the guest's own address
+  # A container that answers on 127.0.0.1 and is published on 0.0.0.0 is a
+  # green play with an unreachable service. This is the assertion that catches
+  # it.
+  ansible.builtin.uri:
+    url: "http://{{ aurral_lan_address }}:{{ app_port }}/api/health/live"
+    method: GET
+    status_code: 200
+  register: aurral_lan_health
+  until: aurral_lan_health.status | default(0) == 200
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: aurral_reachable_from_controller | bool
+
+- name: Assert Aurral answers from the controller
+  # The last hop, and the one that catches a firewall rule Docker bypassed. A
+  # ufw rule that denies a published port reads as applied and enforces
+  # nothing; this is what proves the port is actually reachable from outside
+  # the guest.
+  ansible.builtin.uri:
+    url: "http://{{ aurral_lan_address }}:{{ app_port }}/api/health/live"
+    method: GET
+    status_code: 200
+  delegate_to: localhost
+  changed_when: false
+  when: aurral_reachable_from_controller | bool
+
+- name: Assert the database was created in the state directory
+  # The container's own state. A container that answers but has no database
+  # means the /config mount is not the one the server is using, and every
+  # account would be gone on the next restart.
+  ansible.builtin.stat:
+    path: "{{ aurral_config_dir }}/aurral.db"
+  register: aurral_db_stat
+
+- name: Fail when the database is not in the state directory
+  ansible.builtin.fail:
+    msg: >-
+      {{ aurral_config_dir }}/aurral.db does not exist. The container is
+      serving but its state is not where the role put it. Read the server's own
+      view with `docker compose -f {{ aurral_compose_file }} logs` on the guest.
+  when: not aurral_db_stat.stat.exists
+
+# ---------------------------------------------------------------------------
+# The firewall
+# ---------------------------------------------------------------------------
+#
+# A DOCKER-USER rule, not a ufw rule. Docker evaluates its own chains before
+# ufw's INPUT, so a ufw rule on a published port is reported as applied and
+# enforced by nothing. DOCKER-USER is the chain Docker documents for exactly
+# this, and it is evaluated before the DNAT that publishes the port.
+
+- name: Read the current DOCKER-USER rules
+  ansible.builtin.command:
+    argv: [iptables, -S, DOCKER-USER]
+  changed_when: false
+  failed_when: false
+  register: aurral_docker_user_rules
+  when:
+    - aurral_manage_firewall | bool
+    - aurral_bind_host not in ['127.0.0.1', '::1']
+
+- name: Restrict the published port to the LAN
+  # Inserted at the top of DOCKER-USER so it is evaluated before any rule a
+  # later container might add. The RETURN at the end is what lets traffic that
+  # is not for this port continue to the rest of the chain.
+  ansible.builtin.command:
+    argv:
+      - iptables
+      - -I
+      - DOCKER-USER
+      - "1"
+      - -p
+      - tcp
+      - --dport
+      - "{{ app_port }}"
+      - "!"
+      - -s
+      - "{{ aurral_lan_cidr }}"
+      - -j
+      - DROP
+  changed_when: true
+  when:
+    - aurral_manage_firewall | bool
+    - aurral_bind_host not in ['127.0.0.1', '::1']
+    - aurral_docker_user_rules.stdout is not search('dport ' ~ app_port)
+
+# ---------------------------------------------------------------------------
+# The Cloudflare tunnel
+# ---------------------------------------------------------------------------
+#
+# A named tunnel for the public hostname. It is a SEPARATE connector from the
+# one inside Aurral's image: that one exists for Aurral's file-sharing
+# feature, which opens a quick tunnel for a share and closes it when the share
+# ends. A permanent tunnel for a permanent hostname is a different thing.
+#
+# The connector runs on this guest rather than on the guest that already
+# serves the other hostnames, so it does not depend on that guest, and so the
+# origin is the guest that owns the service.
+#
+# The tunnel is LOCALLY managed: cloudflared reads its ingress from the file
+# this role writes. A remotely managed tunnel has its configuration pushed by
+# the edge, and the local file is overwritten within a second of the connector
+# starting.
+
+- name: Refuse to enable the tunnel without its credentials
+  # The tunnel token is a live credential for the life of the connector. A
+  # connector without one starts, fails to authenticate, and retries forever
+  # while the hostname stays dead — a green play over a broken service. The
+  # message names the secret to set rather than leaving it to the connector's
+  # own log.
+  ansible.builtin.assert:
+    that:
+      - aurral_tunnel_token | default('') | string | length > 0
+      - aurral_tunnel_id | default('') | string | length > 0
+    fail_msg: >-
+      The tunnel is enabled but its credentials are empty. Set them with
+      `appctl secrets set aurral_tunnel_token '<token>'` and put the tunnel's
+      id in aurral_tunnel_id, or turn aurral_tunnel_enabled off.
+    quiet: true
+  when: aurral_tunnel_enabled | bool
+
+- name: Install the cloudflared binary
+  # Pinned by version and by the sha256 the release publishes. The binary is
+  # fetched onto the guest rather than taken from the Aurral image: the image's
+  # copy exists for Aurral's own file sharing, and a connector that reports
+  # its own version is a connector whose version can be asserted.
+  #
+  # `get_url` with a checksum is also what makes the download idempotent: it
+  # skips the transfer when the file on disk already hashes to the expected
+  # value, so a second run reports unchanged.
+  ansible.builtin.get_url:
+    url: "{{ aurral_cloudflared_url }}"
+    dest: "{{ aurral_cloudflared_bin }}"
+    owner: root
+    group: root
+    mode: "0755"
+    checksum: "sha256:{{ aurral_cloudflared_sha256 }}"
+  register: aurral_cloudflared_download
+  when: aurral_tunnel_enabled | bool
+
+- name: Read the cloudflared version on the guest
+  ansible.builtin.command:
+    argv: ["{{ aurral_cloudflared_bin }}", --version]
+  changed_when: false
+  register: aurral_cloudflared_version_out
+  when: aurral_tunnel_enabled | bool
+
+- name: Create the tunnel configuration directory
+  ansible.builtin.file:
+    path: "{{ aurral_tunnel_config_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: aurral_tunnel_enabled | bool
+
+- name: Install the cloudflared tunnel configuration
+  # The origin is the guest's own loopback, and the hostname is the one the
+  # DNS record points at. The catch-all at the end returns 404 rather than
+  # proxying an unmatched request somewhere.
+  ansible.builtin.template:
+    src: aurral-tunnel.j2
+    dest: "{{ aurral_tunnel_config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: aurral_tunnel_config_written
+  when: aurral_tunnel_enabled | bool
+
+- name: Install the tunnel token as the connector's environment
+  # The token is delivered through an EnvironmentFile, not through argv. A
+  # token on the command line is visible in ps to every process on the guest
+  # for the life of the connector.
+  #
+  # Mode 0600, owner root. systemd reads an EnvironmentFile as PID 1, so the
+  # file is root-owned and the connector does not need to read it at all.
+  ansible.builtin.copy:
+    content: "TUNNEL_TOKEN={{ aurral_tunnel_token }}\n"
+    dest: "{{ app_dir }}/cloudflared/tunnel.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  register: aurral_tunnel_env_written
+  when: aurral_tunnel_enabled | bool
+
+- name: Install the cloudflared systemd unit
+  ansible.builtin.template:
+    src: aurral-tunnel.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}-tunnel.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: aurral_tunnel_unit
+  when: aurral_tunnel_enabled | bool
+
+- name: Reload systemd when the tunnel unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - aurral_tunnel_enabled | bool
+    - aurral_tunnel_unit.changed | default(false)
+
+- name: Start the tunnel and make it survive a reboot
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}-tunnel"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (aurral_tunnel_config_written.changed | default(false)
+             or aurral_tunnel_env_written.changed | default(false)
+             or aurral_tunnel_unit.changed | default(false)
+             or aurral_cloudflared_download.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+  when: aurral_tunnel_enabled | bool
+
+- name: Wait for the tunnel connector to register
+  # The connector logs a registered connection per edge it holds. A connector
+  # that started but cannot authenticate logs a different line, so this waits
+  # for the registration rather than for the process to exist.
+  ansible.builtin.command:
+    argv: [journalctl, -u, "{{ app_service_name }}-tunnel", --no-pager, -n, "50"]
+  changed_when: false
+  failed_when: false
+  register: aurral_tunnel_log
+  retries: 12
+  delay: 5
+  until: aurral_tunnel_log.stdout is search('Registered tunnel connection')
+
+- name: Assert the connector registered with Cloudflare
+  ansible.builtin.fail:
+    msg: >-
+      The tunnel connector did not register with Cloudflare. Read its output
+      with `journalctl -u {{ app_service_name }}-tunnel` on the guest.
+  when: aurral_tunnel_log.stdout is not search('Registered tunnel connection')
+
+# ---------------------------------------------------------------------------
+# The report
+# ---------------------------------------------------------------------------
+
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "docker engine: {{ aurral_docker_version.stdout | default('unknown') | trim }}"
+      - "image: {{ aurral_image | regex_replace('^.*@', '') }}"
+      - "version: {{ aurral_version }}"
+      - "container: {{ aurral_ps.stdout | default('') | trim }}"
+      - "health /api/health/live: HTTP {{ aurral_health.status | default('?') }}"
+      - "app version reported: {{ aurral_bootstrap.json.appVersion | default('unknown') }}"
+      - "database: {{ aurral_config_dir }}/aurral.db"
+      - "media: {{ aurral_media_dir }} (Library at /data/downloads/aurral)"
+      - "reachable from controller: {{ aurral_reachable_from_controller | bool }}"
+      - "firewall: {{ 'DOCKER-USER ' ~ aurral_lan_cidr if aurral_manage_firewall | bool and aurral_bind_host not in ['127.0.0.1', '::1'] else 'not applied' }}"
+      - "tunnel: {{ aurral_tunnel_hostname if aurral_tunnel_enabled | bool else 'not enabled' }}"

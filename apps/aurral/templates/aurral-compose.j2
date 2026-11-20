@@ -1,0 +1,46 @@
+# Aurral — the Compose project this role owns.
+#
+# Aurral publishes no Compose file to fetch: its documentation gives an inline
+# snippet, so there is nothing to pin by commit and checksum the way proxcenter
+# pins the vendor's file. The whole project is written here instead.
+#
+# Four things are load-bearing:
+#
+#   1. the image is pinned by DIGEST, so `docker compose up` cannot fetch a
+#      different build than this role verified;
+#   2. /config and /data are SEPARATE BIND MOUNTS under app_state_dir, not
+#      Docker named volumes. A named volume lives in /var/lib/docker on the
+#      guest's rootfs, where a backup cannot see it and a rebuilt guest
+#      destroys it. /config holds the database, the settings, the users and the
+#      job queue; /data holds the music;
+#   3. the environment comes from a file, not from `environment:` entries, so
+#      the admin API key never appears in this file, in the rendered project,
+#      or in `docker inspect` output that a `ps`-equivalent can read;
+#   4. the bind address is explicit. Compose's short form "3001:3001" binds
+#      0.0.0.0 regardless of what the role believes it configured.
+
+services:
+  aurral:
+    container_name: {{ app_name }}
+    image: {{ aurral_image }}
+    restart: unless-stopped
+
+    env_file:
+      - {{ aurral_env_file }}
+
+    volumes:
+      # The database, the settings, the users and the job queue. Aurral's own
+      # AURRAL_DATA_DIR, which is also the canonical container path, so the
+      # entrypoint and the server agree without an override.
+      - {{ aurral_config_dir }}:/config
+      # The music. Aurral's Library folder defaults to /data/downloads/aurral
+      # inside it. A media server that shares files with Aurral mounts the same
+      # host folder at the same container path.
+      - {{ aurral_media_dir }}:/data
+
+    ports:
+      - "{{ aurral_bind_host }}:{{ app_port }}:3001"
+
+    # The image ships no HEALTHCHECK of its own, so none is declared here. The
+    # role asserts on /api/health/live directly, which is the application's own
+    # statement that it can serve, not merely that a process is listening.

@@ -104,3 +104,88 @@ def test_source_built_role_restarts_when_the_build_is_stale():
     assert "om_build_freshness" in restart_state_expression(tasks), (
         "the source-built role does not restart the unit on a stale build"
     )
+
+def test_container_role_restarts_when_the_image_moved():
+    """A digest that moved must restart the container, not just pull the image.
+
+    The symptom of not restarting: the container keeps running the build it
+    was started with, while `docker image inspect` reports the new one. The
+    application then reports the new version and serves the old code, and
+    nothing says so.
+    """
+    tasks = read("apps/aurral/tasks/main.yml")
+    expression = restart_state_expression(tasks)
+
+    assert "aurral_image_pull.changed" in expression, (
+        "the role does not restart the container when the pinned digest moved"
+    )
+
+
+def test_container_role_restart_is_still_gated_for_a_settled_play():
+    """The steady state must stay at changed=0.
+
+    A restart on every play would bounce the container every run and report
+    changed forever. The gate has to name the specific things that changed.
+    """
+    tasks = read("apps/aurral/tasks/main.yml")
+    expression = restart_state_expression(tasks)
+
+    for signal in ("aurral_env_written.changed", "aurral_compose_written.changed",
+                   "aurral_unit.changed"):
+        assert signal in expression, f"the restart lost its {signal} condition"
+
+    assert "else 'started'" in expression, (
+        "the restart is unconditional, so a settled play reports changed"
+    )
+
+
+def test_container_role_does_not_regenerate_the_admin_key():
+    """The admin API key must be kept, not regenerated.
+
+    A regenerated key does not fail the install. Aurral stores its own API key
+    in the settings table when the environment variable is absent, so the
+    server keeps serving and every script that authenticates with the old key
+    stops working — with no message from the install that anything changed.
+    """
+    tasks = read("apps/aurral/tasks/main.yml")
+
+    assert "aurral_existing_env.AURRAL_API_KEY" in tasks, (
+        "the role does not reuse the admin API key it finds on the guest"
+    )
+    assert "aurral_existing_env" in tasks, (
+        "the role does not read the existing environment file before writing it"
+    )
+
+
+def test_tunnel_token_never_reaches_argv():
+    """The tunnel token must go through an EnvironmentFile, not argv.
+
+    A token on the command line is visible in ps to every process on the guest
+    for the life of the connector. The unit template is what decides this, so
+    the assertion is on the unit and not on the task that writes it.
+    """
+    unit = read("apps/aurral/templates/aurral-tunnel.service.j2")
+
+    assert "EnvironmentFile=" in unit, (
+        "the tunnel unit does not read the token from an EnvironmentFile"
+    )
+    assert "TUNNEL_TOKEN" not in unit, (
+        "the tunnel unit carries the token inline instead of in an EnvironmentFile"
+    )
+
+
+def test_tunnel_refuses_to_start_without_credentials():
+    """An enabled tunnel with no token must fail at a task boundary.
+
+    The alternative is a connector that starts, fails to authenticate and
+    retries forever while the hostname stays dead — a green play over a
+    broken service.
+    """
+    tasks = read("apps/aurral/tasks/main.yml")
+
+    assert "aurral_tunnel_token" in tasks, (
+        "the role does not check that the tunnel token is present"
+    )
+    assert "aurral_tunnel_enabled | bool" in tasks, (
+        "the tunnel credential check is not gated on the tunnel being enabled"
+    )

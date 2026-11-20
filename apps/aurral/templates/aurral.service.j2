@@ -1,0 +1,31 @@
+[Unit]
+Description=Aurral music server (Docker Compose)
+Documentation=https://docs.aurral.org/
+# The engine has to be up before the container can be started, and the
+# container needs the network to reach the catalogue it searches.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# The project directory, because `docker compose` resolves its files relative to
+# the working directory when no -f is given — and this unit always gives one.
+WorkingDirectory={{ aurral_project_dir }}
+
+# `--pull never` is what makes the digest pin real: without it, `up` fetches the
+# tag the compose file names and the digest is never consulted.
+ExecStart=/usr/bin/docker compose -f {{ aurral_compose_file }} up -d --pull never --remove-orphans
+ExecStop=/usr/bin/docker compose -f {{ aurral_compose_file }} down
+
+# A container that fails to come up should be retried, not left half-started.
+# The entrypoint prepares the database before the server binds, so a first boot
+# is tens of seconds.
+TimeoutStartSec={{ aurral_health_timeout }}
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

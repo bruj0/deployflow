@@ -178,9 +178,9 @@ appctl targets      # which destinations exist, and which are not built yet
 appctl list         # what this repository has configured
 ```
 
-### The other four applications
+### The other applications
 
-`example-app` is the smallest thing that works. Four others ship as worked
+`example-app` is the smallest thing that works. The others ship as worked
 examples of the shapes that are harder:
 
 | Application | What it shows | What it costs |
@@ -189,6 +189,8 @@ examples of the shapes that are harder:
 | [`omniroute`](apps/omniroute/) | an application **built from a checkout** | a checkout, a build host, ~28 min |
 | [`builder`](apps/builder/) | the **build host** the second one needs | 24 GB of RAM on the host |
 | [`xerj`](apps/xerj/) | an application installed from a **pinned release archive**, serving on the LAN | a firewall, and one shared admin key |
+| [`homarr`](apps/homarr/) | an application shipped as a **single container image** | one image and a Compose file |
+| [`aurral`](apps/aurral/) | a container application reached through a **Cloudflare tunnel** | a Cloudflare account and a tunnel token |
 
 `omniroute-release` is the one to run next if you want a real service: it
 needs no builder and no compile.
@@ -196,6 +198,10 @@ needs no builder and no compile.
 `xerj` is the third shape: a single Rust binary from a GitHub release, pinned
 by version *and* digest, with a LAN bind whose exposure is written down in
 both the manifest and the role.
+
+`aurral` is the fourth shape: the application itself is one container image,
+and reaching it needs a tunnel whose connector token is a secret rather than
+a line in the manifest.
 
 ## How it works
 
@@ -490,8 +496,8 @@ The worked example is [`apps/builder/`](apps/builder/).
 
 ## Ready-to-use applications
 
-The repository ships five applications that work, not four that illustrate.
-`example-app` is covered in [Try it](#try-it) above; the other four cover
+The repository ships eight applications that work, not four that illustrate.
+`example-app` is covered in [Try it](#try-it) above; the others cover
 the shapes that are harder.
 
 ### `omniroute-release` — an application installed from a published release
@@ -559,6 +565,51 @@ It declares no secret: the node generates its own admin key into
 
 See [`apps/xerj/`](apps/xerj/).
 
+### `homarr` — a dashboard in one container
+
+[Homarr](https://homarr.dev) is a Next.js server with an internal Redis and
+an nginx front end, all started by the image's own entrypoint. The database
+is SQLite and lives inside `/appdata`, so nothing runs beside it.
+
+It is the simplest container application here: one image, a Compose file the
+role writes itself, and an encryption key the guest generates once and never
+regenerates.
+
+```bash
+appctl install homarr
+appctl install homarr        # must report changed=0
+```
+
+See [`apps/homarr/`](apps/homarr/).
+
+### `aurral` — a music server behind a Cloudflare tunnel
+
+[Aurral](https://github.com/lklynet/aurral) is a self-hosted music server. It
+discovers music, downloads it, keeps a Library and plays it. It runs as one
+container image with two bind mounts: one for the configuration and the
+SQLite database, one for the media.
+
+```bash
+appctl install aurral
+appctl install aurral        # must report changed=0
+```
+
+The container is bound to the guest's loopback and published through a
+**Cloudflare tunnel**, so the service has no port open on the LAN and no
+TLS certificate to renew. The tunnel is locally managed: the role writes the
+ingress and starts the connector with a token that lives in an
+`EnvironmentFile` at mode `0600`, never in `argv` and never in the
+manifest.
+
+The tunnel is an operator act. Cloudflare's API refuses to create one from a
+token that cannot also configure it, so the role refuses to start a tunnel
+without credentials instead of reporting a success that reaches nothing. The
+recipe — mint a temporary token, create the tunnel, write the ingress, fetch
+the connector token — is in
+[`apps/aurral/README.md`](apps/aurral/README.md).
+
+See [`apps/aurral/`](apps/aurral/).
+
 ## What you get when the agent does it
 
 A reviewer reading the diff sees the intent, not a wall of generated YAML:
@@ -590,7 +641,7 @@ Every feature, what it gives you, and the file that holds it.
 | **Pluggable targets** | A target interface separates "what the application is" from "where it runs". One target ships today. | [`src/appctl/targets/base.py`](src/appctl/targets/base.py) |
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
-| **Five working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, and a search node from a pinned release archive. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/) |
+| **Eight working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, a search node from a pinned release archive, a dashboard in one container, a management plane in a Compose stack, and a music server behind a Cloudflare tunnel. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/), [`apps/homarr/`](apps/homarr/), [`apps/proxcenter/`](apps/proxcenter/), [`apps/aurral/`](apps/aurral/) |
 
 ## Glossary
 

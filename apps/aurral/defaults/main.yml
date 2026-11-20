@@ -1,0 +1,225 @@
+---
+# Aurral, the self-hosted music app, as one container on one guest.
+#
+# Aurral is a single image: a Hono server on Node 26 with SQLite inside, a
+# React frontend it serves itself, and yt-dlp, ffmpeg and cloudflared baked
+# into the image. There is no database server to run beside it, so this is the
+# same shape as homarr — one image, one Compose file, one unit.
+#
+# `app_name` is what the guest sees: it derives the service account (aurral),
+# the install root (/opt/aurral), the state directory and the unit name.
+# Nothing below invents a path that does not follow from it.
+#
+# TWO MOUNTS, NOT ONE. This is the difference between Aurral and every other
+# container application here:
+#
+#   /config  the database, settings, users and job queue. Aurral's own state.
+#            It lives under app_state_dir so reinstalling the container never
+#            destroys the library of playlists, users and settings.
+#   /data    the music. Aurral's Library folder defaults to
+#            /data/downloads/aurral inside it.
+#
+# The two must not be the same directory. Aurral's own documentation separates
+# them for a reason: /config holds credentials and the job queue, and a media
+# server that can read /config can read every stored integration secret.
+
+app_name: aurral
+app_service_name: aurral
+
+# The port the container publishes. Aurral's server binds 3001 and serves the
+# web app, the JSON API, the Subsonic API and the WebSocket from that one
+# port, so 3001 is the only port that needs publishing.
+app_port: 3001
+
+# ---------------------------------------------------------------------------
+# Exposure
+# ---------------------------------------------------------------------------
+#
+# 0.0.0.0 publishes Aurral on the guest's network, because the Cloudflare
+# tunnel connector reaches it from another guest. A loopback bind would make
+# the tunnel's origin unreachable.
+#
+# The variable is `aurral_bind_host`, not `app_bind_host`, and that is not
+# cosmetic. common/python defines `app_bind_host: 127.0.0.1` too, and a
+# meta-dependency's defaults are applied AFTER the including role's — the trap
+# documented in common/python/defaults/main.yml. A role that sets
+# `app_bind_host: 0.0.0.0` here is silently given the framework's loopback
+# value, so Aurral would never be reachable and nothing would say why.
+aurral_bind_host: "0.0.0.0"
+
+# The firewall this role owns, applied only when the bind is not loopback.
+#
+# It is a DOCKER-USER rule, NOT a ufw rule, and that distinction is the whole
+# point. Docker installs its own chains in nat/filter and evaluates them before
+# ufw's INPUT chain, so a ufw rule that denies a published port is reported as
+# applied and enforced by nothing. Measured on vmid 107 on this host: ufw
+# reports "inactive", DOCKER-USER is empty, and published ports are reachable
+# regardless.
+#
+# 10.0.0.0/8 is the range common/lxc puts guest vnet0 on, so on its own it
+# documents intent rather than restricting anything — narrow it to the
+# operator's own subnet to make it a real limit.
+aurral_manage_firewall: true
+aurral_lan_cidr: "10.0.0.0/8"
+
+# ---------------------------------------------------------------------------
+# The image
+# ---------------------------------------------------------------------------
+#
+# Pinned by DIGEST, not by tag. `latest` and `3.0.0` resolved to this digest
+# on 2026-11-20, which is convenient and temporary: a tag is a moving name and
+# the digest is the thing. `--pull never` on the compose invocation below is
+# what makes the pin real, because without it, `up` fetches whatever the tag
+# names today.
+#
+# The image is public: an anonymous pull token from ghcr.io resolves it, so the
+# guest needs no registry credentials.
+aurral_image: >-
+  ghcr.io/lklynet/aurral@sha256:41008fa4293dfb12bfa4c4407c22c685110cfb506dfedbadba8148f0bf0a0694
+aurral_version: "3.0.0"
+
+# ---------------------------------------------------------------------------
+# The engine
+# ---------------------------------------------------------------------------
+#
+# Docker CE from Docker's own apt repository. The role installs; it does not
+# uninstall. A guest that already has a container runtime keeps it.
+#
+# The engine is deliberately NOT version-pinned. It is not the thing being
+# deployed, and a pinned engine that apt no longer carries is a worse failure
+# than a patched one.
+aurral_docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+aurral_docker_apt_repo: "https://download.docker.com/linux/ubuntu"
+aurral_docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+#
+# The Compose project lives under app_dir, which a reinstall replaces. The data
+# lives under app_state_dir, which no role ever removes. A database inside
+# app_dir would be deleted by the next install.
+aurral_project_dir: "{{ app_dir }}/project"
+aurral_compose_file: "{{ app_dir }}/project/docker-compose.yml"
+aurral_env_file: "{{ app_dir }}/project/.env"
+
+# The Aurral data directory: the database, settings, users and the job queue.
+# Bind-mounted into the container at /config.
+aurral_config_dir: "{{ app_state_dir }}/config"
+
+# The music. Bind-mounted into the container at /data. Aurral's Library folder
+# defaults to /data/downloads/aurral inside it.
+#
+# This is the directory a second service has to share to see the same music,
+# and the reason the mount is a bind rather than a Docker named volume: a
+# named volume lives in /var/lib/docker on the guest's rootfs, where a backup
+# cannot see it and a rebuilt guest destroys it.
+aurral_media_dir: "{{ app_state_dir }}/media"
+
+# The owner of the music inside the container. Aurral's entrypoint runs as root
+# and drops to this uid and gid, so the media it writes has to be owned by it.
+#
+# 1000 is the first ordinary user on an Ubuntu guest and matches the uid the
+# Jellyfin container on this host already uses for its own media, so a shared
+# media root keeps one owner rather than two.
+aurral_uid: 1000
+aurral_gid: 1000
+
+# ---------------------------------------------------------------------------
+# The admin API key
+# ---------------------------------------------------------------------------
+#
+# Aurral refuses to start when AURRAL_API_KEY is set and shorter than 32
+# characters. The key is the admin API credential, so it is a secret and it
+# lives in the container's environment file rather than in the compose file.
+#
+# It is GENERATED ON THE GUEST ONCE AND KEPT. Aurral stores its own API key
+# in the settings table when AURRAL_API_KEY is absent, so regenerating this
+# value does not break the install — it silently invalidates every automation
+# and every script that authenticates with the old one, with the symptom "the
+# API key stopped working" rather than "the install failed". The role reads
+# the existing file first and keeps whatever it finds.
+aurral_api_key_length: 48
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+#
+# Refused before the container starts, so a guest that is too small fails at a
+# task boundary instead of part-way through a library scan.
+#
+# Aurral runs one main server plus background worker child processes, and each
+# worker may take a 2 GB JavaScript heap (AURRAL_WORKER_MAX_HEAP_MB, default
+# 2048). The image is roughly 1.5 GB. The floor below is sized for a small
+# library; a large one wants more, and the guest's lxc_memory is the knob.
+aurral_min_memory_mb: 4096
+aurral_min_cores: 2
+aurral_min_free_gb: 10
+
+# Seconds to wait for /api/health/live after `docker compose up`. The
+# entrypoint prepares the database and the server binds after the frontend
+# bundle is served, so a first boot on a cold image is tens of seconds.
+aurral_health_timeout: 300
+
+# The timezone the app renders times in. UTC is the guest's own default and
+# the honest one for a server; override it in the guest's group_vars to
+# localise it without editing the role.
+aurral_timezone: UTC
+
+# The public address of the instance. Used for OAuth callbacks and for the
+# links Aurral puts in a share. It is the tunnel hostname by default, because
+# that is how the instance is reached from outside.
+aurral_public_url: "https://{{ aurral_tunnel_hostname }}"
+
+# ---------------------------------------------------------------------------
+# The Cloudflare tunnel
+# ---------------------------------------------------------------------------
+#
+# A named tunnel for the public hostname, and a SEPARATE connector from the one
+# inside Aurral's image. The image's copy exists for Aurral's file-sharing
+# feature, which opens a quick tunnel for a share and closes it when the share
+# ends. A permanent tunnel for a permanent hostname is a different thing.
+#
+# It is a LOCALLY managed tunnel: cloudflared reads its ingress from the file
+# this role writes. A remotely managed tunnel has its configuration pushed by
+# the edge, and a local file is overwritten within a second of the connector
+# starting — measured, not assumed.
+#
+# The connector runs on this guest and dials out to Cloudflare's edge, so
+# nothing has to be open inbound. The origin is the guest's own loopback:
+# http://127.0.0.1:3001. That is deliberate. A DHCP lease can move, and an
+# origin that names the guest's address breaks the moment it does, while
+# loopback cannot.
+aurral_tunnel_enabled: false
+
+# The tunnel's hostname. The DNS record points at the tunnel's own hostname.
+aurral_tunnel_hostname: music.bruj0.net
+
+# The tunnel's identifier and its connector token. The token is a live
+# credential for the life of the connector, so it is a secret: it lives in
+# .env on the controller and reaches the guest through the play's extra-vars
+# file, never in argv and never in this repository.
+#
+# `aurral_tunnel_token` is declared in app.yaml's secrets list for this
+# application, so `appctl install` refuses to run while it is absent rather
+# than deploying a connector that cannot authenticate.
+aurral_tunnel_id: ""
+aurral_tunnel_token: ""
+
+# The connector's configuration file on the guest, mode 0600.
+aurral_tunnel_config_file: "{{ app_dir }}/cloudflared/config.yml"
+
+# The cloudflared binary. Pinned by version and by the sha256 the release
+# publishes, and fetched onto the guest rather than run from the Aurral image:
+# the image's copy is for a different purpose, and a connector that reports
+# its own version is a connector whose version can be asserted.
+aurral_cloudflared_version: "2026.11.1"
+aurral_cloudflared_url: >-
+  https://github.com/cloudflare/cloudflared/releases/download/{{ aurral_cloudflared_version }}/cloudflared-linux-amd64
+aurral_cloudflared_sha256: 97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7
+aurral_cloudflared_bin: /usr/local/bin/cloudflared
