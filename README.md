@@ -661,6 +661,36 @@ the connector token — is in
 
 See [`apps/aurral/`](apps/aurral/).
 
+### `jellyfin` — a media server reading the music server's volume
+
+[Jellyfin](https://jellyfin.org) serves music and films. It is the only
+application here that is not a container and not a wheel: the upstream `.deb`
+installs its own systemd unit and its own service account, and the role
+configures what the package does not.
+
+```bash
+appctl install jellyfin
+appctl install jellyfin        # must report changed=0
+```
+
+It reads the **shared volume** that Aurral writes into. One volume, one copy
+of the files: the manifest declares the volume once, Aurral's guest mounts it
+read-write, and Jellyfin's guest mounts the same volume read-only. The
+idmap is the disk's own and both guests use the same one, so a file Aurral
+writes is readable by Jellyfin's service account without either guest
+knowing the other's uid.
+
+The role turns the local metadata saver off on every library it creates. That
+is what keeps a read-only mount quiet: with the saver on, Jellyfin writes
+thumbnails into the media folder and fails on every scan with
+`Read-only file system`.
+
+The libraries are not in a configuration file — Jellyfin keeps them in its
+database, and the supported way to change them is the API. The role makes one
+API key, in the database, and uses the API for everything else.
+
+See [`apps/jellyfin/`](apps/jellyfin/).
+
 ## What you get when the agent does it
 
 A reviewer reading the diff sees the intent, not a wall of generated YAML:
@@ -693,7 +723,7 @@ Every feature, what it gives you, and the file that holds it.
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
 | **Shared volumes** | One volume two guests hold at once, one writing and one reading, with one copy of the files. The manifest declares it once; each guest says which volume it holds and whether it may write. | [`common/shared_disk/`](common/shared_disk/) |
-| **Eight working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, a search node from a pinned release archive, a dashboard in one container, a management plane in a Compose stack, and a music server behind a Cloudflare tunnel. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/), [`apps/homarr/`](apps/homarr/), [`apps/proxcenter/`](apps/proxcenter/), [`apps/aurral/`](apps/aurral/) |
+| **Nine working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, a search node from a pinned release archive, a dashboard in one container, a management plane in a Compose stack, a music server behind a Cloudflare tunnel, and a media server reading the music server's shared volume. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/), [`apps/homarr/`](apps/homarr/), [`apps/proxcenter/`](apps/proxcenter/), [`apps/aurral/`](apps/aurral/), [`apps/jellyfin/`](apps/jellyfin/) |
 
 ## Glossary
 

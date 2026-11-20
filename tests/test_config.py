@@ -292,3 +292,45 @@ def test_rejects_two_disks_claiming_one_volume(tmp_path):
     with pytest.raises(ConfigError) as excinfo:
         load(write(tmp_path, body))
     assert "vm-900-disk-0" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Optional secrets
+# ---------------------------------------------------------------------------
+#
+# A secret the manifest requires is one every install of that application
+# demands. A secret the role needs in only one of its modes — a tunnel token,
+# for a tunnel that is off — must be deliverable without being required, or
+# an install that has no use for it refuses to run.
+
+
+def test_loads_optional_secrets(tmp_path):
+    body = BASE.replace(
+        "        description: sample\n",
+        "        description: sample\n"
+        "        secrets:\n"
+        "          - required_secret\n"
+        "        optional_secrets:\n"
+        "          - optional_secret\n",
+    )
+    cfg = load(write(tmp_path, body))
+    app = cfg.app("example-app")
+    assert app.secrets == ("required_secret",)
+    assert app.optional_secrets == ("optional_secret",)
+
+
+def test_an_application_without_optional_secrets_has_none(tmp_path):
+    cfg = load(write(tmp_path, BASE))
+    assert cfg.app("example-app").optional_secrets == ()
+
+
+def test_optional_secrets_accept_a_bare_string(tmp_path):
+    # `secrets:` accepts a bare string as well as a list, and the optional
+    # list is the same shape.
+    body = BASE.replace(
+        "        description: sample\n",
+        "        description: sample\n"
+        "        optional_secrets: optional_secret\n",
+    )
+    cfg = load(write(tmp_path, body))
+    assert cfg.app("example-app").optional_secrets == ("optional_secret",)

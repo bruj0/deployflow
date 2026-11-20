@@ -288,6 +288,25 @@ def select_apps(cfg, requested: str | None) -> list[str]:
     )
 
 
+def optional_for(cfg, selected: list[str], required: list[str]) -> list[str]:
+    """The optional secrets the selected applications declare.
+
+    A secret the manifest lists as required is not repeated here: the
+    required path already delivered it, and it arrived with the guarantee
+    that it is present.
+
+    Only the applications being installed contribute. An optional secret
+    belonging to an application nobody asked for is not read, so a run for
+    one application does not depend on another one's configuration.
+    """
+    names: list[str] = []
+    for name in selected:
+        for secret in cfg.app(name).optional_secrets:
+            if secret not in names and secret not in required:
+                names.append(secret)
+    return names
+
+
 def cmd_install(args) -> int:
     cfg = _load(args)
 
@@ -324,6 +343,8 @@ def cmd_install(args) -> int:
             if secret not in required:
                 required.append(secret)
     values = secrets_mod.ensure_for_install(cfg.root, required) if required else {}
+    # Optional secrets are delivered when they are set and are never required.
+    values.update(secrets_mod.optional_values(cfg.root, optional_for(cfg, selected, required)))
 
     # Rendered here, on the controller, before the play starts. An application
     # that declared a config block gets its YAML turned into JSON here rather

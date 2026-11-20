@@ -161,6 +161,23 @@ def missing(root: Path, required: tuple[str, ...] | list[str]) -> list[str]:
     return [c.name for c in check(root, required) if c.empty]
 
 
+def optional_values(root: Path, names: tuple[str, ...] | list[str]) -> dict[str, str]:
+    """The optional secrets that are set, and only those.
+
+    An optional secret is one the role needs in only one of its modes — a
+    tunnel token, for a tunnel that is off. It is delivered when it is set
+    and never demanded, so an install that has no use for it is not blocked
+    by its absence.
+
+    A name that is also required is skipped here: the required path already
+    delivered it, and it arrived with the guarantee that it is present.
+    """
+    if not names:
+        return {}
+    present = read_env(root)
+    return {name: present[name] for name in names if present.get(name)}
+
+
 def ensure_for_install(root: Path, required: tuple[str, ...] | list[str]) -> dict[str, str]:
     """Return the required secrets, or explain precisely what is missing.
 

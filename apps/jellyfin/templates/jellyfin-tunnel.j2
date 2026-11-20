@@ -1,0 +1,29 @@
+# Jellyfin — the Cloudflare tunnel configuration.
+#
+# Written by the jellyfin role, mode 0644. It holds no credential: the
+# connector's token comes from the EnvironmentFile the role writes beside it,
+# so nothing sensitive is in this file and nothing sensitive is in the unit's
+# command line.
+#
+# The tunnel is LOCALLY managed. cloudflared reads its ingress from this file,
+# and the edge does not push a configuration over it. That is what makes the
+# rule below authoritative — a remotely managed tunnel overwrites this file
+# within a second of the connector starting, and the hostname then goes
+# wherever the edge says rather than where this file says.
+
+tunnel: {{ jellyfin_tunnel_id }}
+
+ingress:
+  - hostname: {{ jellyfin_tunnel_hostname }}
+    # The guest's own loopback. The connector runs on this guest, so the origin
+    # is the published port on this machine. A DHCP lease can move and an
+    # origin naming the guest's address breaks when it does; loopback cannot.
+    service: http://127.0.0.1:{{ app_port }}
+    originRequest:
+      # Jellyfin serves the web UI from the same port as the API, and it
+      # builds absolute URLs from the Host header. Without this, the page it
+      # serves names the guest's own address instead of the public hostname.
+      httpHostHeader: "{{ jellyfin_tunnel_hostname }}"
+  # The catch-all. A request for a hostname the tunnel does not serve gets a
+  # 404 from Cloudflare's edge rather than being proxied somewhere.
+  - service: http_status:404

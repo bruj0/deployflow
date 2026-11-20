@@ -114,4 +114,5 @@ nav:
       - xerj: apps/xerj.md
       - homarr: apps/homarr.md
       - aurral: apps/aurral.md
+      - jellyfin: apps/jellyfin.md
       - Building OmniRoute from source: apps/omniroute-building-from-source.md

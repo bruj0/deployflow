@@ -1,0 +1,228 @@
+---
+# Jellyfin, the media server, as an apt package on one guest.
+#
+# This is the package shape, not the container shape: Jellyfin ships a .deb
+# that installs its own systemd unit, its own service account and its own
+# configuration directories. The role does not write a unit — the package does,
+# and a role that wrote one would replace the package's own and lose the
+# upstream's handling of the ffmpeg paths and the hardware groups.
+#
+# `app_name` is `jellyfin`, and it is not decoration: the package's postinst
+# creates a system account named `jellyfin`, and that account is what the
+# media has to be readable by. common/python creates an account with the same
+# name from the same variable, so the two agree rather than fighting.
+#
+# The account's uid is what the shared-disk idmap has to account for. The
+# media is owned by a host uid that the idmap translates into the guest's
+# uid 1000, and Jellyfin reads it as its own account. A reader does not have
+# to run as the writer's uid, so this works — but only because the role
+# asserts the account exists and reports its uid, rather than assuming it.
+#
+# Everything Jellyfin writes lives under `/var/lib/jellyfin`, which is the
+# package's own PROGRAMDATA directory and not this repository's
+# `app_state_dir`. The package owns that path, and the role does not create
+# or delete it: a reinstall of the package must not discard the database.
+#
+# This role assumes common/python has already run for the same application.
+
+app_name: jellyfin
+app_service_name: jellyfin
+
+# The one port Jellyfin serves. The web UI, the REST API and the streaming
+# endpoints all share it.
+#
+# 8096 is Jellyfin's own default and the port the package's unit binds. The
+# role reads it back rather than assuming it: the network configuration is
+# `/etc/jellyfin/network.xml`, and a hand-edited file can change it.
+app_port: 8096
+
+# ---------------------------------------------------------------------------
+# The release
+# ---------------------------------------------------------------------------
+#
+# The version of the apt package this role installs. Pinned, never "latest":
+# a floating version makes two plays of the same role install different code,
+# which is the opposite of what a pinned role is for.
+#
+# The version string is the one the repository publishes, suffix and all:
+# `12.4+ubu2604`. The `+` is part of the Debian version, and `apt` compares
+# it as a string.
+jellyfin_version: "12.4+ubu2604"
+
+# The package that gets installed. It is a metapackage: the real work is in
+# jellyfin-server, jellyfin-web and jellyfin-ffmpeg8, which it depends on.
+#
+# The application's name and the package's name are the same word here, but
+# they are still separate variables, because the manifest's pin is compared
+# against them and a comparison of a name with itself proves nothing.
+jellyfin_package_name: jellyfin
+
+# The apt repository the package comes from, and the key that signs it.
+#
+# The repository is Jellyfin's own, and it carries one suite per Ubuntu
+# release. The suite is the guest's codename, read from the guest rather than
+# written down, so the same role runs on a guest built from a different
+# template.
+#
+# Measured 2026-11-20: the repository carries `resolute` (Ubuntu 26.04, the
+# template this repository uses) with jellyfin 12.4+ubu2604 as the newest,
+# and `noble` (Ubuntu 24.04) with 10.11.11 as the newest.
+jellyfin_apt_repo: https://repo.jellyfin.org/ubuntu
+jellyfin_apt_key_url: https://repo.jellyfin.org/ubuntu/jellyfin_team.gpg.key
+
+# The sha256 of the key the repository publishes. Pinned so a key that
+# changes is a failed install rather than a silent trust of a new one.
+#
+# Measured 2026-11-20.
+jellyfin_apt_key_sha256: a0cde241ae297fa6f0265c0bf15ce9eb9ee97c008904a59ab367a67d59532839
+
+# The keyring, and the `.asc` extension is load-bearing rather than a
+# convention. The key Jellyfin publishes is ASCII-armored — it starts with
+# `-----BEGIN PGP PUBLIC KEY BLOCK-----` — and apt decides how to read a
+# `Signed-By` file from its name, not from its content. A `.gpg` file is read
+# as a binary keyring, an armored one is not a keyring at all, and the
+# result is:
+#   W: The key(s) in the keyring /etc/apt/keyrings/jellyfin.gpg are ignored
+#      as the file has an unsupported filetype.
+#   E: The repository 'https://repo.jellyfin.org/ubuntu resolute InRelease'
+#      is not signed.
+# which stops the install with a message that names a filetype rather than
+# the repository.
+#
+# Measured on the guest: the same armored key named `.asc` verifies, and
+# `apt-get update` fetches the suite. The guest has no `gpg`, only `gpgv`,
+# so dearmingoring the key on the guest is not an option either.
+jellyfin_apt_keyring: /etc/apt/keyrings/jellyfin.asc
+
+# The packages the role installs. The metapackage pulls the server, the web
+# assets and the ffmpeg build; the last two are what the role needs on top
+# of it.
+jellyfin_apt_packages:
+  - jellyfin
+  - jellyfin-ffmpeg8
+
+# ---------------------------------------------------------------------------
+# The directories
+# ---------------------------------------------------------------------------
+#
+# The package's own paths, written down because the role asserts them. These
+# are the package's defaults, and `/etc/default/jellyfin` can override them —
+# so the role reads the values it actually got rather than trusting the
+# defaults it hopes for.
+jellyfin_data_dir: /var/lib/jellyfin
+jellyfin_config_dir: /etc/jellyfin
+jellyfin_log_dir: /var/log/jellyfin
+jellyfin_cache_dir: /var/cache/jellyfin
+
+# The database. Jellyfin keeps its library configuration here, and it is the
+# one file the role writes into to hold an API key.
+jellyfin_database: "{{ jellyfin_data_dir }}/data/jellyfin.db"
+
+# ---------------------------------------------------------------------------
+# The libraries
+# ---------------------------------------------------------------------------
+#
+# The media folders the server serves. Each one is a name, a path and a
+# collection type, and the role creates them through the API rather than by
+# writing the database directly: the API is the interface the server itself
+# uses, and it is what keeps the server's in-memory state and its database in
+# agreement.
+#
+# The paths are the ones the shared disk is mounted at. A shared disk is
+# mounted at the volume's ROOT, so a library names the tree it wants —
+# `/mnt/volume/music`, not `/mnt/volume`.
+#
+# `save_local_metadata` is False on every one of them. Jellyfin writes
+# thumbnails and metadata into the media folder by default, and the shared
+# volume is mounted read-only for this guest, so that write is an
+# `IOException: Read-only file system` on every library scan
+# (jellyfin/jellyfin#6605).
+jellyfin_libraries:
+  - name: Music
+    path: /mnt/volume/music
+    type: music
+    save_local_metadata: false
+  - name: Movies
+    path: /mnt/volume/movies
+    type: movies
+    save_local_metadata: false
+
+# ---------------------------------------------------------------------------
+# Exposure
+# ---------------------------------------------------------------------------
+#
+# Published on the LAN, because the Cloudflare tunnel connector reaches it
+# from this guest. A loopback bind would make the tunnel's origin
+# unreachable.
+#
+# The variable is `jellyfin_bind_host`, not `app_bind_host`, and that is not
+# cosmetic. common/python defines `app_bind_host: 127.0.0.1` too, and a
+# meta-dependency's defaults are applied AFTER the including role's — the
+# trap documented in common/python/defaults/main.yml. A role that set
+# `app_bind_host: 0.0.0.0` here would be silently given the framework's
+# loopback value, so Jellyfin would never be reachable and nothing would say
+# why.
+jellyfin_bind_host: "0.0.0.0"
+
+# The firewall this role owns, applied only when the bind is not loopback.
+#
+# It is a DOCKER-USER rule, NOT a ufw rule. Docker installs its own chains
+# in nat/filter and evaluates them before ufw's INPUT chain, so a ufw rule
+# that denies a published port is reported as applied and enforced by
+# nothing. Measured on vmid 107 on this host: ufw reports "inactive",
+# DOCKER-USER is empty, and published ports are reachable regardless.
+#
+# Jellyfin does not run in a container, so it has no DOCKER-USER chain of
+# its own. The rule below therefore restricts the ufw INPUT chain, which is
+# what actually governs a systemd service.
+#
+# 10.0.0.0/8 is the range common/lxc puts guest vnet0 on, so on its own it
+# documents intent rather than restricting anything — narrow it to the
+# operator's own LAN to make it a rule rather than a comment.
+jellyfin_firewall_enabled: true
+jellyfin_firewall_cidr: "10.0.0.0/8"
+jellyfin_firewall_port: "{{ app_port }}"
+
+# ---------------------------------------------------------------------------
+# The tunnel
+# ---------------------------------------------------------------------------
+#
+# A named tunnel for the public hostname, and a SEPARATE connector from the
+# one Aurral runs. A permanent tunnel for a permanent hostname is a
+# different thing from the quick tunnel Aurral opens for a share.
+#
+# It is a LOCALLY managed tunnel: cloudflared reads its ingress from the
+# file this role writes. A remotely managed tunnel has its configuration
+# pushed by the edge, and the local file is overwritten within a second of
+# the connector starting — so the hostname then goes wherever the edge says
+# rather than where this file says.
+jellyfin_tunnel_enabled: false
+
+# The tunnel's hostname. The DNS record points at the tunnel's own hostname.
+jellyfin_tunnel_hostname: movies.bruj0.net
+
+# The tunnel's identifier and its connector token.
+#
+# The token is a live credential for the life of the connector. A connector
+# without one starts, fails to authenticate, and retries forever while the
+# hostname stays dead — a green play over a broken service.
+#
+# `jellyfin_tunnel_token` is declared in app.yaml's secrets list for this
+# application, so it is written to `.env` by `appctl secrets set` and never
+# committed.
+jellyfin_tunnel_id: ""
+jellyfin_tunnel_token: ""
+
+# The tunnel's configuration file, written by this role. It holds no
+# credential: the connector's token comes from the EnvironmentFile the role
+# writes beside it.
+jellyfin_tunnel_config_file: "{{ app_dir }}/cloudflared/config.yml"
+
+# The cloudflared binary. Pinned by version and by the sha256 the release
+# publishes, so the connector that runs is the connector that was reviewed
+# and a second run reports unchanged.
+jellyfin_cloudflared_version: "2026.11.1"
+jellyfin_cloudflared_url: >-
+  https://github.com/cloudflare/cloudflared/releases/download/{{ jellyfin_cloudflared_version }}/cloudflared-linux-amd64
+jellyfin_cloudflared_sha256: 97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7
+jellyfin_cloudflared_bin: /usr/local/bin/cloudflared

@@ -33,7 +33,7 @@ _TOP_LEVEL = {"version", "defaults", "applications", "build", "shared_disks"}
 _DEFAULTS = {"python_version", "template", "storage", "rootfs_gb", "cores", "memory_mb", "swap_mb", "features", "onboot"}
 # `state` is written by the tool, never by an operator. It is in the schema so
 # that a record survives a round trip; see src/lxc/state.py.
-_APP = {"name", "description", "target", "source", "build", "secrets", "config", "state"}
+_APP = {"name", "description", "target", "source", "build", "secrets", "optional_secrets", "config", "state"}
 _CONFIG = {"files", "target", "mode", "vars"}
 _SOURCE = {"kind", "package", "repo", "ref", "python", "webui", "output"}
 _BUILD = {"python_version", "lock_requirement", "ref", "fetch", "verify_lock"}
@@ -183,6 +183,9 @@ class Application:
     state: dict[str, object] = field(default_factory=dict)
     # Required secrets. A target may add to this list.
     secrets: tuple[str, ...] = ()
+    # Secrets the role may need, but only in one of its modes. They are
+    # delivered when they are set and are never required.
+    optional_secrets: tuple[str, ...] = ()
 
     @property
     def needs_build(self) -> bool:
@@ -671,6 +674,9 @@ def _application(name: str, data: Any) -> Application:
     secrets = block.get("secrets") or ()
     if isinstance(secrets, str):
         secrets = (secrets,)
+    optional_secrets = block.get("optional_secrets") or ()
+    if isinstance(optional_secrets, str):
+        optional_secrets = (optional_secrets,)
     source = _source(block.get("source"), f"{where}.source")
     build = _build(block.get("build"), f"{where}.build")
     if source.kind == "repo" and build is None:
@@ -688,6 +694,7 @@ def _application(name: str, data: Any) -> Application:
         config=_rendered(block.get("config"), f"{where}.config"),
         state=_state(block.get("state"), f"{where}.state"),
         secrets=tuple(secrets),
+        optional_secrets=tuple(optional_secrets),
     )
 
 

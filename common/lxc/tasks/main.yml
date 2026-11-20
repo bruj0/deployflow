@@ -299,17 +299,31 @@
   #   Offending ECDSA key in ~/.ssh/known_hosts:51
   # every time a guest is rebuilt at the same address.
   #
+  # `ssh-keygen -R` and not a line edit, because a hashed known_hosts entry
+  # does not carry the host name in plaintext. This file's entries are
+  # hashed — 27 of them at the time of writing — so a regexp over the file
+  # matches nothing and the stale key survives the task. `ssh-keygen -R`
+  # removes the entry whether it is hashed or not, which is the only thing
+  # that works here.
+  #
   # Scoped to this guest's own address on purpose. A known_hosts entry for any
   # other host is never touched, so the refusal still protects every machine
   # that is not a guest of this repository.
   #
   # Runs against the controller, on localhost, because the keys that matter are
   # in the operator's own known_hosts and not on the Proxmox node.
-  ansible.builtin.lineinfile:
-    path: "{{ ansible_env.HOME }}/.ssh/known_hosts"
-    regexp: "^{{ ansible_host | regex_escape }}[ \t]"
-    state: absent
-    backup: false
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -R
+      - "{{ ansible_host }}"
+      - -f
+      - "{{ ansible_env.HOME }}/.ssh/known_hosts"
+  register: lxc_known_hosts_removed
+  changed_when: >-
+    lxc_known_hosts_removed.rc == 0
+    and 'not found' not in (lxc_known_hosts_removed.stderr | default(''))
+  failed_when: false
   delegate_to: localhost
   become: false
   when:

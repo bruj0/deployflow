@@ -1,0 +1,19 @@
+---
+# Declare the dependency, not the playbook.
+#
+# Ansible runs a role's dependencies before its own tasks, so common/python
+# creates the service account, the install root and the state directory first.
+# This is what lets a new application avoid editing any playbook.
+#
+# The account common/python creates is `jellyfin`, and the Jellyfin package's
+# postinst creates the same account — but only if it does not already exist:
+#
+#   if [[ -z "$(getent passwd ${JELLYFIN_USER})" ]]; then
+#     adduser --system --ingroup ${JELLYFIN_USER} ...
+#   fi
+#
+# So the two agree instead of fighting. Whichever runs first creates the
+# account, and the other finds it there. The account's uid is what the media
+# has to be readable by, and the role asserts it rather than assuming it.
+dependencies:
+  - role: python

@@ -1,0 +1,723 @@
+---
+# Install Jellyfin and make it serve the media the manifest names.
+#
+# The order here is the order the failures happen in. Everything that can be
+# wrong before a byte is installed is checked first, because a failure after
+# the install leaves the guest half-configured.
+
+- name: Refuse to install without an application name and port
+  ansible.builtin.assert:
+    that:
+      - app_name | length > 0
+      - app_port | int > 0
+    fail_msg: >-
+      this role needs app_name and app_port. common/python derives
+      everything else from app_name.
+    quiet: true
+
+- name: Refuse to install a release the manifest does not name
+  # The manifest says where the application comes from and the role says what
+  # it installs. Those are two files, and they drift — which is exactly how
+  # omniroute-release ended up pinned to 3.8.51 while the manifest named
+  # 3.8.53.
+  #
+  # `appctl` passes the manifest's pin in as appctl_source_* so this cannot
+  # pass silently. The `==` form is what appctl splits, so the manifest has to
+  # use it.
+  ansible.builtin.assert:
+    that:
+      - appctl_source_package is defined
+      - appctl_source_version is defined
+      - appctl_source_package == jellyfin_package_name
+      - appctl_source_version == jellyfin_version
+    fail_msg: >-
+      The manifest pins {{ appctl_source_package | default('nothing')
+      }}=={{ appctl_source_version | default('nothing') }}, but this role
+      installs {{ jellyfin_package_name }}=={{ jellyfin_version }}. Change one
+      of them.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The repository
+# ---------------------------------------------------------------------------
+
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Jellyfin's apt signing key
+  # The key is fetched as an armored file with an `.asc` name, because apt
+  # decides how to read a `Signed-By` file from its name. See the note on
+  # `jellyfin_apt_keyring` for what happens otherwise.
+  #
+  # `get_url` with a checksum is what makes this idempotent: it skips the
+  # transfer when the file on disk already hashes to the expected value, so a
+  # second run reports unchanged. The checksum is the one the repository
+  # publishes for this key.
+  ansible.builtin.get_url:
+    url: "{{ jellyfin_apt_key_url }}"
+    dest: "{{ jellyfin_apt_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+    checksum: "sha256:{{ jellyfin_apt_key_sha256 }}"
+  register: jellyfin_apt_key
+
+- name: Remove a keyring left under the old name
+  # An earlier revision of this role named the keyring `jellyfin.gpg`, and a
+  # guest that ran it still has that file. It is not referenced by the
+  # repository any more, and leaving it costs nothing but a confusing file.
+  #
+  # The removal is conditional on the file existing, so it reports unchanged
+  # on a guest that never had one.
+  ansible.builtin.file:
+    path: "{{ jellyfin_apt_keyring | dirname }}/jellyfin.gpg"
+    state: absent
+  register: jellyfin_apt_stale_keyring
+
+- name: Read the guest's distribution codename
+  # The repository path carries the codename, and Ubuntu 26.04 is `resolute`.
+  # Reading it rather than hard-coding it is what lets the same role run on a
+  # guest built from a different template.
+  #
+  # Measured 2026-11-20: the repository carries `resolute` with jellyfin
+  # 12.4+ubu2604 and `noble` with 10.11.11. A guest on a suite the
+  # repository does not carry would get a 404 from apt, which names the
+  # suite rather than the version.
+  ansible.builtin.command:
+    argv: [lsb_release, -cs]
+  changed_when: false
+  register: jellyfin_codename
+
+- name: Add Jellyfin's apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/jellyfin.sources
+    content: |
+      Types: deb
+      URIs: {{ jellyfin_apt_repo }}
+      Suites: {{ jellyfin_codename.stdout | trim }}
+      Components: main
+      Architectures: {{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}
+      Signed-By: {{ jellyfin_apt_keyring }}
+    owner: root
+    group: root
+    mode: "0644"
+  register: jellyfin_apt_repo
+
+- name: Install Jellyfin
+  # The metapackage pulls jellyfin-server, jellyfin-web and the ffmpeg build.
+  # Its postinst creates the service account and the four directories, and it
+  # registers the systemd unit.
+  ansible.builtin.apt:
+    name: "{{ jellyfin_apt_packages }}"
+    state: present
+    update_cache: true
+  register: jellyfin_apt_install
+
+- name: Read the installed Jellyfin version
+  # Read from dpkg rather than from the repository: the repository says what
+  # is available, dpkg says what is installed. A role that reports the
+  # repository's version reports what it hopes for.
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - "-f=${Version}"
+      - "{{ jellyfin_package_name }}"
+  changed_when: false
+  register: jellyfin_installed_version
+
+- name: Fail when the installed version is not the pinned one
+  ansible.builtin.fail:
+    msg: >-
+      The installed Jellyfin is {{ jellyfin_installed_version.stdout | trim }},
+      but this role pins {{ jellyfin_version }}. The repository may not carry
+      this version for the guest's distribution, or the package may have been
+      upgraded by something else.
+  when: jellyfin_installed_version.stdout | trim != jellyfin_version
+
+# ---------------------------------------------------------------------------
+# The service account and its directories
+# ---------------------------------------------------------------------------
+
+- name: Read the service account the package created
+  # The account's uid is not cosmetic. The media is owned by a host uid that
+  # the shared disk's idmap translates, and the reader has to be able to read
+  # it. The role reports the uid rather than assuming one, because the uid a
+  # system account gets depends on the order the accounts were created in.
+  #
+  # Measured twice on this host, and the two differ:
+  #   the container built by hand: uid 107, gid 110
+  #   the guest the role installed on: uid 999, gid 988
+  # The package's postinst only creates the account when it does not exist
+  # already, so on a guest where common/python made it first, the uid is
+  # whatever the system handed out. The role reports the uid rather than
+  # pinning one, and the plan's copy step is what moves the media to a uid
+  # both readers agree on.
+  #
+  # The `getent` module answers in `ansible_facts`, not in `stdout`, so the
+  # result is read from there. A task that reads `stdout` from it gets an
+  # undefined variable and a failed assertion that names the account rather
+  # than the mistake.
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ app_user }}"
+    fail_key: false
+  changed_when: false
+  register: jellyfin_account
+
+- name: Fail when the service account does not exist
+  # The package creates it. If it is missing, the unit cannot start and the
+  # error names a unit rather than the account.
+  ansible.builtin.assert:
+    that:
+      - app_user in (ansible_facts.getent_passwd | default({}))
+    fail_msg: >-
+      The account {{ app_user }} does not exist on this guest. The Jellyfin
+      package creates it in its postinst; if the package did not install
+      cleanly, the account is missing with it.
+    quiet: true
+
+- name: Read the service account's uid
+  ansible.builtin.command:
+    argv: [id, -u, "{{ app_user }}"]
+  changed_when: false
+  register: jellyfin_uid
+
+- name: Ensure the package's directories exist and belong to the service account
+  # The package creates these, and only chowns them when it finds them owned
+  # by root. A directory that exists with the wrong owner is left alone by
+  # the package, so the role sets it here.
+  #
+  # `/var/lib/jellyfin` holds the database. The role never deletes it: a
+  # reinstall of the package must not discard the library configuration and
+  # the accounts.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ jellyfin_data_dir }}"
+      mode: "0750"
+    - path: "{{ jellyfin_config_dir }}"
+      mode: "0750"
+    - path: "{{ jellyfin_log_dir }}"
+      mode: "0750"
+    - path: "{{ jellyfin_cache_dir }}"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+# ---------------------------------------------------------------------------
+# The service
+# ---------------------------------------------------------------------------
+
+- name: Enable and start the service
+  # The service is started BEFORE the metadata savers are turned off, because
+  # Jellyfin writes `/etc/jellyfin/system.xml` on its first run. A role that
+  # patched the file before the first start would fail on a file that does
+  # not exist yet, and would have to be written to tolerate both cases.
+  #
+  # The package installed the unit and enabled it, so this is usually a
+  # no-op. It is here because the role's own contract is that the service
+  # is running and answering when the play ends.
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (jellyfin_apt_install.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+
+- name: Wait for the service to accept connections
+  ansible.builtin.wait_for:
+    host: "{{ jellyfin_bind_host }}"
+    port: "{{ app_port }}"
+    timeout: 120
+
+- name: Check that the server answers on its own address
+  # `/System/Info/Public` needs no credential, so it proves the server is
+  # up and serving without needing the key this role creates later.
+  #
+  # The check RETRIES, and that matters after a restart. A `wait_for` on the
+  # port succeeds as soon as the socket is open, and the dying server's
+  # socket is still open for a moment after `systemctl restart` returns. The
+  # next task then gets "Connection refused" and fails on a server that is
+  # perfectly healthy two seconds later.
+  #
+  # The port check is kept, but it is not what proves the server is ready.
+  # The API answering is.
+  ansible.builtin.uri:
+    url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/System/Info/Public"
+    status_code: 200
+    timeout: 30
+  register: jellyfin_public_info
+  retries: 12
+  delay: 5
+  until: jellyfin_public_info.status | default(0) == 200
+
+- name: Fail when the server does not answer
+  ansible.builtin.fail:
+    msg: >-
+      Jellyfin did not answer on {{ jellyfin_bind_host }}:{{ app_port }}. Read
+      its log with `journalctl -u {{ app_service_name }}` on the guest.
+  when: jellyfin_public_info.status | default(0) != 200
+
+- name: Read the port the server is actually listening on
+  # The port is read back from the running server rather than assumed, and
+  # from the server's own answer rather than from a configuration file.
+  #
+  # Measured 2026-11-20: Jellyfin 10.11 keeps the port in
+  # `/etc/jellyfin/network.xml` as `<InternalHttpPort>`, and Jellyfin 12.4
+  # writes no `network.xml` at all — the port is a build-time default. A
+  # role that read `network.xml` therefore fails on the version it installs.
+  #
+  # `LocalAddress` in the public info response is the server's own statement
+  # of where it listens, so it is the port the server is actually using.
+  # Measured: "http://127.0.0.1:8096".
+  ansible.builtin.set_fact:
+    jellyfin_listen_port: >-
+      {{ jellyfin_public_info.json.LocalAddress | regex_replace('^.*:', '') }}
+
+- name: Fail when the port does not match what this role expects
+  ansible.builtin.fail:
+    msg: >-
+      The server is listening on port {{ jellyfin_listen_port }}, but this
+      role expects {{ app_port }}. Change app_port in the role's defaults, or
+      the port the server was configured with on the guest.
+  when: jellyfin_listen_port | int != app_port | int
+
+# ---------------------------------------------------------------------------
+# The metadata savers
+# ---------------------------------------------------------------------------
+#
+# Jellyfin writes thumbnails and metadata INTO the media folder by default.
+# On a read-only media folder that is an
+# `IOException: Read-only file system` on every library scan
+# (jellyfin/jellyfin#6605), and the server's own log fills with it.
+#
+# The setting that governs this is the PER-LIBRARY `SaveLocalMetadata`, and
+# it is set when the library is created below. It is read back and asserted
+# afterwards, so a library that silently lost the setting fails the play
+# rather than filling the log with errors.
+#
+# The server-wide "portable mode" flags are NOT touched here, and the reason
+# is worth stating: `/etc/jellyfin/system.xml` is the server's own output,
+# and the server rewrites it from its in-memory configuration on every
+# start. An element added to that file is dropped on the next start.
+#
+# Measured 2026-11-20: a role that added `SaveImageTagsInPortableMode` to
+# `system.xml` reported a change on every single run, because the server had
+# removed it again. The acceptance test for this repository is that a second
+# install reports no changes, and a role that cannot persist a setting
+# cannot pass it.
+
+# ---------------------------------------------------------------------------
+# The API key
+# ---------------------------------------------------------------------------
+#
+# Jellyfin has no configuration file for its libraries. They live in its
+# database, and the supported way to change them is the API. So the role
+# needs an API key, and the only way to make one without a user logging in is
+# to write it into the database directly — which is what the role does, once,
+# and then it uses the API for everything else.
+#
+# The key is stored under the role's own name, so a second run finds it
+# instead of making another one. A role that made a new key every run would
+# fill the table and never converge.
+
+- name: Read the API key this role already made
+  # The token is read out of the database, not out of a file on the
+  # controller, so the role has no secret of its own to store.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sqlite3, sys
+        db = sqlite3.connect(sys.argv[1])
+        row = db.execute(
+            "select AccessToken from ApiKeys where Name = ?", (sys.argv[2],)
+        ).fetchone()
+        print(row[0] if row else "")
+      - "{{ jellyfin_database }}"
+      - "{{ app_name }}"
+  changed_when: false
+  register: jellyfin_existing_key
+
+- name: Create an API key when the role does not have one yet
+  # The key's own value is generated by the guest, from the system CSPRNG.
+  # It is never generated on the controller and never travels through the
+  # controller: the role creates it where it is used and reads it back from
+  # the same place.
+  #
+  # The Id column is an INTEGER, not the UUID string the other tables use, and
+  # the dates are TEXT in Jellyfin's own format. Both are measured, and both
+  # fail with a bare `datatype mismatch` when they are guessed.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import datetime, secrets, sqlite3, sys
+        db = sqlite3.connect(sys.argv[1])
+        now = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.0000000Z")
+        token = secrets.token_hex(16)
+        db.execute(
+            "insert into ApiKeys (Id, DateCreated, DateLastActivity, Name, "
+            "AccessToken) values ((select coalesce(max(Id), 0) + 1 from "
+            "ApiKeys), ?, ?, ?, ?)", (now, now, sys.argv[2], token))
+        db.commit()
+        print(token)
+      - "{{ jellyfin_database }}"
+      - "{{ app_name }}"
+  changed_when: true
+  register: jellyfin_created_key
+  when: jellyfin_existing_key.stdout | trim | length == 0
+
+- name: Read the API key
+  ansible.builtin.set_fact:
+    jellyfin_api_key: >-
+      {{ jellyfin_created_key.stdout | default('') | trim
+         if (jellyfin_created_key.stdout | default('') | trim | length > 0)
+         else (jellyfin_existing_key.stdout | trim) }}
+
+- name: Fail when there is no API key
+  # Without it the role cannot create the libraries, and the failure would
+  # otherwise be an empty library list that looks like a working server with
+  # nothing to show.
+  ansible.builtin.assert:
+    that:
+      - jellyfin_api_key | length > 0
+    fail_msg: >-
+      The role could not obtain an API key for Jellyfin. The database is at
+      {{ jellyfin_database }}; check that the package installed cleanly.
+    quiet: true
+
+# ---------------------------------------------------------------------------
+# The libraries
+# ---------------------------------------------------------------------------
+
+- name: Read the libraries the server already has
+  ansible.builtin.uri:
+    url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders"
+    headers:
+      X-Emby-Token: "{{ jellyfin_api_key }}"
+      X-Emby-Authorization: >-
+        MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
+        DeviceId="{{ app_name }}", Version="1.0"
+    timeout: 30
+  register: jellyfin_existing_libraries
+
+- name: Report the libraries that are already there
+  # A library that already points at the right path is left alone. Removing
+  # and recreating it would drop every item's metadata, and the scan that
+  # follows would take hours on a real library.
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.Name }} already points at {{ item.Locations | join(', ') }}
+  loop: "{{ jellyfin_existing_libraries.json | default([]) }}"
+
+- name: Add the libraries that are missing
+  # `/Library/VirtualFolders` is the endpoint the server itself uses, and it
+  # is the only one that keeps the server's in-memory state and its database
+  # in agreement. Writing the database directly would leave the two out of
+  # step until the next restart.
+  #
+  # `SaveLocalMetadata` is false on every one of them: the media is read-only
+  # for this guest, and the metadata savers would fail on every scan.
+  #
+  # It is sent as a JSON BOOLEAN, not as the string "false". Jellyfin 12
+  # validates the body and answers
+  #   The JSON value could not be converted to System.Boolean.
+  # which names the type rather than the field's value. A role that sent
+  # `| bool | lower` produced the string "false" and got that error.
+  ansible.builtin.uri:
+    url: >-
+      http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders?name={{ item.name | urlencode }}&collectionType={{ item.type }}&refreshLibrary=false
+    method: POST
+    headers:
+      X-Emby-Token: "{{ jellyfin_api_key }}"
+      X-Emby-Authorization: >-
+        MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
+        DeviceId="{{ app_name }}", Version="1.0"
+    body_format: json
+    body:
+      Name: "{{ item.name }}"
+      Locations:
+        - "{{ item.path }}"
+      CollectionType: "{{ item.type }}"
+      LibraryOptions:
+        SaveLocalMetadata: "{{ item.save_local_metadata | bool }}"
+        EnableRealtimeMonitor: false
+        PathInfos:
+          - Path: "{{ item.path }}"
+    status_code: [200, 204]
+    timeout: 60
+  loop: "{{ jellyfin_libraries }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: jellyfin_library_added
+  when: >-
+    (jellyfin_existing_libraries.json | default([]))
+    | selectattr('Name', 'eq', item.name)
+    | selectattr('Locations', 'contains', item.path)
+    | list | length == 0
+
+- name: Read the libraries back
+  # The register is named `jellyfin_libraries_read`, not `jellyfin_libraries`.
+  # The role already has a variable called `jellyfin_libraries` — the list of
+  # libraries it wants — and a register of the same name shadows it for the
+  # rest of the play. The loop below then iterates over the whole HTTP
+  # response and fails with
+  #   Invalid data passed to 'loop', it requires a list
+  # which names the shape rather than the collision.
+  ansible.builtin.uri:
+    url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders"
+    headers:
+      X-Emby-Token: "{{ jellyfin_api_key }}"
+      X-Emby-Authorization: >-
+        MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
+        DeviceId="{{ app_name }}", Version="1.0"
+    timeout: 30
+  register: jellyfin_libraries_read
+
+- name: Assert that every library is where this role put it
+  # The claim a play can make is only as good as the check behind it. A
+  # library that silently failed to be added is a server with an empty
+  # library, and the play would still be green.
+  #
+  # The metadata saver is asserted in the same pass, because a library on a
+  # read-only mount with the saver on is a library that fills the server's
+  # log with "Read-only file system" on every scan.
+  ansible.builtin.assert:
+    that:
+      - >-
+        (jellyfin_libraries_read.json | default([])
+         | selectattr('Name', 'eq', item.name)
+         | selectattr('Locations', 'contains', item.path)
+         | list | length) == 1
+      - >-
+        (jellyfin_libraries_read.json | default([])
+         | selectattr('Name', 'eq', item.name)
+         | selectattr('LibraryOptions.SaveLocalMetadata', 'eq', false)
+         | list | length) == 1
+    fail_msg: >-
+      The library {{ item.name }} does not point at {{ item.path }}, or it has
+      the local metadata saver on. The server's libraries are
+      {{ jellyfin_libraries_read.json | default([]) | map(attribute='Name') | join(', ') }}.
+    quiet: true
+  loop: "{{ jellyfin_libraries }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# ---------------------------------------------------------------------------
+# The firewall
+# ---------------------------------------------------------------------------
+
+- name: Read the current ufw rules
+  # ufw governs a systemd service, which is what Jellyfin is. The
+  # DOCKER-USER chain the container applications use does not apply here:
+  # there is no container, and a rule there would enforce nothing.
+  ansible.builtin.command:
+    argv: [ufw, status]
+  changed_when: false
+  failed_when: false
+  register: jellyfin_ufw_status
+  when:
+    - jellyfin_firewall_enabled | bool
+    - jellyfin_bind_host not in ['127.0.0.1', '::1']
+
+- name: Restrict the published port to the LAN
+  # Added only when ufw is actually active. On a guest where ufw reports
+  # "inactive", a rule added to it is reported as applied and enforced by
+  # nothing — the same trap the DOCKER-USER chain has, in the other
+  # direction.
+  #
+  # ufw answers "Skipping adding existing rule" when the rule is already
+  # there, and that is NOT a change. The task's changed_when reads the
+  # answer rather than assuming one, because an unconditional
+  # `changed_when: true` makes the role report a change on every run and
+  # the repository's acceptance test — a second install with no changes —
+  # can never pass.
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - allow
+      - from
+      - "{{ jellyfin_firewall_cidr }}"
+      - to
+      - any
+      - port
+      - "{{ jellyfin_firewall_port }}"
+      - proto
+      - tcp
+  changed_when: >-
+    'Skipping adding existing rule' not in (jellyfin_ufw_rule.stdout | default(''))
+  register: jellyfin_ufw_rule
+  when:
+    - jellyfin_firewall_enabled | bool
+    - jellyfin_bind_host not in ['127.0.0.1', '::1']
+    - jellyfin_ufw_status.stdout is search('Status: active')
+
+# ---------------------------------------------------------------------------
+# The Cloudflare tunnel
+# ---------------------------------------------------------------------------
+
+- name: Refuse to enable the tunnel without its credentials
+  # The tunnel token is a live credential for the life of the connector. A
+  # connector without one starts, fails to authenticate, and retries forever
+  # while the hostname stays dead — a green play over a broken service. The
+  # message names the secret to set rather than leaving it to the connector's
+  # own log.
+  ansible.builtin.assert:
+    that:
+      - jellyfin_tunnel_token | default('') | string | length > 0
+      - jellyfin_tunnel_id | default('') | string | length > 0
+    fail_msg: >-
+      The tunnel is enabled but its credentials are empty. Set them with
+      `appctl secrets set jellyfin_tunnel_token '<token>'` and put the
+      tunnel's id in jellyfin_tunnel_id, or turn jellyfin_tunnel_enabled off.
+    quiet: true
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Install the cloudflared binary
+  # Pinned by version and by the sha256 the release publishes. The binary is
+  # fetched onto the guest rather than taken from a container image: a
+  # connector that reports its own version is a connector whose version can
+  # be asserted.
+  #
+  # `get_url` with a checksum is also what makes the download idempotent: it
+  # skips the transfer when the file on disk already hashes to the expected
+  # value, so a second run reports unchanged.
+  ansible.builtin.get_url:
+    url: "{{ jellyfin_cloudflared_url }}"
+    dest: "{{ jellyfin_cloudflared_bin }}"
+    owner: root
+    group: root
+    mode: "0755"
+    checksum: "sha256:{{ jellyfin_cloudflared_sha256 }}"
+  register: jellyfin_cloudflared_download
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Read the cloudflared version on the guest
+  ansible.builtin.command:
+    argv: ["{{ jellyfin_cloudflared_bin }}", --version]
+  changed_when: false
+  register: jellyfin_cloudflared_version_out
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Create the tunnel configuration directory
+  ansible.builtin.file:
+    path: "{{ jellyfin_tunnel_config_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Install the cloudflared tunnel configuration
+  # The origin is the guest's own loopback, and the hostname is the one the
+  # DNS record points at. The catch-all at the end returns 404 rather than
+  # proxying an unmatched request somewhere.
+  ansible.builtin.template:
+    src: jellyfin-tunnel.j2
+    dest: "{{ jellyfin_tunnel_config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: jellyfin_tunnel_config_written
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Install the tunnel token as the connector's environment
+  # The token is delivered through an EnvironmentFile, not through argv. A
+  # token on the command line is visible in ps to every process on the guest
+  # for the life of the connector.
+  #
+  # Mode 0600, owner root. systemd reads an EnvironmentFile as PID 1, so the
+  # file is root-owned and the connector does not need to read it at all.
+  ansible.builtin.copy:
+    content: "TUNNEL_TOKEN={{ jellyfin_tunnel_token }}\n"
+    dest: "{{ app_dir }}/cloudflared/tunnel.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  register: jellyfin_tunnel_env_written
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Install the cloudflared systemd unit
+  ansible.builtin.template:
+    src: jellyfin-tunnel.service.j2
+    dest: "/etc/systemd/system/{{ app_service_name }}-tunnel.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: jellyfin_tunnel_unit
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Reload systemd when the tunnel unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - jellyfin_tunnel_enabled | bool
+    - jellyfin_tunnel_unit.changed | default(false)
+
+- name: Start the tunnel and make it survive a reboot
+  ansible.builtin.systemd:
+    name: "{{ app_service_name }}-tunnel"
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if (jellyfin_tunnel_config_written.changed | default(false)
+             or jellyfin_tunnel_env_written.changed | default(false)
+             or jellyfin_tunnel_unit.changed | default(false)
+             or jellyfin_cloudflared_download.changed | default(false))
+         else 'started' }}
+    daemon_reload: true
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Wait for the tunnel connector to register
+  # The connector logs a registered connection per edge it holds. A connector
+  # that started but cannot authenticate logs a different line, so this waits
+  # for the registration rather than for the process to exist.
+  ansible.builtin.command:
+    argv: [journalctl, -u, "{{ app_service_name }}-tunnel", --no-pager, -n, "50"]
+  changed_when: false
+  failed_when: false
+  register: jellyfin_tunnel_log
+  retries: 12
+  delay: 5
+  until: jellyfin_tunnel_log.stdout is search('Registered tunnel connection')
+  when: jellyfin_tunnel_enabled | bool
+
+- name: Assert the connector registered with Cloudflare
+  ansible.builtin.fail:
+    msg: >-
+      The tunnel connector did not register with Cloudflare. Read its output
+      with `journalctl -u {{ app_service_name }}-tunnel` on the guest.
+  when:
+    - jellyfin_tunnel_enabled | bool
+    - jellyfin_tunnel_log.stdout is not search('Registered tunnel connection')
+
+# ---------------------------------------------------------------------------
+# The report
+# ---------------------------------------------------------------------------
+
+- name: Report the checks that passed
+  ansible.builtin.debug:
+    msg:
+      - "{{ app_name }} is installed and answering on port {{ app_port }}"
+      - "version: {{ jellyfin_installed_version.stdout | default('unknown') | trim }}"
+      - "service account: {{ app_user }} (uid {{ jellyfin_uid.stdout | default('?') | trim }})"
+      - "server version: {{ jellyfin_public_info.json.Version | default('unknown') }}"
+      - "libraries: {{ jellyfin_libraries_read.json | default([]) | map(attribute='Name') | join(', ') }}"
+      - "tunnel: {{ jellyfin_tunnel_hostname }} ({{ 'enabled' if jellyfin_tunnel_enabled | bool else 'disabled' }})"

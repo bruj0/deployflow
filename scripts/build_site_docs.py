@@ -66,6 +66,7 @@ PAGES: dict[str, str] = {
     "apps/xerj/README.md": "apps/xerj.md",
     "apps/homarr/README.md": "apps/homarr.md",
     "apps/aurral/README.md": "apps/aurral.md",
+    "apps/jellyfin/README.md": "apps/jellyfin.md",
     "apps/omniroute/docs/BUILDING-FROM-SOURCE.md": "apps/omniroute-building-from-source.md",
 }
 
@@ -78,6 +79,7 @@ DIRECTORY_DOCS: dict[str, str | None] = {
     "apps/xerj": "apps/xerj.md",
     "apps/homarr": "apps/homarr.md",
     "apps/aurral": "apps/aurral.md",
+    "apps/jellyfin": "apps/jellyfin.md",
     "docs": "reference/index.md",
 }
 

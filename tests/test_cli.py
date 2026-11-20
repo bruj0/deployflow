@@ -90,3 +90,62 @@ def test_init_writes_a_config_that_loads(capsys, tmp_path):
     # The template must survive its own validator.
     code, out = run(capsys, "-C", str(path), "list")
     assert code == 0
+
+
+# ---------------------------------------------------------------------------
+# Optional secrets
+# ---------------------------------------------------------------------------
+#
+# A secret the role needs in only one of its modes must be deliverable
+# without every install of that application demanding it.
+
+
+OPTIONAL = """
+    version: 1
+    applications:
+      example-app:
+        description: sample
+        target:
+          kind: proxmox_lxc
+          options:
+            hostname: example-app
+        source:
+          kind: package
+          package: "example-app==1.0.0"
+        secrets:
+          - required_secret
+        optional_secrets:
+          - optional_secret
+"""
+
+
+def test_an_optional_secret_is_delivered_when_it_is_set(tmp_path):
+    from appctl.cli import optional_for
+    from appctl.config import load
+    from appctl.secrets import optional_values
+
+    cfg = load(write(tmp_path, OPTIONAL))
+    (tmp_path / ".env").write_text("optional_secret=the-token\n", encoding="utf-8")
+    names = optional_for(cfg, ["example-app"], ["required_secret"])
+    assert names == ["optional_secret"]
+    assert optional_values(tmp_path, names) == {"optional_secret": "the-token"}
+
+
+def test_an_optional_secret_that_is_not_set_is_simply_absent(tmp_path):
+    from appctl.cli import optional_for
+    from appctl.config import load
+    from appctl.secrets import optional_values
+
+    cfg = load(write(tmp_path, OPTIONAL))
+    (tmp_path / ".env").write_text("something_else=x\n", encoding="utf-8")
+    names = optional_for(cfg, ["example-app"], ["required_secret"])
+    assert optional_values(tmp_path, names) == {}
+
+
+def test_a_required_secret_is_not_also_optional(tmp_path):
+    from appctl.cli import optional_for
+    from appctl.config import load
+
+    body = OPTIONAL.replace("          - optional_secret\n", "          - required_secret\n")
+    cfg = load(write(tmp_path, body))
+    assert optional_for(cfg, ["example-app"], ["required_secret"]) == []

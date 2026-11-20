@@ -1,0 +1,344 @@
+# jellyfin
+
+Jellyfin, the media server, as an apt package on one guest.
+
+This is the **package** shape, not the container shape. Jellyfin ships a `.deb`
+that installs its own systemd unit, its own service account and its own
+configuration directories. The role does not write a unit — the package does —
+so the upstream's handling of the ffmpeg paths and the hardware groups stays
+intact.
+
+## What is deployed
+
+| | |
+|---|---|
+| Guest | `jellyfin`, CT 100 |
+| Package | `jellyfin` `12.4+ubu2604` from `repo.jellyfin.org` |
+| Repository | `https://repo.jellyfin.org/ubuntu`, suite read from the guest |
+| Service account | `jellyfin`, created by the package's postinst |
+| Config | `/etc/jellyfin`, owned by the service account |
+| State | `/var/lib/jellyfin` — the database, the metadata, the thumbnails |
+| Unit | `jellyfin.service`, shipped by the package |
+| Port | 8096, read back from the running server |
+| Media | the shared volume, read-only, mounted at `/mnt/volume` |
+| Tunnel | `movies.bruj0.net`, a locally managed Cloudflare tunnel |
+
+## Install it
+
+```bash
+appctl install jellyfin
+appctl install jellyfin        # must report changed=0
+```
+
+The manifest key is `jellyfin` and the role directory is `apps/jellyfin/`. They
+match: `appctl install` selects the role with `--tags lxc,<key>`, and a key
+that is not a role name selects nothing — the play runs, changes nothing and
+reports success.
+
+## The service account is the package's, not the framework's
+
+The package's postinst creates a system account named `jellyfin`:
+
+```bash
+if [[ -z "$(getent passwd ${JELLYFIN_USER})" ]]; then
+  adduser --system --ingroup ${JELLYFIN_USER} ...
+fi
+```
+
+`common/python` creates an account with the same name, from the same
+`app_name`. The two agree rather than fighting: whichever runs first creates
+the account, and the other finds it there.
+
+That account's uid is not cosmetic. The media is owned by a host uid that the
+shared disk's idmap translates, and the reader has to be able to read it. A
+reader does not have to run as the writer's uid — that is what the idmap buys —
+but it does have to be an account that exists. The role reads the uid back and
+reports it rather than assuming one, because a system account's uid depends on
+the order the accounts were created in.
+
+Measured twice on this host, and the two differ:
+
+| Guest | How the account was made | uid | gid |
+|---|---|---|---|
+| the container built by hand | the package's postinst | 107 | 110 |
+| the guest the role installed on | `common/python` first, the package second | 999 | 988 |
+
+The package's postinst only creates the account when it does not exist
+already, so on a guest where the framework made it first, the uid is whatever
+the system handed out. That is why the role reports the uid instead of
+asserting one: the number is a fact about the guest, not a constant the role
+may assume.
+
+## The apt keyring is an `.asc` file, and that is load-bearing
+
+The repository is Jellyfin's own, and the key it publishes is **ASCII-armored**
+— it starts with `-----BEGIN PGP PUBLIC KEY BLOCK-----`.
+
+apt decides how to read a `Signed-By` file from its **name**, not from its
+content. A `.gpg` file is read as a binary keyring; an armored one is not a
+keyring at all. Naming the file `jellyfin.gpg` produces:
+
+```
+W: The key(s) in the keyring /etc/apt/keyrings/jellyfin.gpg are ignored as
+   the file has an unsupported filetype.
+E: The repository 'https://repo.jellyfin.org/ubuntu resolute InRelease' is
+   not signed.
+```
+
+and the install stops with a message that names a filetype rather than the
+repository. The same armored key named `jellyfin.asc` verifies.
+
+The guest has no `gpg`, only `gpgv`, so dearmoring the key on the guest is
+not an option either.
+
+The key is fetched with `get_url` and a **sha256**, so a key that changes is a
+failed install rather than a silent trust of a new one, and a second run
+skips the transfer and reports no change.
+
+The suite is read from the guest with `lsb_release -cs` rather than written
+down, so the same role runs on a guest built from a different template.
+Measured: the repository carries `resolute` (Ubuntu 26.04, the template this
+repository uses) with `12.4+ubu2604` as the newest, and `noble` (Ubuntu
+24.04) with `10.11.11` as the newest.
+
+## The libraries are not in a configuration file
+
+Jellyfin keeps its media folders in its **database**, and the supported way to
+change them is the API. There is no `libraries.xml` to write.
+
+So the role needs an API key, and the only way to make one without a user
+logging in is to write it into the database directly:
+
+```sql
+insert into ApiKeys (Id, DateCreated, DateLastActivity, Name, AccessToken)
+values ((select coalesce(max(Id), 0) + 1 from ApiKeys), ?, ?, ?, ?)
+```
+
+Two details are measured, and both fail with a bare `datatype mismatch` when
+guessed: the `Id` column is an **INTEGER**, not the UUID string the other
+tables use, and the dates are TEXT in Jellyfin's own format.
+
+The key's value is generated by the guest, from the system CSPRNG. It never
+travels through the controller, and the role stores it under its own name so a
+second run finds it instead of making another one.
+
+With the key, the role uses `/Library/VirtualFolders` — the endpoint the server
+itself uses — to add the libraries, and then reads them back and asserts each
+one points where the role put it. Writing the database directly would leave
+the server's in-memory state and its database in disagreement until the next
+restart.
+
+A library that already points at the right path is **left alone**. Removing and
+recreating it would drop every item's metadata, and the scan that follows
+would take hours on a real library.
+
+## The metadata savers are off
+
+Jellyfin writes thumbnails and metadata **into the media folder** by default.
+On a read-only media folder that is an `IOException: Read-only file system` on
+every library scan (jellyfin/jellyfin#6605), and the server's log fills with
+it.
+
+The setting that governs this is the **per-library** `SaveLocalMetadata`, and
+the role sets it to false on every library it creates:
+
+```json
+"LibraryOptions": {
+  "SaveLocalMetadata": false,
+  "EnableRealtimeMonitor": false,
+  "PathInfos": [{"Path": "/mnt/volume/music"}]
+}
+```
+
+It is sent as a JSON **boolean**. Jellyfin 12 validates the body and answers
+`The JSON value could not be converted to System.Boolean.` — a message that
+names the type rather than the field's value, which is what a string `"false"`
+produces.
+
+The role then reads the libraries back and asserts both that each one points
+where the role put it and that the saver is off. A library that silently lost
+the setting would fill the server's log with errors on every scan.
+
+### The server-wide flags are not touched
+
+`/etc/jellyfin/system.xml` also carries server-wide flags such as
+`SaveImageTagsInPortableMode`. The role does **not** write them, and the
+reason is worth stating:
+
+`system.xml` is the server's own output, and the server rewrites it from its
+in-memory configuration on every start. An element added to that file is
+dropped on the next start.
+
+Measured: a role that added `SaveImageTagsInPortableMode` to `system.xml`
+reported a change on **every** run, because the server had removed it again.
+The acceptance test for this repository is that a second install reports no
+changes, and a role that cannot persist a setting cannot pass it.
+
+The server's metadata and thumbnails still go to `/var/lib/jellyfin`, on the
+guest's own root disk. Only the media is shared.
+
+## The port is read back, not assumed
+
+The port is read from the **running server's own answer**, not from a
+configuration file.
+
+Measured 2026-11-20: Jellyfin 10.11 keeps the port in
+`/etc/jellyfin/network.xml` as `<InternalHttpPort>`, and Jellyfin 12.4 writes
+no `network.xml` at all — the port is a build-time default. A role that read
+`network.xml` therefore fails on the very version it installs.
+
+So the role reads `LocalAddress` from `/System/Info/Public`, which is the
+server's own statement of where it listens (`http://127.0.0.1:8096`), and
+fails with both numbers when it differs from `app_port`. A role that reported
+the port it expected while the server listened on another one would be a role
+whose checks pass for the wrong reason.
+
+## The tunnel
+
+`movies.bruj0.net`, on its own named tunnel, separate from the one Aurral
+runs. The connector runs on this guest rather than on the guest that already
+serves the other hostnames, so it does not depend on that guest.
+
+It is a **locally managed** tunnel: cloudflared reads its ingress from the
+file the role writes. A remotely managed tunnel has its configuration pushed
+by the edge, and the local file is overwritten within a second of the
+connector starting — so the hostname then goes wherever the edge says rather
+than where this file says.
+
+The origin is the guest's own **loopback**. A DHCP lease can move and an
+origin naming the guest's address breaks when it does; loopback cannot.
+
+The token is delivered through an `EnvironmentFile`, mode `0600`, never
+through `argv` — a token on the command line is visible in `ps` to every
+process on the guest for the life of the connector.
+
+The token is an **optional** secret in the manifest, not a required one. A
+secret the manifest requires is one every install of this application demands,
+and the tunnel is off by default: an install that has no use for the token
+would still refuse to run without it. When the tunnel is switched on and the
+token is missing, the role refuses and says which secret to set.
+
+```yaml
+# app.yaml
+    secrets: []
+    optional_secrets:
+      - jellyfin_tunnel_token
+```
+
+### The tunnel is an operator act
+
+Cloudflare's API refuses to create a tunnel from a token that cannot also
+configure it, so the role cannot mint one. The recipe — mint a temporary
+token, create the tunnel, write the ingress, fetch the connector token — is in
+[`apps/aurral/README.md`](../aurral/README.md), and it is the same recipe for
+this application.
+
+Until the tunnel exists, the hostname is dead. That is a deliberate order:
+the role installs the server first, and the connector second.
+
+## The firewall rule is a ufw rule
+
+The container applications in this repository use a `DOCKER-USER` rule, because
+Docker evaluates its own chains before ufw's `INPUT` and a ufw rule on a
+published port is enforced by nothing.
+
+Jellyfin is not in a container. It is a systemd service, and ufw's `INPUT`
+chain is what governs it. So the rule here is a ufw rule, and it is added only
+when ufw reports **active** — on a guest where ufw is inactive, a rule added
+to it would be reported as applied and enforced by nothing.
+
+ufw answers `Skipping adding existing rule` when the rule is already there,
+and that is **not** a change. The task reads that answer rather than assuming
+one, because an unconditional `changed_when: true` makes the role report a
+change on every run, and the repository's acceptance test — a second install
+with no changes — could never pass.
+
+## What the role proves
+
+The `check:` lines in the operator's summary are the role's own evidence:
+
+- the installed version is the pinned one
+- the service account exists, and its uid is reported
+- the server answers on its own address
+- every library points where the role put it, and its metadata saver is off
+- the tunnel connector registered with Cloudflare
+
+A green play over a server with an empty library is worse than a red one, so
+the library check is an assertion rather than a log line.
+
+## The shared volume, read-only
+
+This application is the **reader** of the shared volume. Aurral writes into it.
+
+The manifest declares the volume once:
+
+```yaml
+shared_disks:
+  media:
+    storage: data2
+    size_gb: 1000
+    volume: vm-900-disk-0
+    filesystem: btrfs
+    idmap: "u:1000:101000:1;g:1000:101000:1"
+    host_uid: 101000
+    trees:
+      - /music
+      - /movies
+```
+
+and this guest says which volume it holds and that it may not write:
+
+```yaml
+# inventory/group_vars/jf/main.yml
+shared_disk_mounts:
+  - disk: media
+    mountpoint: /mnt/volume
+    read_only: true
+```
+
+Two details are measured, and both are the reason the role works:
+
+**The reader does not need the writer's uid.** The idmap translates the
+host's `101000` into the guest's `1000` on *every* guest that mounts the
+volume, so a file Aurral writes as uid 1000 is readable by Jellyfin's service
+account as uid 999. The read-only part comes from `ro=1`, not from the uid.
+
+**The volume's name carries a VMID that is not a guest.** A volume belongs to
+the VMID in its name, and destroying that container deletes the volume even
+while another guest is using it. `vm-900-disk-0` names a VMID that is not a
+guest, so the volume outlives every container that mounts it.
+
+The mount path does not select a subtree: the guest sees the volume root at
+`/mnt/volume`, and the libraries name the tree each one wants.
+
+## Measured on a scratch guest
+
+The role was proved end to end on a throwaway guest before it touched the
+production one. The numbers it produced:
+
+```
+jellyfin: proxmox_lxc -> jellyfin  0 changed, 0 failed, 93 tasks, 49s
+  check: jellyfin is installed and answering on port 8096
+  check: version: 12.4+ubu2604
+  check: service account: jellyfin (uid 999)
+  check: server version: 12.4.0
+  check: libraries: Music, Movies
+  check: tunnel: movies.bruj0.net (disabled)
+```
+
+`0 changed` on the second run is the acceptance test: the role converges.
+
+The shared disk was verified from inside the guest:
+
+```
+/dev/mapper/data2-vm--900--disk--0 /mnt/volume ro,relatime,idmapped,...
+
+$ touch /mnt/volume/music/probe
+touch: cannot touch '/mnt/volume/music/probe': Read-only file system
+
+$ sudo -u jellyfin cat /mnt/volume/music/probe.txt
+hello from the writer
+```
+
+The last line is the whole point: a file written on the host as uid 101000
+and owned by the writer, read by Jellyfin's account, which is a different uid.

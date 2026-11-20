@@ -1,0 +1,26 @@
+[Unit]
+Description=Cloudflare tunnel for {{ jellyfin_tunnel_hostname }}
+Documentation=https://developers.cloudflare.com/cloudflare-one/
+# The connector needs the network and the application it forwards to. It does
+# not need Docker: it dials out to Cloudflare's edge and connects to Jellyfin
+# on the guest's own address.
+After=network-online.target {{ app_service_name }}.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# The token is in an EnvironmentFile, not in argv. A token on the command line
+# is visible in ps to every process on the guest for the life of the connector.
+EnvironmentFile={{ app_dir }}/cloudflared/tunnel.env
+
+# The configuration names the tunnel and its ingress rules. Nothing sensitive
+# is on the command line, so the unit is readable without being a credential
+# leak.
+ExecStart={{ jellyfin_cloudflared_bin }} --no-autoupdate --config {{ jellyfin_tunnel_config_file }} tunnel run
+
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
