@@ -29,9 +29,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from .config import Config
-from .errors import InstallError
+from .errors import ConfigError, InstallError
 
 TASK_RE = re.compile(r"^TASK \[(.+?)\]\s*\*+\s*$")
 RESULT_RE = re.compile(r"^(ok|changed|skipping|failed|fatal|rescued|ignored|unreachable):")
@@ -110,6 +111,103 @@ def source_vars(app: Any) -> dict[str, str]:
     return {"appctl_source_package": name, "appctl_source_version": version.strip()}
 
 
+def shared_disk_vars(config: Any) -> dict[str, Any]:
+    """The shared disks, as play variables.
+
+    The disk's own facts live in the manifest's `shared_disks` block. A
+    guest's attachment lives in that guest's `group_vars` as
+    `shared_disk_mounts`, next to the guest facts it belongs with, and the
+    role reads it from there.
+
+    Only the disks travel as an extra var. The attachments do not: they are
+    per-guest, and extra vars are global, so passing them would attach every
+    guest's mounts to every guest.
+
+    Every attachment on the machine is checked against the manifest here,
+    because this is the only place that sees all of them. An attachment
+    naming a disk the manifest does not declare is a typo that would
+    otherwise attach nothing and report success.
+
+    `shared_disks` holds every disk the manifest declares, not only the ones
+    a guest attaches. A volume is a machine-wide thing: it is created once
+    and lives until it is removed, so one guest creating it and another
+    attaching it is the normal case, not a race.
+    """
+    disks = dict(getattr(config, "shared_disks", {}) or {})
+    if not disks:
+        return {}
+
+    for mount in _attachments_for(config):
+        if mount.disk not in disks:
+            raise ConfigError(
+                f"a guest attaches the shared disk {mount.disk!r}, "
+                "which the manifest does not declare",
+                hint=f"shared disks in this config: {', '.join(sorted(disks)) or 'none'}",
+            )
+
+    return {
+        "shared_disks": {
+            name: {
+                "storage": disk.storage,
+                "size_gb": disk.size_gb,
+                "volume": disk.volume,
+                "filesystem": disk.filesystem,
+                "idmap": disk.idmap,
+                "host_uid": disk.host_uid,
+                "trees": list(disk.trees),
+            }
+            for name, disk in disks.items()
+        },
+    }
+
+
+def _attachments_for(config: Any) -> list[Any]:
+    """Every guest's shared disk attachments, read from the inventory.
+
+    The attachments live in the inventory's `group_vars`, next to the guest
+    facts they belong with: the vmid, the size, the roles the guest runs.
+    Reading them here is what lets the framework know what every guest on the
+    machine attaches, so a volume is created once and by one play.
+    """
+    import yaml
+
+    root = getattr(config, "root", None)
+    if root is None:
+        return []
+    group_vars = root / "inventory" / "group_vars"
+    if not group_vars.is_dir():
+        return []
+
+    found: list[Any] = []
+    for path in sorted(group_vars.glob("*/main.yml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        mounts = data.get("shared_disk_mounts") or []
+        if isinstance(mounts, dict):
+            mounts = [mounts]
+        for mount in mounts:
+            if isinstance(mount, dict) and mount.get("disk"):
+                found.append(
+                    _Mount(
+                        disk=str(mount["disk"]),
+                        mountpoint=str(mount.get("mountpoint", "")),
+                        read_only=bool(mount.get("read_only", False)),
+                    )
+                )
+    return found
+
+
+@dataclass
+class _Mount:
+    """One attachment, read from an inventory group_vars file."""
+
+    disk: str
+    mountpoint: str
+    read_only: bool = False
+
+
 @dataclass
 class Result:
     label: str
@@ -156,7 +254,8 @@ class Installer:
 
     def command(self, extra: list[str], secret_vars: dict[str, str],
                 rendered: dict[str, str] | None = None,
-                source_vars: dict[str, str] | None = None) -> list[str]:
+                source_vars: dict[str, str] | None = None,
+                shared_vars: dict[str, Any] | None = None) -> list[str]:
         cmd = [
             "ansible-playbook",
             "-i", str(self.config.root / "inventory" / "hosts.yml"),
@@ -174,7 +273,7 @@ class Installer:
         # and with the same care: it is what the operator reviewed, and a role
         # that installs a different version than the manifest names is a role
         # that disagreed with the manifest. See _source_vars.
-        handle = self._vars_file(secret_vars, rendered, source_vars)
+        handle = self._vars_file(secret_vars, rendered, source_vars, shared_vars)
         if handle is not None:
             cmd += ["--extra-vars", f"@{handle}"]
         cmd += extra
@@ -182,7 +281,8 @@ class Installer:
 
     def _vars_file(self, values: dict[str, str],
                    rendered: dict[str, str] | None = None,
-                   source_vars: dict[str, str] | None = None) -> Path | None:
+                   source_vars: dict[str, str] | None = None,
+                   shared_vars: dict[str, Any] | None = None) -> Path | None:
         """Write the extra-vars file, mode 0600, removed when the run ends.
 
         It carries the secrets and, when any application declares one, the paths
@@ -198,7 +298,8 @@ class Installer:
         """
         rendered = rendered or {}
         source_vars = source_vars or {}
-        if not values and not rendered and not source_vars:
+        shared_vars = shared_vars or {}
+        if not values and not rendered and not source_vars and not shared_vars:
             return None
         import tempfile
 
@@ -209,6 +310,8 @@ class Installer:
                 payload["appctl_rendered_configs"] = rendered
             if source_vars:
                 payload.update(source_vars)
+            if shared_vars:
+                payload.update(shared_vars)
             json.dump(payload, handle)
         os.chmod(name, 0o600)
         self._cleanup_files = getattr(self, "_cleanup_files", [])
@@ -223,14 +326,16 @@ class Installer:
     def run(self, extra: list[str], *, label: str = "play",
             outdir: Path | None = None, secret_vars: dict[str, str] | None = None,
             rendered: dict[str, str] | None = None,
-            source_vars: dict[str, str] | None = None) -> Result:
+            source_vars: dict[str, str] | None = None,
+            shared_vars: dict[str, Any] | None = None) -> Result:
         stamp = outdir or (self.config.root / "tmp" / "runs" /
                            datetime.now().strftime("%Y%m%d-%H%M%S"))
         directory = stamp / label
         directory.mkdir(parents=True, exist_ok=True)
         result = Result(label=label, directory=directory)
 
-        cmd = self.command(extra, secret_vars or {}, rendered, source_vars)
+        cmd = self.command(extra, secret_vars or {}, rendered, source_vars,
+                           shared_vars)
         _echo("run: " + " ".join(redact_argv(cmd)))
         _echo(f"--> {directory / 'commands.txt'}")
 

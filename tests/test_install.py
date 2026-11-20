@@ -15,10 +15,13 @@ from __future__ import annotations
 import io
 import json
 import textwrap
+
+import pytest
 from pathlib import Path
 
 from appctl.config import load
-from appctl.install import Installer, source_vars
+from appctl.errors import ConfigError
+from appctl.install import Installer, shared_disk_vars, source_vars
 
 MANIFEST = """
     version: 1
@@ -171,3 +174,94 @@ def test_a_play_without_a_check_report_has_no_checks(tmp_path):
     play = "TASK [example-app : Install the application] *********************\n"
     result = _pump(Installer(cfg), play)
     assert result.checks == []
+
+
+SHARED_DISK_MANIFEST = """
+    version: 1
+    applications:
+      myapp:
+        description: sample
+        target:
+          kind: proxmox_lxc
+          options:
+            hostname: myapp
+        source:
+          kind: package
+          package: "myapp==1.2.3"
+    shared_disks:
+      media:
+        storage: data2
+        size_gb: 1000
+        volume: vm-900-disk-0
+        filesystem: btrfs
+        idmap: "u:1000:101000:1;g:1000:101000:1"
+        host_uid: 101000
+        trees:
+          - /music
+"""
+
+
+def write_inventory(tmp_path: Path, group: str, body: str) -> None:
+    path = tmp_path / "inventory" / "group_vars" / group
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "main.yml").write_text(textwrap.dedent(body), encoding="utf-8")
+
+
+def test_the_shared_disks_reach_the_play_as_variables(tmp_path):
+    """The manifest's disk facts travel to the role that prepares the volume."""
+    manifest = write_manifest(tmp_path, SHARED_DISK_MANIFEST)
+    cfg = load(manifest)
+    vars = shared_disk_vars(cfg)
+    disk = vars["shared_disks"]["media"]
+    assert disk["volume"] == "vm-900-disk-0"
+    assert disk["filesystem"] == "btrfs"
+    assert disk["idmap"] == "u:1000:101000:1;g:1000:101000:1"
+    assert disk["host_uid"] == 101000
+
+
+def test_the_attachments_do_not_travel_as_variables(tmp_path):
+    """Extra vars are global, so an attachment would reach every guest.
+
+    The attachments are per-guest and live in the inventory's group_vars.
+    Passing them as a variable would attach one guest's mount to every
+    guest on the machine.
+    """
+    manifest = write_manifest(tmp_path, SHARED_DISK_MANIFEST)
+    cfg = load(manifest)
+    write_inventory(
+        tmp_path,
+        "mine",
+        """
+        app_roles: []
+        shared_disk_mounts:
+          - disk: media
+            mountpoint: /mnt/volume
+            read_only: false
+        """,
+    )
+    vars = shared_disk_vars(cfg)
+    assert set(vars) == {"shared_disks"}
+    assert "shared_disk_mounts" not in vars
+
+
+def test_an_attachment_naming_an_undeclared_disk_is_refused(tmp_path):
+    """A typo in the disk name would otherwise attach nothing and pass.
+
+    The check is here because this is the only place that sees every
+    guest's attachments and the manifest's disks at once.
+    """
+    manifest = write_manifest(tmp_path, SHARED_DISK_MANIFEST)
+    cfg = load(manifest)
+    write_inventory(
+        tmp_path,
+        "mine",
+        """
+        app_roles: []
+        shared_disk_mounts:
+          - disk: medai
+            mountpoint: /mnt/volume
+        """,
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        shared_disk_vars(cfg)
+    assert "medai" in str(excinfo.value)

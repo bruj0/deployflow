@@ -1,0 +1,433 @@
+---
+# Create and prepare the shared volumes this machine's guests attach.
+#
+# The role runs on the Proxmox node, because that is where `pct`, `lvcreate`
+# and the volume tools live. Every task delegates there.
+#
+# It is idempotent in the sense that matters: a second run finds the volume,
+# finds the filesystem, finds the trees, and changes nothing. The acceptance
+# test is `changed=0` on the second `appctl install`, the same as every other
+# role here.
+#
+# The volume is prepared by mounting it on the Proxmox node, which works
+# alongside the guests that hold it. Measured: with two containers holding the
+# volume, one read-write and one read-only, the host mounts it too and sees
+# the host-side ownership:
+#
+#   $ mount /dev/data2/vm-900-disk-0 /srv/shared-disk/vm-900-disk-0
+#   $ ls -ln /srv/shared-disk/vm-900-disk-0/music/
+#   -rw-r--r-- 1 101000 101000 0 Nov 20 21:02 song.mp3
+#
+# The idmap lives on the container's mount, not in the filesystem's
+# superblock, so the host sees the unmapped ownership and the guests see
+# their own.
+
+- name: Refuse to prepare a shared disk without the facts that make it safe
+  # Four things have to be true for a volume to be shared safely, and each of
+  # them is checked before anything is created rather than after: a wrong
+  # volume name, a non-btrfs filesystem, a missing idmap, or an idmap that
+  # overlaps the guest's own. The framework's schema checks these too; this
+  # task is the second gate, for the case where a role is applied directly.
+  ansible.builtin.assert:
+    that:
+      - item.value.volume is defined
+      - item.value.volume | length > 0
+      - item.value.filesystem == 'btrfs'
+      - item.value.idmap is defined
+      - item.value.idmap | length > 0
+      - item.value.host_uid is defined
+    fail_msg: >-
+      shared disk {{ item.key }} is missing a fact that makes it unsafe to
+      share: it needs a volume name, filesystem: btrfs, an idmap and a
+      host_uid.
+    quiet: true
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Read the storage configuration from the Proxmox node
+  # The manifest names a Proxmox storage, and the storage names a volume
+  # group and a thin pool. The two are not the same word in general:
+  # `pvesm config` does not exist as a command, so the storage is read
+  # through the API.
+  #
+  #   $ pvesh get /storage/data2 --output-format json
+  #   {"storage":"data2","type":"lvmthin","thinpool":"data2","vgname":"data2",...}
+  #
+  # The thin pool and the volume group are read from it rather than assumed,
+  # because each volume group holds exactly one thin pool on this host and a
+  # second pool in the same group is not possible:
+  #
+  #   $ lvcreate -V 20 -T data2/shared-media
+  #     Pool shared-media not found in Volume group data2
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pvesh
+      - get
+      - "/storage/{{ item.value.storage }}"
+      - --output-format
+      - json
+  register: shared_disk_storage_cfg
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Record the thin pool of each shared disk's storage
+  # The pool is the one the storage names. The volume is created inside it,
+  # and the path `lvcreate -V <size> -T <pool>` needs is `<vg>/<pool>`.
+  ansible.builtin.set_fact:
+    shared_disk_pool: >-
+      {{ shared_disk_pool | default({}) | combine({ item.key:
+          (shared_disk_storage_cfg.results[shared_disk_index].stdout
+           | from_json).thinpool | default('', true) }) }}
+  changed_when: false
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Refuse to continue without a thin pool for the storage
+  # Without a pool there is nothing to create the volume in, and the error
+  # from `lvcreate` names a pool rather than the storage, which reads like a
+  # typo in the disk's name.
+  ansible.builtin.assert:
+    that:
+      - shared_disk_pool[item.key] | length > 0
+    fail_msg: >-
+      no thin pool found in the volume group for storage
+      {{ item.value.storage }}. Each volume group holds exactly one thin
+      pool; check that the storage name in the manifest matches a pool on the
+      Proxmox node.
+    quiet: true
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Check whether each shared volume already exists
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/lvs
+      - --noheadings
+      - -o
+      - lv_name
+      - "{{ item.value.storage }}/{{ item.value.volume }}"
+  register: shared_disk_existing
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Create each shared volume
+  # A thin volume inside the pool. The name carries the owner's VMID, so it
+  # must be one no container uses — otherwise destroying that container takes
+  # the volume with it.
+  #
+  # The size is a floor, not a target: a thin volume is created at the size
+  # asked for and can be grown later with `lvs -L +<n>G`.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/lvcreate
+      - -V
+      - "{{ item.value.size_gb }}G"
+      - -T
+      - "{{ item.value.storage }}/{{ shared_disk_pool[item.key] }}"
+      - -n
+      - "{{ item.value.volume }}"
+      - --yes
+  register: shared_disk_created
+  changed_when: true
+  when: >-
+    item.value.volume
+    not in (shared_disk_existing.results[shared_disk_index].stdout | default(''))
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Check the filesystem on each shared volume
+  # A volume that has never been formatted is raw. One that was adopted from
+  # a container's rootfs carries that filesystem and its files, and must not
+  # be reformatted — `btrfs-convert` is what changes it, and that is a
+  # deliberate act, not something a play does on the way past.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/blkid
+      - -o
+      - value
+      - -s
+      - TYPE
+      - "/dev/{{ item.value.storage }}/{{ item.value.volume }}"
+  register: shared_disk_fstype
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Refuse to prepare a volume that is not btrfs
+  # A shared volume that is not btrfs cannot be mounted by two guests, and
+  # the failure surfaces when the second guest fails to start — long after
+  # the play that caused it. Refusing here names the volume.
+  ansible.builtin.assert:
+    that:
+      - shared_disk_fstype.results[shared_disk_index].stdout | trim in ['', 'btrfs']
+    fail_msg: >-
+      the shared volume {{ item.value.storage }}/{{ item.value.volume }} is
+      {{ shared_disk_fstype.results[shared_disk_index].stdout | trim | default('unformatted', true) }}, and
+      only btrfs can be mounted by two guests at once. Convert it first with
+      btrfs-convert.
+    quiet: true
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Format each new shared volume as btrfs
+  # Only a volume with no filesystem at all is formatted, and only one this
+  # play created. A volume that already existed is left exactly as it is.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/mkfs.btrfs
+      - -q
+      - -f
+      - "/dev/{{ item.value.storage }}/{{ item.value.volume }}"
+  register: shared_disk_formatted
+  changed_when: true
+  when: not shared_disk_created.results[shared_disk_index].skipped | default(false)
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Make the mountpoint directory for each shared volume
+  # A temporary mountpoint, so the tree can be prepared with the right
+  # ownership. `/mnt` cannot be used: it is the boot ISO and is read-only.
+  #
+  #   $ mkdir /mnt/shared
+  #   mkdir: cannot create directory '/mnt/shared': Read-only file system
+  #
+  # `/srv` is writable and is where the mountpoint goes. The mountpoint is an
+  # empty directory; the data is on the volume.
+  ansible.builtin.file:
+    path: "/srv/shared-disk/{{ item.value.volume }}"
+    state: directory
+    mode: "0755"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Check whether each shared volume is mounted on the Proxmox node
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/findmnt
+      - --noheadings
+      - "/srv/shared-disk/{{ item.value.volume }}"
+  register: shared_disk_mounted
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: Mount each shared volume that is not mounted yet
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mount
+      - "/dev/{{ item.value.storage }}/{{ item.value.volume }}"
+      - "/srv/shared-disk/{{ item.value.volume }}"
+  register: shared_disk_mounted_now
+  changed_when: false
+  when: shared_disk_mounted.results[shared_disk_index].stdout | trim | length == 0
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"
+
+- name: List every shared tree with the disk it belongs to
+  # The trees are the directories the guests share. They are created here
+  # rather than left to the application, because both guests have to agree on
+  # where they are.
+  #
+  # The list is built by a loop, one entry per disk, rather than by a
+  # comprehension: Jinja has no inline dict comprehension, and
+  # `[{'a': x['b']} for x in items]` is a parse error rather than a wrong
+  # answer. Measured:
+  #
+  #   template error while templating string: expected token ',', got 'for'
+  ansible.builtin.set_fact:
+    shared_disk_trees: >-
+      {{ shared_disk_trees | default([]) + [ {
+           'disk': item.key,
+           'volume': item.value.volume,
+           'host_uid': item.value.host_uid,
+           'trees': item.value.trees | default([])} ] }}
+  changed_when: false
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Create the shared trees on each volume
+  ansible.builtin.file:
+    path: "/srv/shared-disk/{{ item.0.volume }}{{ item.1 }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ shared_disk_trees | default([]) | subelements('trees') | list }}"
+  loop_control:
+    label: "{{ item.0.volume }}{{ item.1 }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Read the ownership of each shared tree
+  # Read before changing, so the change only runs when it is needed. A task
+  # that always reports `changed` breaks the acceptance test for every role
+  # here, which is `changed=0` on the second install.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/stat
+      - -c
+      - "%u"
+      - "/srv/shared-disk/{{ item.0.volume }}{{ item.1 }}"
+  register: shared_disk_tree_owner
+  changed_when: false
+  loop: "{{ shared_disk_trees | default([]) | subelements('trees') | list }}"
+  loop_control:
+    index_var: shared_disk_tree_index
+    label: "{{ item.0.volume }}{{ item.1 }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Give the shared trees the host-side ownership
+  # The files on the volume have to be owned by the host-side uid the idmap
+  # maps to. An idmap translates ownership; it does not set it.
+  #
+  # Measured: a volume whose files belong to host uid 100107 shows up inside
+  # the guest as uid 107, which is outside the mount idmap's range, so the
+  # writer gets `Permission denied`.
+  #
+  #   $ ls -ln /mnt/volume/music/
+  #   -rw-r--r-- 1 107 110  a.mp3
+  #   $ touch /mnt/volume/music/writer.mp3
+  #   touch: cannot touch '/mnt/volume/music/writer.mp3': Permission denied
+  #
+  # After the change the same file reads as uid 1000 and writes.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chown
+      - -R
+      - "{{ item.0.host_uid }}:{{ item.0.host_uid }}"
+      - "/srv/shared-disk/{{ item.0.volume }}{{ item.1 }}"
+  changed_when: true
+  loop: "{{ shared_disk_trees | default([]) | subelements('trees') | list }}"
+  loop_control:
+    index_var: shared_disk_tree_index
+    label: "{{ item.0.volume }}{{ item.1 }}"
+  when: >-
+    shared_disk_tree_owner.results[shared_disk_tree_index].stdout | trim
+    != (item.0.host_uid | string)
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Report what each shared tree holds
+  # The claim a play can make is only as good as the check behind it. This
+  # one asserts the tree's ownership on the host, so a green play means the
+  # disk is actually ready for a guest to mount.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/stat
+      - -c
+      - "%u %a %n"
+      - "/srv/shared-disk/{{ item.0.volume }}{{ item.1 }}"
+  register: shared_disk_tree_stat
+  changed_when: false
+  loop: "{{ shared_disk_trees | default([]) | subelements('trees') | list }}"
+  loop_control:
+    index_var: shared_disk_tree_index
+    label: "{{ item.0.volume }}{{ item.1 }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Assert that every shared tree has the host-side ownership
+  ansible.builtin.assert:
+    that:
+      - shared_disk_tree_stat.results[shared_disk_tree_index].stdout.split(' ')[0] | int == item.0.host_uid | int
+    fail_msg: >-
+      the shared tree {{ item.1 }} belongs to uid
+      {{ shared_disk_tree_stat.results[shared_disk_tree_index].stdout.split(' ')[0] }}, not to the host-side
+      uid {{ item.0.host_uid }} that the idmap maps to. A guest would see the
+      files as an unmapped uid and could not write them.
+    quiet: true
+  loop: "{{ shared_disk_trees | default([]) | subelements('trees') | list }}"
+  loop_control:
+    index_var: shared_disk_tree_index
+    label: "{{ item.0.volume }}{{ item.1 }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Unmount each shared volume again
+  # The volume must not stay mounted on the host while a guest mounts it. A
+  # host mount that outlives the play holds the device open:
+  #
+  #   $ lvremove -f data2/vm-901-disk-0
+  #     Logical volume data2/vm-901-disk-0 in use.
+  #
+  # The guest mounts it; the host does not keep it.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/umount
+      - "/srv/shared-disk/{{ item.value.volume }}"
+  changed_when: false
+  when: >-
+    shared_disk_mounted.results[shared_disk_index].stdout | trim | length > 0
+    or not shared_disk_mounted_now.results[shared_disk_index].skipped | default(false)
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ shared_disks | dict2items }}"
+  loop_control:
+    index_var: shared_disk_index
+    label: "{{ item.key }}"

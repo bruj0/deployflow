@@ -1,0 +1,37 @@
+---
+# A shared disk: one volume that two guests mount, one writing and one reading.
+#
+# This role knows nothing about any particular application. It owns the
+# lifecycle of a volume that more than one guest attaches, and the rules that
+# make that safe.
+#
+# The rules are not preferences. Each one was measured, and each one fails in
+# a way that is expensive:
+#
+#   btrfs            ext4 can only be mounted once, so the second guest
+#                    attaching it fails at the pre-start hook and refuses to
+#                    start.
+#   ownerless name   Proxmox owns a volume by the VMID in its name and deletes
+#                    it when that container is destroyed — including a volume
+#                    another guest is still using.
+#   one idmap        btrfs stores one idmap per filesystem in its superblock,
+#                    so a second guest asking for a different one is refused.
+#   one-to-one uid   a wide idmap overlaps the guest's own lxc.idmap, and the
+#                    shared tree then appears as `nobody`.
+#
+# The guest attaches the disk through `shared_disk_mounts` in its group_vars;
+# this role creates the volume and prepares the tree, and common/lxc does the
+# attaching.
+
+# The guest's attachments. Each entry is `disk`, `mountpoint` and `read_only`.
+# There is deliberately NO default: a role that attaches a volume the
+# operator did not ask for is a role that writes to a disk by surprise.
+#
+# The attachment itself is made by common/lxc, not by this role. This role
+# prepares the volume; the guest's role attaches it.
+shared_disk_mounts: []
+#
+# The disk's own facts — storage, size, volume name, idmap, host uid, trees —
+# come from the manifest's `shared_disks` block, and arrive as the
+# `shared_disks` variable. This role reads them; it never guesses them.
+shared_disks: {}

@@ -9,6 +9,23 @@
 # one directory under apps/ and one word in that guest's `app_roles`. Nothing in
 # this file changes for either.
 
+- name: Create the shared disks
+  # Before the guests, because a guest attaches a volume that has to exist.
+  #
+  # On the Proxmox node and once, not once per guest: a volume is a
+  # machine-wide thing, and two guests' plays racing to create the same one
+  # is a race that one of them loses. The attachments come from the
+  # controller, which has already read every guest's group_vars, so this play
+  # knows what the whole machine attaches.
+  hosts: proxmox
+  gather_facts: false
+  become: true
+  become_user: root
+
+  roles:
+    - role: shared_disk
+      tags: [lxc, shared_disk]
+
 - name: Create guests
   hosts: lxc
   gather_facts: false

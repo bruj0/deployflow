@@ -73,6 +73,155 @@
   # `pct create` is not re-entrant, so the guard has to sit in front of it.
   when: not lxc_existing.stat.exists
 
+- name: Resolve this guest's shared disk attachments
+  # The guest's `group_vars` names the disks it attaches; the manifest holds
+  # the facts about each one. The join happens here, per guest, so a guest
+  # attaches its own mounts and not everybody's.
+  #
+  # The list is built by a loop, one entry per attachment, rather than by a
+  # comprehension: Jinja has no inline dict comprehension, and
+  # `[{'a': x['b']} for x in items]` is a parse error rather than a wrong
+  # answer. Measured:
+  #
+  #   template error while templating string: expected token ',', got 'for'
+  ansible.builtin.set_fact:
+    lxc_shared_mounts: >-
+      {{ lxc_shared_mounts | default([]) + [ {
+           'disk': shared_disks[item.disk],
+           'mount': {'mountpoint': item.mountpoint,
+                     'read_only': item.read_only | default(false)}} ] }}
+  changed_when: false
+  loop: "{{ shared_disk_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.disk }}"
+
+- name: Refuse to attach a disk this guest names but the manifest does not
+  # A typo in the disk name would otherwise attach nothing and report
+  # success. The check is here because this is where the guest's list and the
+  # manifest's list meet.
+  ansible.builtin.assert:
+    that:
+      - item.disk in (shared_disks | default({}))
+    fail_msg: >-
+      this guest attaches the shared disk {{ item.disk }}, which the manifest
+      does not declare.
+    quiet: true
+  loop: "{{ shared_disk_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.disk }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Read the container's current mount points
+  # The attach task has to be idempotent: a second install must report
+  # `changed=0`, or the role reinstalls itself on every play. `pct set -mpN`
+  # always reports a change, so the current configuration is read first and
+  # the attach is skipped when it already says what is wanted.
+  #
+  # The comparison is on the mount point's own line, not on the whole
+  # configuration. `pct config` writes:
+  #
+  #   mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1
+  #   mp1: data2:vm-900-disk-0,mp=/mnt/other,idmap=u:1000:101000:1;g:1000:101000:1,ro=1
+  #
+  # so a search for the volume alone would match the wrong line.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/pct
+      - config
+      - "{{ lxc_vmid }}"
+  register: lxc_current_config
+  changed_when: false
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+
+- name: Read the mount point line each attachment would write
+  # One line per attachment, holding what the container currently has at
+  # that index. A mount point that is not configured yet reads as an empty
+  # string, which never matches what the attachment wants.
+  ansible.builtin.set_fact:
+    lxc_mount_lines: >-
+      {{ lxc_mount_lines | default([]) + [ {
+           'index': lxc_shared_mount_index,
+           'line': (lxc_current_config.stdout.splitlines()
+                    | select('match', '^mp' ~ lxc_shared_mount_index ~ ':')
+                    | first | default('')) } ] }}
+  changed_when: false
+  loop: "{{ lxc_shared_mounts | default([]) }}"
+  loop_control:
+    index_var: lxc_shared_mount_index
+    label: "{{ item.disk.volume }} -> {{ item.mount.mountpoint }}"
+
+- name: Record what each attachment would write
+  # The line the attach task writes, so the comparison below is against one
+  # string rather than an expression repeated twice.
+  #
+  # Proxmox adds `size=` to the line it stores, so the stored line is longer
+  # than what is written:
+  #
+  #   written: mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1
+  #   stored:  mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1,size=1000G
+  #
+  # The stored line therefore starts with what is written, and that prefix is
+  # what the comparison uses.
+  ansible.builtin.set_fact:
+    lxc_mount_wanted: >-
+      {{ lxc_mount_wanted | default([]) + [ {
+           'index': lxc_shared_mount_index,
+           'wanted': ('mp' ~ lxc_shared_mount_index ~ ': '
+                      ~ item.disk.storage ~ ':' ~ item.disk.volume
+                      ~ ',mp=' ~ item.mount.mountpoint
+                      ~ ',idmap=' ~ item.disk.idmap
+                      ~ (',ro=1' if item.mount.read_only else '')) } ] }}
+  changed_when: false
+  loop: "{{ lxc_shared_mounts | default([]) }}"
+  loop_control:
+    index_var: lxc_shared_mount_index
+    label: "{{ item.disk.volume }} -> {{ item.mount.mountpoint }}"
+
+- name: Attach each shared disk to the container
+  # A shared volume is attached with `pct set -mpN`. The volume is named
+  # `<storage>:<volume>` and the idmap is the disk's own, the same one every
+  # guest that attaches the disk uses.
+  #
+  # The idmap has to be identical on every guest: btrfs stores one idmap per
+  # filesystem in its superblock, so a second guest asking for a different one
+  # is refused and the container refuses to start. Measured:
+  #
+  #   mp0: ...,idmap=u:107:101000:1;g:110:101000:1
+  #   -> startup for container '211' failed
+  #
+  # It also has to be one-to-one. A wide idmap overlaps the guest's own
+  # `lxc.idmap` (`u 0 100000 65536`), and the shared tree then appears as
+  # `nobody` and the writer cannot write to it.
+  #
+  # The mount point names where the filesystem is attached. It does not select
+  # a directory of it: the guest sees the filesystem root there. Selecting a
+  # subtree is the application's own business.
+  #
+  # The task runs before the container starts, because Proxmox attaches the
+  # volume when it starts the guest, and a guest that starts without its
+  # shared disk is a guest serving an empty library.
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/pct
+      - set
+      - "{{ lxc_vmid }}"
+      - "-mp{{ lxc_shared_mount_index }}"
+      - "{{ item.disk.storage }}:{{ item.disk.volume }},mp={{ item.mount.mountpoint }},idmap={{ item.disk.idmap }}{{ ',ro=1' if item.mount.read_only else '' }}"
+  delegate_to: "{{ groups['proxmox'][0] }}"
+  become: true
+  become_user: root
+  loop: "{{ lxc_shared_mounts | default([]) }}"
+  loop_control:
+    index_var: lxc_shared_mount_index
+    label: "{{ item.disk.volume }} -> {{ item.mount.mountpoint }}"
+  when: >-
+    not lxc_mount_lines[lxc_shared_mount_index].line
+    .startswith(lxc_mount_wanted[lxc_shared_mount_index].wanted)
+
 - name: Start the container
   ansible.builtin.command:
     argv:

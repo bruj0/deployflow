@@ -125,6 +125,9 @@ class ProxmoxLxcTarget(Target):
                 # The manifest's own pin, so a role can check that it installs
                 # what the manifest named rather than what it pinned itself.
                 source_vars=install_mod.source_vars(app),
+                # The shared disks and the attachments, joined from the
+                # manifest and the inventory.
+                shared_vars=install_mod.shared_disk_vars(context.config),
                 label=app_name,
             )
         finally:

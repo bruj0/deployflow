@@ -29,7 +29,7 @@ CONFIG_NAME = "app.yaml"
 # Kept as explicit sets rather than inferred from the dataclass fields: a
 # dataclass silently ignores an attribute it was not given, which is exactly the
 # failure mode this module exists to prevent.
-_TOP_LEVEL = {"version", "defaults", "applications", "build"}
+_TOP_LEVEL = {"version", "defaults", "applications", "build", "shared_disks"}
 _DEFAULTS = {"python_version", "template", "storage", "rootfs_gb", "cores", "memory_mb", "swap_mb", "features", "onboot"}
 # `state` is written by the tool, never by an operator. It is in the schema so
 # that a record survives a round trip; see src/lxc/state.py.
@@ -39,6 +39,12 @@ _SOURCE = {"kind", "package", "repo", "ref", "python", "webui", "output"}
 _BUILD = {"python_version", "lock_requirement", "ref", "fetch", "verify_lock"}
 _TARGET = {"kind", "options"}
 _WEBUI = {"path", "out", "package_manager", "build_command", "install_command"}
+# A shared disk is a volume two guests mount, one writing and one reading.
+_SHARED_DISK = {
+    "storage", "size_gb", "volume", "filesystem", "idmap", "host_uid", "trees",
+}
+# One guest's attachment of a shared disk.
+_SHARED_DISK_MOUNT = {"disk", "mountpoint", "read_only"}
 
 # Where a secret is required: any one of these conditions puts it in that app's
 # required set. Kept as data so the message can say which condition failed
@@ -200,6 +206,64 @@ class Application:
 
 
 @dataclass(frozen=True)
+class SharedDisk:
+    """A volume two guests mount, one writing and one reading.
+
+    The disk belongs to the storage, not to any one application, so it is
+    declared once at the top level and referenced by name from the guests that
+    attach it.
+
+    Four fields carry a rule rather than a preference, and the framework
+    refuses a disk that breaks one of them.
+
+    ``filesystem`` must be ``btrfs``. ext4 can only be mounted once, so a
+    second guest attaching it fails at the pre-start hook and the container
+    refuses to start.
+
+    ``volume`` must name a VMID that has no container. Proxmox owns a volume
+    by the VMID in its name and deletes it when that container is destroyed —
+    including a volume another guest is still using. An ownerless name is what
+    keeps the disk alive across a guest being replaced.
+
+    ``idmap`` must be the same on every guest that attaches the disk, because
+    btrfs stores one idmap per filesystem in its superblock. It must also be
+    one-to-one and must not overlap the guest's own ``lxc.idmap``, or the tree
+    appears as ``nobody`` and the writer cannot write.
+
+    ``host_uid`` is the host-side half of that mapping. Files on the disk must
+    be owned by it, or the guest sees them as an unmapped uid.
+    """
+
+    storage: str = "data1"
+    size_gb: int = 16
+    volume: str = ""
+    filesystem: str = "btrfs"
+    idmap: str = ""
+    host_uid: int = 100000
+    trees: tuple[str, ...] = ()
+
+    def tree_names(self) -> tuple[str, ...]:
+        """The shared directories on this disk, each a leading-slash path."""
+        return self.trees
+
+
+@dataclass(frozen=True)
+class SharedDiskMount:
+    """One guest's attachment of a shared disk.
+
+    ``disk`` names a shared disk. ``mountpoint`` is where the filesystem is
+    attached inside the guest — it is a label, not a selector: a Proxmox
+    mount point exposes the filesystem root, never one of its directories.
+    Selecting a subtree is the application's business, done with its own
+    bind mount.
+    """
+
+    disk: str
+    mountpoint: str
+    read_only: bool = False
+
+
+@dataclass(frozen=True)
 class Defaults:
     """Guest shape inherited by any application that does not override it."""
 
@@ -222,6 +286,9 @@ class Config:
     defaults: Defaults
     applications: dict[str, Application]
     path: Path
+    # Shared disks, by name. A disk is declared once and referenced by the
+    # guests that attach it.
+    shared_disks: dict[str, SharedDisk] = field(default_factory=dict)
     # Raw mapping, for keys this version does not model yet. Reading a config
     # written for a newer tool should not silently lose data.
     raw: dict[str, Any] = field(default_factory=dict)
@@ -235,6 +302,16 @@ class Config:
                 hint=f"applications in this config: {known}",
             )
         return self.applications[name]
+
+    def shared_disk(self, name: str) -> SharedDisk:
+        """Look up one shared disk, with a message naming what is available."""
+        if name not in self.shared_disks:
+            known = ", ".join(sorted(self.shared_disks)) or "none"
+            raise ConfigError(
+                f"no shared disk named {name!r} in {self.path}",
+                hint=f"shared disks in this config: {known}",
+            )
+        return self.shared_disks[name]
 
     @property
     def root(self) -> Path:
@@ -422,6 +499,171 @@ def _target(data: Any, name: str) -> TargetRef:
     return TargetRef(kind=str(kind), options=dict(options))
 
 
+def _shared_disk(name: str, data: Any) -> SharedDisk:
+    """Read one shared disk block.
+
+    The rules this enforces are the ones that lose data or lose the mount,
+    and they are checked here rather than in a role, because a role that
+    finds them after it has already made a volume is too late.
+    """
+    where = f"shared_disks.{name}"
+    block = _require_mapping(data, where)
+    _reject_unknown(block, _SHARED_DISK, where)
+
+    filesystem = str(block.get("filesystem", "btrfs"))
+    if filesystem != "btrfs":
+        raise ConfigError(
+            f"{where}.filesystem must be 'btrfs', got {filesystem!r}",
+            hint="ext4 can only be mounted once, so a second guest attaching it "
+                 "fails to start; btrfs allows one mount per device",
+        )
+
+    volume = str(block.get("volume", ""))
+    if not volume:
+        raise ConfigError(
+            f"{where}.volume is required",
+            hint="name the LVM volume, for example: volume: vm-900-disk-0",
+        )
+    if not volume.startswith("vm-"):
+        raise ConfigError(
+            f"{where}.volume must be named vm-<vmid>-disk-<n>, got {volume!r}",
+            hint="Proxmox refuses a volume whose name it cannot parse, and it "
+                 "refuses to mount one that is not in its own convention",
+        )
+    owner = volume.split("-")[1] if volume.count("-") >= 2 else ""
+    if not owner.isdigit():
+        raise ConfigError(
+            f"{where}.volume must carry a numeric VMID, got {volume!r}",
+            hint="the VMID in the name is the owner: vm-900-disk-0 is owned by "
+                 "VMID 900, and destroying that VMID's container deletes the "
+                 "volume",
+        )
+
+    idmap = str(block.get("idmap", ""))
+    if not idmap:
+        raise ConfigError(
+            f"{where}.idmap is required",
+            hint="map one container uid to one host uid, for example: "
+                 "idmap: 'u:1000:101000:1;g:1000:101000:1'",
+        )
+    _check_idmap(idmap, where)
+
+    host_uid = int(block.get("host_uid", 100000))
+    trees = block.get("trees") or ()
+    if isinstance(trees, str):
+        trees = [trees]
+    for tree in trees:
+        if not str(tree).startswith("/"):
+            raise ConfigError(
+                f"{where}.trees entries must be absolute paths, got {tree!r}",
+                hint="a tree is a directory on the volume, for example: /music",
+            )
+
+    return SharedDisk(
+        storage=str(block.get("storage", "data1")),
+        size_gb=int(block.get("size_gb", 16)),
+        volume=volume,
+        filesystem=filesystem,
+        idmap=idmap,
+        host_uid=host_uid,
+        trees=tuple(str(t) for t in trees),
+    )
+
+
+def _check_idmap(idmap: str, where: str) -> None:
+    """Check that an idmap is one-to-one and does not overlap the guest's own.
+
+    Every unprivileged guest already has ``lxc.idmap = u 0 100000 65536``. A
+    per-mountpoint idmap is a second mapping on top of that one, and the two
+    must not cover the same range: a wide mount idmap makes the shared tree
+    appear as ``nobody`` and the writer cannot write to it.
+
+    The mapping is also one-to-one, because that is the only form Proxmox
+    accepts for a shared volume that two guests mount.
+    """
+    parts = [p for p in idmap.split(";") if p]
+    kinds = set()
+    for part in parts:
+        fields = part.split(":")
+        if len(fields) != 4:
+            raise ConfigError(
+                f"{where}.idmap entry {part!r} must be u:<from>:<to>:<range>",
+                hint="for example: 'u:1000:101000:1;g:1000:101000:1'",
+            )
+        kind = fields[0]
+        if kind not in ("u", "g"):
+            raise ConfigError(
+                f"{where}.idmap entry {part!r} must start with 'u' or 'g'",
+                hint="both a user and a group mapping are needed",
+            )
+        kinds.add(kind)
+        try:
+            start, count = int(fields[1]), int(fields[3])
+        except ValueError:
+            raise ConfigError(
+                f"{where}.idmap entry {part!r} has a non-numeric uid or range",
+                hint="for example: 'u:1000:101000:1;g:1000:101000:1'",
+            ) from None
+        if count != 1:
+            raise ConfigError(
+                f"{where}.idmap entry {part!r} maps {count} uids, not 1",
+                hint="a shared volume needs a one-to-one mapping: one "
+                     "container uid to one host uid",
+            )
+        if 0 <= start < 65536 and 100000 <= start < 165536:
+            raise ConfigError(
+                f"{where}.idmap entry {part!r} maps uid {start}, which "
+                "overlaps the guest's own lxc.idmap",
+                hint="the guest already maps u 0 100000 65536; pick a "
+                     "container uid outside that range",
+            )
+    missing = {"u", "g"} - kinds
+    if missing:
+        raise ConfigError(
+            f"{where}.idmap has no {' and '.join(sorted(missing))} mapping",
+            hint="for example: 'u:1000:101000:1;g:1000:101000:1'",
+        )
+
+
+def _shared_disk_mounts(data: Any, where: str) -> tuple[SharedDiskMount, ...]:
+    """Read a guest's list of shared disk attachments."""
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError(f"{where} must be a list")
+    mounts = []
+    for index, entry in enumerate(data):
+        spot = f"{where}[{index}]"
+        block = _require_mapping(entry, spot)
+        _reject_unknown(block, _SHARED_DISK_MOUNT, spot)
+        disk = block.get("disk")
+        if not disk:
+            raise ConfigError(
+                f"{spot}.disk is required",
+                hint="name a shared disk from the shared_disks block",
+            )
+        mountpoint = block.get("mountpoint")
+        if not mountpoint:
+            raise ConfigError(
+                f"{spot}.mountpoint is required",
+                hint="where the filesystem is attached inside the guest, for "
+                     "example: /mnt/volume",
+            )
+        if not str(mountpoint).startswith("/"):
+            raise ConfigError(
+                f"{spot}.mountpoint must be an absolute path, got {mountpoint!r}",
+                hint="for example: /mnt/volume",
+            )
+        mounts.append(
+            SharedDiskMount(
+                disk=str(disk),
+                mountpoint=str(mountpoint),
+                read_only=bool(block.get("read_only", False)),
+            )
+        )
+    return tuple(mounts)
+
+
 def _application(name: str, data: Any) -> Application:
     where = f"applications.{name}"
     block = _require_mapping(data, where)
@@ -502,13 +744,42 @@ def load(path: Path | None = None) -> Config:
     raw_apps = _require_mapping(root.get("applications"), "applications")
     applications = {name: _application(name, body) for name, body in raw_apps.items()}
 
+    raw_disks = root.get("shared_disks") or {}
+    if not isinstance(raw_disks, dict):
+        raise ConfigError("shared_disks must be a mapping of name to disk")
+    shared_disks = {
+        name: _shared_disk(name, body) for name, body in raw_disks.items()
+    }
+
+    _check_shared_disk_use(shared_disks)
+
     return Config(
         version=version,
         defaults=_defaults(root.get("defaults")),
         applications=applications,
         path=config_path,
+        shared_disks=shared_disks,
         raw=root,
     )
+
+
+def _check_shared_disk_use(disks: dict[str, SharedDisk]) -> None:
+    """Check the disks against each other.
+
+    Two disks may not claim the same volume, and no disk may be writable by
+    more than one guest. The second rule is checked against the inventory,
+    which is where the guests live, so it is done by the target that installs
+    them rather than here.
+    """
+    seen: dict[str, str] = {}
+    for name, disk in disks.items():
+        if disk.volume in seen:
+            raise ConfigError(
+                f"shared_disks.{name} and shared_disks.{seen[disk.volume]} "
+                f"both use the volume {disk.volume!r}",
+                hint="one volume is one disk; give each its own name",
+            )
+        seen[disk.volume] = name
 
 
 def dump(config: Config) -> str:

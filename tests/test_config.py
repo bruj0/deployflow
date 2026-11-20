@@ -189,3 +189,106 @@ class TestRegistry:
         with pytest.raises(TargetError) as excinfo:
             registry.resolve("")
         assert "target.kind" in str(excinfo.value)
+
+
+SHARED_DISK = """
+    version: 1
+    applications:
+      example-app:
+        description: sample
+        target:
+          kind: proxmox_lxc
+          options:
+            hostname: example-app
+        source:
+          kind: package
+          package: "example-app==1.0.0"
+    shared_disks:
+      media:
+        storage: data2
+        size_gb: 1000
+        volume: vm-900-disk-0
+        filesystem: btrfs
+        idmap: "u:1000:101000:1;g:1000:101000:1"
+        host_uid: 101000
+        trees:
+          - /music
+          - /movies
+"""
+
+
+def test_loads_a_shared_disk(tmp_path):
+    cfg = load(write(tmp_path, SHARED_DISK))
+    disk = cfg.shared_disk("media")
+    assert disk.storage == "data2"
+    assert disk.volume == "vm-900-disk-0"
+    assert disk.filesystem == "btrfs"
+    assert disk.host_uid == 101000
+    assert list(disk.trees) == ["/music", "/movies"]
+
+
+def test_rejects_a_shared_disk_that_is_not_btrfs(tmp_path):
+    body = SHARED_DISK.replace("filesystem: btrfs", "filesystem: ext4")
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "btrfs" in str(excinfo.value)
+
+
+def test_rejects_a_shared_volume_without_a_conventional_name(tmp_path):
+    body = SHARED_DISK.replace("vm-900-disk-0", "shared-media")
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "vm-" in str(excinfo.value)
+
+
+def test_rejects_a_shared_volume_whose_vmid_is_not_a_number(tmp_path):
+    body = SHARED_DISK.replace("vm-900-disk-0", "vm-abc-disk-0")
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "vm-" in str(excinfo.value)
+
+
+def test_rejects_a_shared_disk_without_an_idmap(tmp_path):
+    body = SHARED_DISK.replace(
+        '        idmap: "u:1000:101000:1;g:1000:101000:1"\n', ""
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "idmap" in str(excinfo.value)
+
+
+def test_rejects_an_idmap_that_overlaps_the_container_range(tmp_path):
+    # The container's own lxc.idmap covers u 0 100000 65536. A per-mount
+    # idmap that overlaps it makes the tree appear as `nobody`, and the
+    # writer cannot write to it.
+    body = SHARED_DISK.replace(
+        '        idmap: "u:1000:101000:1;g:1000:101000:1"',
+        '        idmap: "u:0:101000:65536;g:0:101000:65536"',
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "idmap" in str(excinfo.value)
+
+
+def test_rejects_a_relative_tree_path(tmp_path):
+    body = SHARED_DISK.replace("          - /music", "          - music")
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "music" in str(excinfo.value)
+
+
+def test_rejects_two_disks_claiming_one_volume(tmp_path):
+    body = SHARED_DISK.replace(
+        "    shared_disks:\n      media:",
+        "    shared_disks:\n      other:\n"
+        "        storage: data1\n"
+        "        size_gb: 100\n"
+        "        volume: vm-900-disk-0\n"
+        "        filesystem: btrfs\n"
+        '        idmap: "u:1000:101000:1;g:1000:101000:1"\n'
+        "        host_uid: 101000\n"
+        "      media:",
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, body))
+    assert "vm-900-disk-0" in str(excinfo.value)
