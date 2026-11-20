@@ -282,6 +282,57 @@ installing something else. The application's *name* is not its package name:
 `example-app` is what the guest calls the service, `bottle` is what gets
 installed to serve it.
 
+### 1a. A volume two guests share
+
+Sometimes one service writes a library and another serves it. The manifest
+declares the volume once:
+
+```yaml
+shared_disks:
+  media:
+    storage: data2              # the Proxmox storage it lives on
+    size_gb: 1000
+    volume: vm-900-disk-0       # the LVM volume name
+    filesystem: btrfs           # only btrfs
+    idmap: "u:1000:101000:1;g:1000:101000:1"
+    host_uid: 101000            # the host-side uid the files belong to
+    trees:
+      - /music
+      - /movies
+```
+
+and each guest says which volume it holds, and whether it may write:
+
+```yaml
+# inventory/group_vars/jf/main.yml
+shared_disk_mounts:
+  - disk: media
+    mountpoint: /mnt/volume
+    read_only: true
+```
+
+One writer and one reader hold the same btrfs volume at the same time — one
+`rw`, one `ro=1` — and there is one copy of the files, not two. The reader
+cannot write, create or delete; the writer's files appear in the reader
+immediately.
+
+Three things are enforced before anything is created, because each one is a
+failure that surfaces much later:
+
+- **btrfs, not ext4.** ext4 can be mounted once, so the second guest's
+  pre-start hook fails.
+- **The same idmap on every guest.** btrfs stores one idmap per filesystem in
+  its superblock, and a second guest asking for a different one is refused.
+  The idmap must also be one-to-one, or the tree appears as `nobody` and
+  nothing can be written.
+- **A volume name with no container behind it.** A volume is owned by the VMID
+  in its name, and destroying that container deletes the volume — even while
+  another container still uses it. `vm-900-disk-0` names a VMID that does not
+  exist.
+
+The full reference is in
+[docs/configuration.md](docs/configuration.md#shared_disks).
+
 ### 2. The application role
 
 How it is installed, in one directory per application. The agent writes this;
@@ -641,6 +692,7 @@ Every feature, what it gives you, and the file that holds it.
 | **Pluggable targets** | A target interface separates "what the application is" from "where it runs". One target ships today. | [`src/appctl/targets/base.py`](src/appctl/targets/base.py) |
 | **Streaming logs** | The play streams as it runs, with a heartbeat when a task goes quiet, and keeps commands, log, recap and errors per run under `tmp/runs/`. | [`src/appctl/install.py`](src/appctl/install.py) |
 | **Shared framework** | The toolchain, the service account and the venv that every application role depends on. | [`common/python/`](common/python/) |
+| **Shared volumes** | One volume two guests hold at once, one writing and one reading, with one copy of the files. The manifest declares it once; each guest says which volume it holds and whether it may write. | [`common/shared_disk/`](common/shared_disk/) |
 | **Eight working applications** | A sample that installs in one command, a service from a published release, a service built from a checkout, the build host that builds it, a search node from a pinned release archive, a dashboard in one container, a management plane in a Compose stack, and a music server behind a Cloudflare tunnel. | [`apps/example-app/`](apps/example-app/), [`apps/omniroute-release/`](apps/omniroute-release/), [`apps/omniroute/`](apps/omniroute/), [`apps/builder/`](apps/builder/), [`apps/xerj/`](apps/xerj/), [`apps/homarr/`](apps/homarr/), [`apps/proxcenter/`](apps/proxcenter/), [`apps/aurral/`](apps/aurral/) |
 
 ## Glossary
@@ -662,6 +714,7 @@ The words this document uses, in the order a newcomer meets them.
 | **lockfile** (`requirements.lock`) | Every dependency and its hashes, so the tree that installs is the tree that was reviewed. |
 | **`changed=0`** | The second run found nothing to do. The project's central claim. |
 | **toolchain** | An application that installs no service: the build host other applications are built on. |
+| **shared disk** | A volume two or more guests hold at the same time, one writing and the others reading. Declared once in the manifest, attached per guest. |
 
 ## Requirements
 

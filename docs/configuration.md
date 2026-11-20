@@ -13,7 +13,110 @@ a silently dropped key is how a service comes up on the wrong port.
 version: 1              # integer
 defaults: {...}         # guest shape, inherited by every application
 applications: {...}     # the applications
+shared_disks: {...}     # optional: the volumes two or more guests share
 ```
+
+## `shared_disks`
+
+One volume that two or more guests hold at the same time: one writes, the
+others read. This is the mechanism for a media library that one service
+downloads and another serves.
+
+```yaml
+shared_disks:
+  media:
+    storage: data2              # the Proxmox storage the volume lives on
+    size_gb: 1000               # the volume's size, in GiB
+    volume: vm-900-disk-0       # the LVM volume name
+    filesystem: btrfs           # only btrfs
+    idmap: "u:1000:101000:1;g:1000:101000:1"
+    host_uid: 101000            # the host-side uid the files belong to
+    trees:
+      - /music                  # directories on the volume, created by the role
+      - /movies
+```
+
+| Key | |
+|---|---|
+| `storage` | a Proxmox storage. The role reads its thin pool from the storage, not from a name it assumes. |
+| `size_gb` | the size the volume is created at. A thin volume grows with `lvs -L +<n>G`. |
+| `volume` | the LVM volume name. It must be `vm-<vmid>-disk-<n>`. |
+| `filesystem` | `btrfs`, and nothing else. |
+| `idmap` | the ownership mapping, the same on every guest that attaches the volume. |
+| `host_uid` | the uid the files are stored under on the host. |
+| `trees` | the directories on the volume. Each is created and owned by the role. |
+
+### Why the volume name carries an unused VMID
+
+A volume is owned by the VMID in its name, and **destroying that container
+deletes the volume** — even while another container still uses it. Proxmox says
+so when it refuses:
+
+```
+ignore deletion of 'data2:vm-900-disk-0', CT 220 isn't the owner!
+```
+
+So the name must carry a VMID no container uses. `vm-900-disk-0` is the
+convention; VMID 900 is not in the range the operator allocates from.
+
+A name Proxmox cannot parse is refused when it is attached, so the
+`vm-<vmid>-disk-<n>` shape is not cosmetic:
+
+```
+Could not rescan volume size - unable to parse lvm volume name 'shared-media'
+```
+
+### Why btrfs, and why one idmap
+
+ext4 can be mounted once. The second guest's pre-start hook fails, long after
+the play that caused it. btrfs allows one mount per device, so two guests hold
+the same volume at once, one `rw` and one `ro`.
+
+btrfs stores **one** idmap per filesystem, in its superblock. The first guest
+to mount it decides, and a second guest asking for a different one is refused
+and refuses to start. So every guest that attaches a disk uses the same
+`idmap`, and the manifest holds it in one place.
+
+The idmap must be **one-to-one**: `u:1000:101000:1` maps the single guest uid
+`1000` to the single host uid `101000`. A wider idmap overlaps the guest's
+own `lxc.idmap` (`u 0 100000 65536`), the tree appears as `nobody`, and the
+writer cannot write to it. The check is on the **container** side of the
+mapping: pick a container uid outside `0..65536`.
+
+The files on the volume must be owned by `host_uid`. The idmap maps
+ownership; it does not set it.
+
+### Attaching a disk to a guest
+
+The disk is declared once, in the manifest. Which guest holds it, and whether
+it holds it read-only, is declared in that guest's `group_vars`:
+
+```yaml
+# inventory/group_vars/jf/main.yml
+shared_disk_mounts:
+  - disk: media
+    mountpoint: /mnt/volume
+    read_only: true
+```
+
+The attachments do **not** travel as play variables. Extra vars are global, so
+passing them would attach every guest's mounts to every guest. The disk
+attachments live next to the guest facts they belong with, and the role joins
+the two per guest.
+
+A guest that names a disk the manifest does not declare is refused before
+anything runs.
+
+### What the role does
+
+`common/shared_disk` runs on the Proxmox node, once, before the guests: it
+creates the volume if it does not exist, refuses a volume that is not btrfs,
+creates the trees, gives them the host-side ownership, and asserts it. The
+`common/lxc` role then attaches the volume to each guest that names it, before
+the guest starts, because Proxmox attaches the volume when it starts it.
+
+A second `appctl install` reports `changed=0`: the role finds the volume, the
+filesystem and the trees, and changes nothing.
 
 ## `defaults`
 
@@ -321,6 +424,14 @@ Everything is checked at load, before any command does work:
 | `repo` source with no `build` | `<app> has source.kind: repo but no build block` |
 | missing `guest.hostname` | `applications.x.guest.hostname is required` |
 | `webui` with no `path` | `applications.x.source.webui.path is required` |
+| a shared disk that is not btrfs | `shared_disks.x.filesystem must be 'btrfs'` |
+| a shared volume name Proxmox cannot parse | `shared_disks.x.volume must be named vm-<vmid>-disk-<n>` |
+| a shared disk with no idmap | `shared_disks.x.idmap is required` |
+| an idmap that is not one-to-one | `shared_disks.x.idmap entry 'u:...' maps 4 uids, not 1` |
+| an idmap over the guest's own range | `shared_disks.x.idmap entry 'u:...' maps uid 1000, which overlaps the guest's own lxc.idmap` |
+| an idmap with no group mapping | `shared_disks.x.idmap has no g mapping` |
+| two shared disks claiming one volume | `shared_disks.x and shared_disks.y both use the volume '...'` |
+| a guest attaching a disk the manifest does not declare | `a guest attaches the shared disk 'x', which the manifest does not declare` |
 | unparseable YAML | the YAML error, with its line number |
 
 `appctl list` shows what was parsed, which is the quickest way to confirm a file

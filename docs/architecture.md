@@ -182,6 +182,7 @@ Where a change belongs:
 | install a different artifact | `apps/<app>/` and the `source:` block |
 | require another secret | the `secrets:` list in `app.yaml` |
 | change how guests are created | `common/lxc/` |
+| change how shared volumes are prepared | `common/shared_disk/` |
 | support another delivery target | `src/appctl/targets/` — see [targets.md](targets.md) |
 | change the venv contract | `common/python/` |
 | add an application | `apps/<app>/` — see the `deployflow-add-app` skill |
@@ -244,3 +245,35 @@ measured. A builder sized at 12 GB passed every install check and then failed
 during a build with an error naming a memory limit rather than the guest — and
 the guest stopped answering SSH. A role that installs a compiler and reports
 success has not said anything about whether a build can run on it.
+
+**A shared volume outlives every container that holds it.** The volume name
+carries an owner, and destroying that owner destroys the volume — while
+another container is still using it. Proxmox refuses the destroy and says so:
+
+```
+ignore deletion of 'data2:vm-900-disk-0', CT 220 isn't the owner!
+```
+
+So the name must carry a VMID no container uses, and the schema refuses one
+that is not `vm-<vmid>-disk-<n>` — because a name Proxmox cannot parse is
+refused when it is attached, with an error that reads like a typo.
+
+**Every guest that holds a shared volume uses the same idmap.** btrfs stores
+one idmap per filesystem, in its superblock. The first guest to mount the
+volume decides it, and a second guest asking for a different one is refused
+and refuses to start. The idmap lives in the manifest, once, for that reason.
+
+**The idmap is one-to-one, and the files are owned by the host-side uid.** A
+wide idmap overlaps the guest's own `lxc.idmap` (`u 0 100000 65536`), the
+tree appears as `nobody`, and the writer cannot write to it. The idmap maps
+ownership; it does not set it, so the files have to be owned by the uid the
+idmap maps to.
+
+**The attachments live in the guest's `group_vars`, not in a play variable.**
+Extra vars are global. A list of attachments passed as a variable would attach
+every guest's mounts to every guest.
+
+**The volume is prepared on the host, but not left mounted there.** The host
+mounts it to create the trees and give them their ownership, then unmounts it.
+A host mount that outlives the play holds the device open and the volume
+cannot be removed.
