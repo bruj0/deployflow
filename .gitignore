@@ -27,6 +27,10 @@ __pycache__/
 *.log
 .cache/
 
+# Scratch work for the current task: plans, notes, throwaway scripts. It
+# goes away with the worktree and is never committed.
+.scratch/
+
 # The manifest an operator edits. app.example.yaml is the committed template.
 app.yaml
 # The inventory. It names the operator's own Proxmox host, the guest IDs and

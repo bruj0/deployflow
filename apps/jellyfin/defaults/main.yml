@@ -130,7 +130,29 @@ jellyfin_database: "{{ jellyfin_data_dir }}/data/jellyfin.db"
 #
 # The paths are the ones the shared disk is mounted at. A shared disk is
 # mounted at the volume's ROOT, so a library names the tree it wants —
-# `/mnt/volume/music`, not `/mnt/volume`.
+# `/mnt/media/music`, not `/mnt/media`.
+#
+# THE MOUNT POINT IS `/mnt/media`, NOT `/mnt/volume`.
+#
+# This is not a preference. Jellyfin records the media path in three places:
+# the library's `.mblink` shortcut, the `PathInfos` in the library's
+# `options.xml`, and the `Path` column of every tracked item in the
+# database. Measured on the server that was migrated:
+#
+#   var/lib/jellyfin/root/default/Music/music.mblink   -> /mnt/media/music
+#   var/lib/jellyfin/root/default/Music/options.xml     -> /mnt/media/music
+#   BaseItems.Path                                      -> /mnt/media/music
+#
+# A server that was configured against `/mnt/media` and is moved to a mount
+# at `/mnt/volume` has to have all three rewritten, and the 1255 tracked
+# items have to be re-matched against the new path or they are orphaned and
+# re-added as new items: the watch history and the favourites are lost, and
+# the library is scanned from scratch.
+#
+# Mounting the volume at `/mnt/media` instead makes the migrated state
+# correct as it is. The volume's own trees are `/music` and `/movies`, so
+# the guest sees `/mnt/media/music` and `/mnt/media/movies` — the same two
+# paths the server already knows.
 #
 # `save_local_metadata` is False on every one of them. Jellyfin writes
 # thumbnails and metadata into the media folder by default, and the shared
@@ -139,13 +161,133 @@ jellyfin_database: "{{ jellyfin_data_dir }}/data/jellyfin.db"
 # (jellyfin/jellyfin#6605).
 jellyfin_libraries:
   - name: Music
-    path: /mnt/volume/music
+    path: /mnt/media/music
     type: music
     save_local_metadata: false
   - name: Movies
-    path: /mnt/volume/movies
+    path: /mnt/media/movies
     type: movies
     save_local_metadata: false
+
+# The normaliser for the library list the server answers with.
+#
+# Jellyfin's JSON casing is not stable, and the request does not decide it:
+# a fresh database answers in camelCase and a migrated one in PascalCase.
+# So the answer is normalised once, into a shape the role reads, and every
+# lookup is made under both spellings.
+#
+# The result is a list of dicts with these keys, whatever came back:
+#
+#   name                 the library's name
+#   locations            the paths it points at
+#   collection_type      music, movies, …
+#   save_local_metadata  whether it writes metadata into the media folder
+#   item_id              the library's own id, which the options endpoint wants
+#   options              the server's own options object, for the same call
+#
+# It is a script and not a Jinja expression because the nested lookup —
+# `LibraryOptions.SaveLocalMetadata`, under either spelling of either name —
+# is not something Jinja can express without repeating itself at every use.
+#
+# The script takes the wanted libraries on stdin as a second JSON document
+# and reports, for each one whose saver is on, the body that turns it off.
+# The body is the server's OWN options object with one field changed,
+# because the options endpoint replaces the options rather than merging
+# them: a partial body would drop every setting it does not mention.
+jellyfin_normalize_libraries_script: |
+  import json, sys
+
+  def pick(d, *names):
+      """The first of `names` present in `d`."""
+      for name in names:
+          if name in d:
+              return d[name]
+      return None
+
+  def set_in(d, names, value):
+      """Set whichever of `names` is present in `d`."""
+      for name in names:
+          if name in d:
+              d[name] = value
+              return
+      d[names[0]] = value
+
+  # Two JSON documents, as arguments rather than on stdin: Ansible's
+  # `command` module has no `stdin` keyword, and a task that passes one
+  # fails with "non-zero return code" and a Python traceback about reading
+  # a closed stream.
+  libraries = json.loads(sys.argv[1]) if len(sys.argv) > 1 else []
+  wanted = json.loads(sys.argv[2]) if len(sys.argv) > 2 else []
+
+  out = []
+  fixes = []
+  for lib in libraries:
+      options = pick(lib, "LibraryOptions", "libraryOptions") or {}
+      saver = pick(options, "SaveLocalMetadata", "saveLocalMetadata")
+      name = pick(lib, "Name", "name")
+      out.append({
+          "name": name,
+          "locations": pick(lib, "Locations", "locations") or [],
+          "collection_type": pick(lib, "CollectionType", "collectionType"),
+          "save_local_metadata": saver,
+          "item_id": pick(lib, "ItemId", "itemId"),
+          "options": options,
+      })
+
+      # A library that wants the saver off and has it on is a library that
+      # writes into a read-only media folder on every scan.
+      #
+      # The comparison is `bool(saver) != bool(wanted)`, not `is not`. The
+      # wanted value arrives as a JSON boolean and the server's as a JSON
+      # boolean too, but `True is not False` and `True != False` disagree
+      # about what "the same value" means when one side came from YAML and
+      # the other from JSON — and `is` on booleans is the wrong tool either
+      # way, because it compares identity rather than value.
+      target = next((w for w in wanted if w["name"] == name), None)
+      if target is None:
+          continue
+      if bool(saver) == bool(target["save_local_metadata"]):
+          continue
+      changed = dict(options)
+      set_in(changed, ["SaveLocalMetadata", "saveLocalMetadata"],
+             bool(target["save_local_metadata"]))
+      fixes.append({
+          "name": name,
+          "Id": pick(lib, "ItemId", "itemId"),
+          "LibraryOptions": changed,
+      })
+
+  print(json.dumps({"libraries": out, "fixes": fixes}))
+
+# ---------------------------------------------------------------------------
+# The state restore
+# ---------------------------------------------------------------------------
+#
+# The archive of a previous server's state, and where to find it on the
+# guest. Empty by default: a fresh install has no previous state, and a role
+# that restored something by default would install a server with somebody
+# else's users.
+#
+# The archive is a tarball whose paths are absolute — `var/lib/jellyfin` and
+# `etc/jellyfin` — so it is unpacked at `/`. It carries the database, the
+# per-library options, the user accounts and the metadata cache.
+#
+# The archive is on the GUEST, not on the controller. A 150 MB state archive
+# is not something to carry in the extra-vars file or to push through
+# Ansible on every install, and a restore is a one-time migration rather
+# than a step every install repeats. The cutover pushes it once with
+# `pct push`; the role then unpacks it when it is told where it is.
+#
+# The role asserts that the archive is there when this is set, so a
+# mistyped path fails the play rather than producing a server with an empty
+# library and a straight face.
+jellyfin_state_archive: ""
+
+# The account and group that own the restored state. The archive carries the
+# ownership of the machine it came from, and this guest's service account
+# has a different uid — 999 here, 107 on the container that was built by
+# hand — so the ownership is set after the unpacking.
+jellyfin_state_owner: "{{ app_user }}"
 
 # ---------------------------------------------------------------------------
 # Exposure

@@ -121,6 +121,25 @@ aurral_config_dir: "{{ app_state_dir }}/config"
 # cannot see it and a rebuilt guest destroys it.
 aurral_media_dir: "{{ app_state_dir }}/media"
 
+# The music that is SHARED, bound into the container at the Library folder.
+#
+# This is the `music` tree of the shared media volume, and it is the path a
+# media server has to read to see the same files. It is a different path from
+# `aurral_media_dir` because the shared volume holds the movies as well, and
+# a media server that shares files with Aurral must not be able to reach
+# them: the bind names the subtree, not the volume root.
+#
+# The guest mounts the volume at `/mnt/media`, so the tree is
+# `/mnt/media/music` on the guest's side.
+#
+# A subtree of an idmapped mount binds correctly, and the files inside it
+# carry the uid the idmap maps to. Measured:
+#
+#   $ docker run --rm -v /mnt/media/music:/data alpine \
+#       stat -c '%n uid=%u' /data/a.mp3
+#   /data/a.mp3 uid=1000
+aurral_shared_music_dir: /mnt/media/music
+
 # The owner of the music inside the container. Aurral's entrypoint runs as root
 # and drops to this uid and gid, so the media it writes has to be owned by it.
 #

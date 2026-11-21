@@ -20,7 +20,7 @@ intact.
 | State | `/var/lib/jellyfin` — the database, the metadata, the thumbnails |
 | Unit | `jellyfin.service`, shipped by the package |
 | Port | 8096, read back from the running server |
-| Media | the shared volume, read-only, mounted at `/mnt/volume` |
+| Media | the shared volume, read-only, mounted at `/mnt/media` |
 | Tunnel | `movies.bruj0.net`, a locally managed Cloudflare tunnel |
 
 ## Install it
@@ -292,7 +292,7 @@ and this guest says which volume it holds and that it may not write:
 # inventory/group_vars/jf/main.yml
 shared_disk_mounts:
   - disk: media
-    mountpoint: /mnt/volume
+    mountpoint: /mnt/media
     read_only: true
 ```
 
@@ -309,7 +309,59 @@ while another guest is using it. `vm-900-disk-0` names a VMID that is not a
 guest, so the volume outlives every container that mounts it.
 
 The mount path does not select a subtree: the guest sees the volume root at
-`/mnt/volume`, and the libraries name the tree each one wants.
+`/mnt/media`, and the libraries name the tree each one wants.
+
+**`/mnt/media` is not a choice.** Jellyfin records a media path in three
+places — the library's `.mblink` shortcut, the `PathInfos` in its
+`options.xml`, and the `Path` of every tracked item in its database. The
+state this server was migrated from names `/mnt/media/music` and
+`/mnt/media/movies` in all three, so mounting the volume anywhere else
+orphans every tracked item: the watch history and the favourites are gone,
+and the library is rescanned from scratch as 873 new items.
+
+## The state archive, and the wait that follows it
+
+The role can restore a previous server's state on its first install:
+
+```yaml
+# inventory/group_vars/jf/main.yml
+jellyfin_state_archive: /root/jellyfin-state.tar.gz
+```
+
+The archive carries the database, the per-library options, the user accounts
+and the metadata cache. It sits on the **guest**, not the controller: a
+150 MB archive is not something to carry in the extra-vars file or push
+through Ansible on every install, and a restore is a one-time migration
+rather than a step every install repeats.
+
+The role unpacks it only when the database is not there yet, and leaves it
+alone after that, so a second install does not destroy the state the server
+has written since.
+
+**A restored server migrates its database on the first start, and the
+migration runs inside the startup.** The API starts answering before the
+migration finishes, so "the server answers" does not mean "the database is
+ready". A role that writes to the database as soon as the API answers
+writes into a database the migration is holding. Measured, on a server
+restored from a 10.11 state:
+
+```
+18:06:20  the migration starts
+18:06:29  the role creates its API key — a WRITE, into the migrating database
+18:06:30  SQLite Error 11: 'database disk image is malformed'
+```
+
+The database was left corrupt. The role therefore waits before it writes
+anything, and the wait is on the **migration count** — the number of rows in
+`__EFMigrationsHistory` — because the migration leaves no "done" line in the
+log to wait for. The restored database carries 71 migrations; the migrated
+one carries 107.
+
+The log window that watch reads is anchored to an absolute epoch taken on
+the guest before the service started. A relative window is wrong: the
+guest's clock runs an hour behind the controller's, so `--since "-15 min"`
+on the guest reaches back into the previous run and reports a failure that
+already happened.
 
 ## Measured on a scratch guest
 
@@ -317,13 +369,13 @@ The role was proved end to end on a throwaway guest before it touched the
 production one. The numbers it produced:
 
 ```
-jellyfin: proxmox_lxc -> jellyfin  0 changed, 0 failed, 93 tasks, 49s
+jellyfin: proxmox_lxc -> jellyfin  0 changed, 0 failed, 108 tasks, 74s
   check: jellyfin is installed and answering on port 8096
   check: version: 12.4+ubu2604
   check: service account: jellyfin (uid 999)
   check: server version: 12.4.0
-  check: libraries: Music, Movies
-  check: tunnel: movies.bruj0.net (disabled)
+  check: libraries: Movies, Music
+  check: tunnel: movies.bruj0.net (enabled)
 ```
 
 `0 changed` on the second run is the acceptance test: the role converges.
@@ -331,14 +383,51 @@ jellyfin: proxmox_lxc -> jellyfin  0 changed, 0 failed, 93 tasks, 49s
 The shared disk was verified from inside the guest:
 
 ```
-/dev/mapper/data2-vm--900--disk--0 /mnt/volume ro,relatime,idmapped,...
+/dev/mapper/data2-vm--900--disk--0 /mnt/media ro,relatime,idmapped,...
 
-$ touch /mnt/volume/music/probe
-touch: cannot touch '/mnt/volume/music/probe': Read-only file system
+$ touch /mnt/media/music/probe
+touch: cannot touch '/mnt/media/music/probe': Read-only file system
 
-$ sudo -u jellyfin cat /mnt/volume/music/probe.txt
+$ sudo -u jellyfin cat /mnt/media/music/probe.txt
 hello from the writer
 ```
 
 The last line is the whole point: a file written on the host as uid 101000
 and owned by the writer, read by Jellyfin's account, which is a different uid.
+
+## Measured in production
+
+The cutover ran on 2026-11-21. The server was rebuilt from a stock template
+by the role, the state was restored and migrated on the guest's first start,
+and the shared volume was attached read-only:
+
+```
+mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1,ro=1,size=1T
+rootfs: data1:vm-100-disk-0,size=16G
+```
+
+The restored state, after the migration:
+
+```
+integrity: ok
+users: admin bruj0
+items: 1255
+migrations: 107
+```
+
+and the API agrees — 874 audio items, and the two libraries pointing where the
+state already knew:
+
+```
+Movies -> ['/mnt/media/movies']  save_local_metadata=False
+Music  -> ['/mnt/media/music']   save_local_metadata=False
+```
+
+The reader sees the media and cannot write it:
+
+```
+$ ls /mnt/media/music | wc -l
+873
+$ sudo -u jellyfin touch /mnt/media/music/probe
+touch: cannot touch '/mnt/media/music/probe': Read-only file system
+```

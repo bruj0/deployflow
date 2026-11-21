@@ -188,6 +188,159 @@
   changed_when: false
   register: jellyfin_uid
 
+# ---------------------------------------------------------------------------
+# The state restore
+# ---------------------------------------------------------------------------
+#
+# A previous server's state, restored from an archive the cutover put on the
+# guest. It carries the database, the per-library options, the user accounts
+# and the metadata cache.
+#
+# The restore happens BEFORE the service starts, and that ordering is the
+# whole point. Jellyfin's migration from a 10.11 database to a 12.4 one runs
+# on first start, it is one-way, and it rewrites the schema in place. A
+# server that started on the empty database first and had the old one
+# unpacked over it afterwards would leave the migration to run against a
+# database the server had already opened, and the result is a server whose
+# schema does not match its own migration history.
+#
+# The restore is skipped when the database is already there. The acceptance
+# test for this repository is `changed=0` on the second install, and a role
+# that unpacked the archive on every run would both fail that and destroy
+# the state the server had written since — the accounts, the watch history,
+# the play counts.
+- name: Read whether the database is already in place
+  ansible.builtin.stat:
+    path: "{{ jellyfin_database }}"
+  register: jellyfin_database_present
+
+- name: Read the state archive
+  # A `stat`, and not the `is file` test, because the `is` tests run on the
+  # CONTROLLER: `jellyfin_state_archive is file` asks the controller whether
+  # IT has a file at that path, and it does not — the archive is on the
+  # guest. The assertion failed with
+  #   "assertion": "jellyfin_state_archive is file", "evaluated_to": false
+  # while the file was there, 0600 and 153 MB on the guest.
+  #
+  # The `stat` module asks the guest, which is the question worth asking.
+  ansible.builtin.stat:
+    path: "{{ jellyfin_state_archive }}"
+  register: jellyfin_state_archive_stat
+  when: jellyfin_state_archive | length > 0
+
+- name: Fail when the state archive is named but is not on the guest
+  # A mistyped path would otherwise restore nothing and produce a server with
+  # an empty library, which is the one outcome that looks like a working
+  # install. The error names the path.
+  ansible.builtin.assert:
+    that:
+      - jellyfin_state_archive | length > 0
+      - jellyfin_state_archive_stat.stat.exists
+      - jellyfin_state_archive_stat.stat.isreg
+    fail_msg: >-
+      The state archive {{ jellyfin_state_archive | default('(unset)') }} is
+      not a file on this guest. Push it with `pct push` before installing, or
+      clear jellyfin_state_archive to install a fresh server.
+    quiet: true
+  when:
+    - jellyfin_state_archive | length > 0
+    - not jellyfin_database_present.stat.exists
+
+- name: Restore the previous state
+  # The archive's paths are absolute — `var/lib/jellyfin` and
+  # `etc/jellyfin` — so it is unpacked at `/`.
+  #
+  # The unpack is done with `tar` rather than with Ansible's `unarchive`,
+  # because `unarchive` refuses a path that escapes the destination and
+  # because the archive is already on the guest: `remote_src` is what makes
+  # that work, and the extraction is the same either way.
+  #
+  # The ownership is NOT restored from the archive. The archive carries the
+  # uid of the machine it came from — 107 on the container that was built by
+  # hand — and this guest's service account is a different uid. The next
+  # task sets it.
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tar
+      - xzf
+      - "{{ jellyfin_state_archive }}"
+      - -C
+      - /
+  register: jellyfin_state_restored_task
+  changed_when: true
+  when:
+    - jellyfin_state_archive | length > 0
+    - not jellyfin_database_present.stat.exists
+
+- name: Record that the state was restored
+  # The flag says the database on this guest came from another version, and
+  # so the migration below has to be waited for before anything writes to
+  # it. Without it the role writes to a database the migration is holding,
+  # and the database is left corrupt.
+  #
+  # The count is the number of migrations the restored database carries. The
+  # migration that runs on first start adds more, and the wait below uses
+  # this number to tell "the migration is running" from "the migration is
+  # done".
+  #
+  # The count is read from the ARCHIVE rather than from the unpacked
+  # database, because the unpack happens in the task above and the number
+  # has to be known before the server starts.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sqlite3, sys, tarfile
+        with tarfile.open(sys.argv[1], "r:gz") as archive:
+            member = archive.extractfile("var/lib/jellyfin/data/jellyfin.db")
+            if member is None:
+                print(0)
+                raise SystemExit
+            with open("/tmp/jellyfin-restored.db", "wb") as handle:
+                handle.write(member.read())
+        db = sqlite3.connect("/tmp/jellyfin-restored.db")
+        print(db.execute(
+            "select count(*) from __EFMigrationsHistory").fetchone()[0])
+      - "{{ jellyfin_state_archive }}"
+  register: jellyfin_migration_count_task
+  changed_when: false
+  when:
+    - jellyfin_state_archive | length > 0
+    - not jellyfin_database_present.stat.exists
+
+- name: Record the restored state's migration count
+  ansible.builtin.set_fact:
+    jellyfin_state_restored: true
+    jellyfin_migration_count_before: >-
+      {{ jellyfin_migration_count_task.stdout | default('0') | trim | int }}
+  when:
+    - jellyfin_state_archive | length > 0
+    - not jellyfin_database_present.stat.exists
+
+- name: Give the restored state to the service account
+  # The archive's ownership belongs to the machine the state came from. Left
+  # as it is, the server cannot open its own database: the file is owned by a
+  # uid that does not exist on this guest.
+  #
+  # `recurse` on `/var/lib/jellyfin` is the whole metadata cache — 152 MB of
+  # thumbnails — so this walks more files than the rest of the role touches.
+  # It runs once, on the restore, and never again.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ jellyfin_state_owner }}"
+    group: "{{ jellyfin_state_owner }}"
+    recurse: true
+  loop:
+    - path: "{{ jellyfin_data_dir }}"
+    - path: "{{ jellyfin_config_dir }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - jellyfin_state_archive | length > 0
+    - not jellyfin_database_present.stat.exists
+
 - name: Ensure the package's directories exist and belong to the service account
   # The package creates these, and only chowns them when it finds them owned
   # by root. A directory that exists with the wrong owner is left alone by
@@ -217,6 +370,24 @@
 # ---------------------------------------------------------------------------
 # The service
 # ---------------------------------------------------------------------------
+
+- name: Mark the moment before the service starts
+  # The wait for the migration reads the service's log, and the log is read
+  # through a window. A relative window — "--since -15 min" — is wrong
+  # here, because the guest's clock and the controller's clock do not
+  # agree: the guest runs an hour behind, so a fifteen-minute window on the
+  # guest reaches back into the previous run's log and reports a failure
+  # that happened an hour ago.
+  #
+  # An absolute epoch does not have that problem. This is the guest's own
+  # clock, so the window starts where the controller's view of the guest
+  # does not matter.
+  ansible.builtin.command:
+    argv:
+      - date
+      - +%s
+  register: jellyfin_epoch_before_start
+  changed_when: false
 
 - name: Enable and start the service
   # The service is started BEFORE the metadata savers are turned off, because
@@ -254,8 +425,29 @@
   #
   # The port check is kept, but it is not what proves the server is ready.
   # The API answering is.
+  #
+  # The `Accept` header asks for the PascalCase profile. It does not PIN the
+  # casing, though: which spelling comes back depends on the server's own
+  # state, not on what the request asked for.
+  #
+  # MEASURED on one server, one version, one day:
+  #
+  #   a fresh database      answered {"localAddress":"http://127.0.0.1:8096"}
+  #   a migrated database   answered {"LocalAddress":"http://127.0.0.1:8096"}
+  #
+  # and every Accept header gave the same answer on a given server:
+  #
+  #   no Accept header                              -> LocalAddress
+  #   application/json                              -> LocalAddress
+  #   application/json; profile="PascalCase"        -> LocalAddress
+  #   application/json; profile="CamelCase"         -> localAddress
+  #
+  # So the profile in the header is not what decides it, and the role reads
+  # the key without caring which spelling it got. See the task below.
   ansible.builtin.uri:
     url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/System/Info/Public"
+    headers:
+      Accept: 'application/json; profile="PascalCase"'
     status_code: 200
     timeout: 30
   register: jellyfin_public_info
@@ -282,9 +474,25 @@
   # `LocalAddress` in the public info response is the server's own statement
   # of where it listens, so it is the port the server is actually using.
   # Measured: "http://127.0.0.1:8096".
+  #
+  # THE KEY IS READ WITHOUT CARING WHICH SPELLING CAME BACK.
+  #
+  # `json.LocalAddress` fails with
+  #   'dict object' has no attribute 'LocalAddress'
+  # on a server that answers in camelCase, and `json.localAddress` fails the
+  # same way on a server that answers in PascalCase. The two were measured on
+  # the same version, on the same day, differing only in whether the
+  # database had been migrated.
+  #
+  # So the value is looked up by trying both spellings, rather than by
+  # picking one and hoping. A role that picks one is a role that fails on
+  # every other machine.
   ansible.builtin.set_fact:
     jellyfin_listen_port: >-
-      {{ jellyfin_public_info.json.LocalAddress | regex_replace('^.*:', '') }}
+      {{ (jellyfin_public_info.json | dict2items
+          | selectattr('key', 'in', ['LocalAddress', 'localAddress'])
+          | map(attribute='value') | first)
+         | regex_replace('^.*:', '') }}
 
 - name: Fail when the port does not match what this role expects
   ansible.builtin.fail:
@@ -293,6 +501,133 @@
       role expects {{ app_port }}. Change app_port in the role's defaults, or
       the port the server was configured with on the guest.
   when: jellyfin_listen_port | int != app_port | int
+
+- name: Wait for the database migration to finish
+  # THIS IS THE STEP THE ROLE WAS MISSING, and it is the one that matters.
+  #
+  # A server restored from an older state migrates its database on the first
+  # start. The migration runs INSIDE the startup, and the server's API
+  # starts answering BEFORE the migration is finished — the API is up while
+  # the database is still being rewritten.
+  #
+  # So "the server answers" does not mean "the database is ready", and a
+  # role that writes to the database as soon as the API answers writes into
+  # a database the migration is holding.
+  #
+  # MEASURED, on a server restored from a 10.11 state:
+  #
+  #   18:06:20  the migration starts
+  #   18:06:29  the role creates its API key — a WRITE, into the migrating
+  #              database
+  #   18:06:30  SQLite Error 11: 'database disk image is malformed'
+  #             Error while optimizing the database after migration
+  #
+  # The database was left corrupt. The same restore, with nothing writing to
+  # it while the migration ran, ended clean:
+  #
+  #   integrity: ok
+  #   users: admin, bruj0
+  #   items: 1255
+  #   migrations: 107
+  #
+  # THE WAIT IS ON THE MIGRATION COUNT, not on a log line and not on a sleep.
+  #
+  # The migration leaves no "done" line in the log: a clean run says only
+  # that a rebuild of `BaseItems` is pending, and the next thing it says is
+  # about the web root. So there is nothing to wait for in the log.
+  #
+  # The count is the thing that changes. The restored database carries the
+  # migrations of the version it came from — 71 for a 10.11 database — and
+  # the migrated one carries the migrations of the version that ran it: 107
+  # for 12.4. The role waits for the count to stop moving and to be higher
+  # than the one the archive carried.
+  #
+  # The count is read from the database, which is exactly the thing that must
+  # not be written to while the migration runs — and reading it does not
+  # write.
+  #
+  # The window the log is read through is anchored to an absolute epoch
+  # taken on the guest before the service started. A relative window is
+  # wrong here: the guest's clock runs an hour behind the controller's, so
+  # "--since -15 min" on the guest reaches back into the previous run and
+  # finds a failure that already happened.
+  #
+  # The poller is Python rather than a shell loop. A shell loop needs quotes
+  # nested three deep for the SQL, and the folded YAML scalar that carries it
+  # mangles them: the guest answers "Syntax error: \"". The script is
+  # therefore passed as one argv entry and reads its arguments from argv, the
+  # same way the library normaliser does.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sqlite3, subprocess, sys, time
+
+        database = sys.argv[1]
+        before = int(sys.argv[2])
+        service = sys.argv[3]
+        since = sys.argv[4]
+        deadline = time.time() + 300
+
+        def count():
+            try:
+                db = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+                return db.execute(
+                    "select count(*) from __EFMigrationsHistory").fetchone()[0]
+            except Exception:
+                return 0
+
+        def corrupt():
+            try:
+                out = subprocess.run(
+                    ["journalctl", "-u", service, "--since", "@" + since,
+                     "--no-pager"],
+                    capture_output=True, text=True, timeout=30).stdout
+            except Exception:
+                return False
+            return "database disk image is malformed" in out
+
+        last = 0
+        stable = 0
+        while time.time() < deadline:
+            if corrupt():
+                print("MIGRATION_FAILED")
+                raise SystemExit(1)
+            current = count()
+            if current > before and current == last:
+                stable += 1
+                if stable >= 2:
+                    print(f"MIGRATION_FINISHED {current}")
+                    raise SystemExit(0)
+            else:
+                stable = 0
+            last = current
+            time.sleep(5)
+
+        print(f"MIGRATION_TIMEOUT {last}")
+        raise SystemExit(0)
+      - "{{ jellyfin_database }}"
+      - "{{ jellyfin_migration_count_before }}"
+      - "{{ app_service_name }}"
+      - "{{ jellyfin_epoch_before_start.stdout | trim }}"
+  register: jellyfin_migration_wait
+  changed_when: false
+  # Only on a server that was just restored. On an ordinary install there is
+  # no migration to wait for, and the loop would sit for five minutes.
+  when: jellyfin_state_restored | default(false) | bool
+
+- name: Fail when the database migration did not finish
+  # A migration that failed leaves a corrupt database, and everything after
+  # this point would fail in a way that names the wrong cause.
+  ansible.builtin.fail:
+    msg: >-
+      The database migration did not finish. The server's log says
+      "{{ jellyfin_migration_wait.stdout | default('nothing') }}". Read it
+      with `journalctl -u {{ app_service_name }}` on the guest.
+  when:
+    - jellyfin_state_restored | default(false) | bool
+    - jellyfin_migration_wait.stdout | default('') is not search('MIGRATION_FINISHED')
 
 # ---------------------------------------------------------------------------
 # The metadata savers
@@ -407,15 +742,81 @@
 # ---------------------------------------------------------------------------
 
 - name: Read the libraries the server already has
+  # The `Accept` header asks for the PascalCase profile. See the note on the
+  # public info request above: which casing comes back depends on the
+  # server's own state, and the role reads the answer without caring which
+  # spelling it got.
+  #
+  # THE TOKEN GOES IN THE `Authorization` HEADER, and this is measured.
+  #
+  # Jellyfin reads the token from the `Authorization` header's `Token=` part.
+  # The `X-Emby-Token` header is a LEGACY alternative, and it is only read
+  # when the server's own configuration says so:
+  #
+  #   if (_configurationManager.Configuration.EnableLegacyAuthorization
+  #       && string.IsNullOrEmpty(token))
+  #   {
+  #       token = headers["X-Emby-Token"];
+  #   }
+  #
+  # A fresh 12.4 server has `EnableLegacyAuthorization` false, so the
+  # `X-Emby-Token` header is IGNORED and every request answers 401. A server
+  # restored from an older configuration has it set, and the same header
+  # works. Measured on one server, same database, same key:
+  #
+  #   X-Emby-Token only            -> 401
+  #   Authorization ... Token="..." -> OK, 2 libraries
+  #
+  # So the role sends the token in the `Authorization` header, which works
+  # whether legacy authorization is on or off. The legacy header is sent as
+  # well, so an older server that only reads that one still authenticates.
   ansible.builtin.uri:
     url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders"
     headers:
-      X-Emby-Token: "{{ jellyfin_api_key }}"
-      X-Emby-Authorization: >-
+      Accept: 'application/json; profile="PascalCase"'
+      Authorization: >-
         MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
-        DeviceId="{{ app_name }}", Version="1.0"
+        DeviceId="{{ app_name }}", Version="1.0", Token="{{ jellyfin_api_key }}"
+      X-Emby-Token: "{{ jellyfin_api_key }}"
     timeout: 30
   register: jellyfin_existing_libraries
+
+- name: Normalise the library list the server answered with
+  # Jellyfin's JSON casing is NOT stable, and it is not the request that
+  # decides it. Measured on one server, one version, one day:
+  #
+  #   a fresh database      answered {"localAddress": …}
+  #   a migrated database   answered {"LocalAddress": …}
+  #
+  # The library endpoints answer in PascalCase on a fresh server and in
+  # camelCase on a migrated one, so a role that reads `Name` and `Locations`
+  # works on one and fails on the other with
+  #   'dict object' has no attribute 'Name'
+  #
+  # Rather than picking a spelling and hoping — or sending an Accept header
+  # and hoping that pins it, which it does not — the answer is NORMALISED
+  # once, here, into a shape the rest of the role reads.
+  #
+  # The normaliser is a small script rather than a Jinja expression because
+  # the nested lookup — `LibraryOptions.SaveLocalMetadata`, under either
+  # spelling of either name — is not something Jinja can express without
+  # repeating itself at every use.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ jellyfin_normalize_libraries_script }}"
+      - "{{ jellyfin_existing_libraries.json | default([]) | to_json }}"
+      - "{{ jellyfin_libraries | to_json }}"
+  register: jellyfin_libraries_present_raw
+  changed_when: false
+
+- name: Record the libraries the server already has
+  ansible.builtin.set_fact:
+    jellyfin_libraries_present: >-
+      {{ (jellyfin_libraries_present_raw.stdout | from_json).libraries }}
+    jellyfin_library_option_fixes: >-
+      {{ (jellyfin_libraries_present_raw.stdout | from_json).fixes }}
 
 - name: Report the libraries that are already there
   # A library that already points at the right path is left alone. Removing
@@ -423,8 +824,8 @@
   # follows would take hours on a real library.
   ansible.builtin.debug:
     msg: >-
-      {{ item.Name }} already points at {{ item.Locations | join(', ') }}
-  loop: "{{ jellyfin_existing_libraries.json | default([]) }}"
+      {{ item.name }} already points at {{ item.locations | join(', ') }}
+  loop: "{{ jellyfin_libraries_present }}"
 
 - name: Add the libraries that are missing
   # `/Library/VirtualFolders` is the endpoint the server itself uses, and it
@@ -445,10 +846,11 @@
       http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders?name={{ item.name | urlencode }}&collectionType={{ item.type }}&refreshLibrary=false
     method: POST
     headers:
-      X-Emby-Token: "{{ jellyfin_api_key }}"
-      X-Emby-Authorization: >-
+      Accept: 'application/json; profile="PascalCase"'
+      Authorization: >-
         MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
-        DeviceId="{{ app_name }}", Version="1.0"
+        DeviceId="{{ app_name }}", Version="1.0", Token="{{ jellyfin_api_key }}"
+      X-Emby-Token: "{{ jellyfin_api_key }}"
     body_format: json
     body:
       Name: "{{ item.name }}"
@@ -467,10 +869,55 @@
     label: "{{ item.name }}"
   register: jellyfin_library_added
   when: >-
-    (jellyfin_existing_libraries.json | default([]))
-    | selectattr('Name', 'eq', item.name)
-    | selectattr('Locations', 'contains', item.path)
-    | list | length == 0
+    (jellyfin_libraries_present | default([])
+    | selectattr('name', 'eq', item.name)
+    | selectattr('locations', 'contains', item.path)
+    | list | length) == 0
+
+- name: Turn the metadata saver off on the libraries that are already there
+  # A library that already points at the right path is left alone — removing
+  # and recreating it would drop every item's metadata — but its OPTIONS are
+  # still wrong.
+  #
+  # This matters for a RESTORED server. The old server's libraries were on
+  # writable media, so they carry `SaveLocalMetadata: true`. The shared
+  # volume is read-only for this guest, and a saver that is on writes
+  # thumbnails into the media folder on every scan:
+  #
+  #   IOException: Read-only file system
+  #
+  # Measured on the restored server: both libraries came back with
+  # `save_local_metadata: true`. Without this task the play would have been
+  # green with a library that fills the server's log on every scan — if the
+  # assertion had not caught it.
+  #
+  # `Library/VirtualFolders/LibraryOptions` is the endpoint the server
+  # itself uses to change a library's options. The body carries the whole
+  # `LibraryOptions` object, because the endpoint REPLACES the options
+  # rather than merging them — a partial body would drop the settings it
+  # does not mention.
+  #
+  # The body is built by a script, because it is the server's own options
+  # object with one field changed, and reading that object out of Jinja
+  # without losing a field would need a filter per field.
+  ansible.builtin.uri:
+    url: >-
+      http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders/LibraryOptions
+    method: POST
+    headers:
+      Accept: 'application/json; profile="PascalCase"'
+      Authorization: >-
+        MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
+        DeviceId="{{ app_name }}", Version="1.0", Token="{{ jellyfin_api_key }}"
+      X-Emby-Token: "{{ jellyfin_api_key }}"
+    body_format: json
+    body: "{{ item }}"
+    status_code: [200, 204]
+    timeout: 60
+  loop: "{{ jellyfin_library_option_fixes | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: jellyfin_library_option_fixes | default([]) | length > 0
 
 - name: Read the libraries back
   # The register is named `jellyfin_libraries_read`, not `jellyfin_libraries`.
@@ -480,15 +927,36 @@
   # response and fails with
   #   Invalid data passed to 'loop', it requires a list
   # which names the shape rather than the collision.
+  #
+  # The `Accept` header asks for the PascalCase profile, as it does on the
+  # request above, and the token goes in the `Authorization` header for the
+  # same reason.
   ansible.builtin.uri:
     url: "http://{{ jellyfin_bind_host }}:{{ app_port }}/Library/VirtualFolders"
     headers:
-      X-Emby-Token: "{{ jellyfin_api_key }}"
-      X-Emby-Authorization: >-
+      Accept: 'application/json; profile="PascalCase"'
+      Authorization: >-
         MediaBrowser Client="{{ app_name }}", Device="{{ app_name }}",
-        DeviceId="{{ app_name }}", Version="1.0"
+        DeviceId="{{ app_name }}", Version="1.0", Token="{{ jellyfin_api_key }}"
+      X-Emby-Token: "{{ jellyfin_api_key }}"
     timeout: 30
   register: jellyfin_libraries_read
+
+- name: Normalise the library list that was read back
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ jellyfin_normalize_libraries_script }}"
+      - "{{ jellyfin_libraries_read.json | default([]) | to_json }}"
+      - "{{ jellyfin_libraries | to_json }}"
+  register: jellyfin_libraries_read_normalized
+  changed_when: false
+
+- name: Record the libraries that were read back
+  ansible.builtin.set_fact:
+    jellyfin_libraries_after: >-
+      {{ (jellyfin_libraries_read_normalized.stdout | from_json).libraries }}
 
 - name: Assert that every library is where this role put it
   # The claim a play can make is only as good as the check behind it. A
@@ -501,19 +969,19 @@
   ansible.builtin.assert:
     that:
       - >-
-        (jellyfin_libraries_read.json | default([])
-         | selectattr('Name', 'eq', item.name)
-         | selectattr('Locations', 'contains', item.path)
+        (jellyfin_libraries_after | default([])
+         | selectattr('name', 'eq', item.name)
+         | selectattr('locations', 'contains', item.path)
          | list | length) == 1
       - >-
-        (jellyfin_libraries_read.json | default([])
-         | selectattr('Name', 'eq', item.name)
-         | selectattr('LibraryOptions.SaveLocalMetadata', 'eq', false)
+        (jellyfin_libraries_after | default([])
+         | selectattr('name', 'eq', item.name)
+         | selectattr('save_local_metadata', 'eq', false)
          | list | length) == 1
     fail_msg: >-
       The library {{ item.name }} does not point at {{ item.path }}, or it has
       the local metadata saver on. The server's libraries are
-      {{ jellyfin_libraries_read.json | default([]) | map(attribute='Name') | join(', ') }}.
+      {{ jellyfin_libraries_after | default([]) | map(attribute='name') | join(', ') }}.
     quiet: true
   loop: "{{ jellyfin_libraries }}"
   loop_control:
@@ -719,5 +1187,5 @@
       - "version: {{ jellyfin_installed_version.stdout | default('unknown') | trim }}"
       - "service account: {{ app_user }} (uid {{ jellyfin_uid.stdout | default('?') | trim }})"
       - "server version: {{ jellyfin_public_info.json.Version | default('unknown') }}"
-      - "libraries: {{ jellyfin_libraries_read.json | default([]) | map(attribute='Name') | join(', ') }}"
+      - "libraries: {{ jellyfin_libraries_after | default([]) | map(attribute='name') | join(', ') }}"
       - "tunnel: {{ jellyfin_tunnel_hostname }} ({{ 'enabled' if jellyfin_tunnel_enabled | bool else 'disabled' }})"

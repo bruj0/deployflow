@@ -166,12 +166,46 @@
     mode: "0750"
 
 - name: Create the media directory
+  # The Library folder, on the shared volume's `music` tree.
+  #
+  # This directory is NOT created here when the music is shared, because the
+  # shared volume owns it: it is a tree on a volume two guests mount, and a
+  # role that created it on one guest would own a directory the other guest
+  # can also see. The shared-disk role creates the tree, on the Proxmox node,
+  # and the volume carries the ownership.
+  #
+  # So this task runs only when Aurral's music is its own — that is, when
+  # `aurral_shared_music_dir` is empty. A default that pointed at the shared
+  # tree would fail on a guest that mounts no shared disk at all, because the
+  # path would not exist.
   ansible.builtin.file:
     path: "{{ aurral_media_dir }}/downloads/aurral"
     state: directory
     owner: "{{ aurral_uid }}"
     group: "{{ aurral_gid }}"
     mode: "0775"
+  when: aurral_shared_music_dir | length == 0
+
+- name: Report where the music is
+  # A claim a play can make is only as good as the check behind it. The
+  # shared tree has to exist and to be writable by the uid Aurral runs as,
+  # or the container starts with an empty library and no error.
+  ansible.builtin.stat:
+    path: "{{ aurral_shared_music_dir }}"
+  register: aurral_shared_music
+  when: aurral_shared_music_dir | length > 0
+
+- name: Fail when the shared music tree is not there
+  ansible.builtin.assert:
+    that:
+      - aurral_shared_music.stat.exists
+      - aurral_shared_music.stat.isdir
+    fail_msg: >-
+      The shared music tree {{ aurral_shared_music_dir }} does not exist on
+      this guest. The shared volume has to be mounted before Aurral starts:
+      check the guest's shared_disk_mounts and that the volume was created.
+    quiet: true
+  when: aurral_shared_music_dir | length > 0
 
 # ---------------------------------------------------------------------------
 # The admin API key
@@ -664,7 +698,7 @@
       - "health /api/health/live: HTTP {{ aurral_health.status | default('?') }}"
       - "app version reported: {{ aurral_bootstrap.json.appVersion | default('unknown') }}"
       - "database: {{ aurral_config_dir }}/aurral.db"
-      - "media: {{ aurral_media_dir }} (Library at /data/downloads/aurral)"
+      - "media: {{ aurral_shared_music_dir if aurral_shared_music_dir | length > 0 else aurral_media_dir }} (Library at /data/downloads/aurral)"
       - "reachable from controller: {{ aurral_reachable_from_controller | bool }}"
       - "firewall: {{ 'DOCKER-USER ' ~ aurral_lan_cidr if aurral_manage_firewall | bool and aurral_bind_host not in ['127.0.0.1', '::1'] else 'not applied' }}"
       - "tunnel: {{ aurral_tunnel_hostname if aurral_tunnel_enabled | bool else 'not enabled' }}"

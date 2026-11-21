@@ -312,13 +312,32 @@
   #
   # Runs against the controller, on localhost, because the keys that matter are
   # in the operator's own known_hosts and not on the Proxmox node.
+  #
+  # The path is built from `lookup('env', 'HOME')` and NOT from
+  # `ansible_env.HOME`. The gather-facts play runs `become: true`, and under
+  # become the environment of the remote account is what the facts carry —
+  # root's, which has no HOME — so `ansible_env.HOME` is undefined and the
+  # task was skipped every time:
+  #
+  #   skipping: [jellyfin] => {
+  #       "false_condition": "ansible_env.HOME is defined",
+  #       "skip_reason": "Conditional result was False"
+  #   }
+  #
+  # A task that can never run is a guard that keeps a gate open. The guest
+  # was rebuilt at an address an earlier guest had held, so the stale key was
+  # still in known_hosts, and the play died with
+  #   REMOTE HOST IDENTIFICATION HAS CHANGED
+  #   Offending ECDSA key in /home/operator/.ssh/known_hosts:68
+  # The `lookup` reads the CONTROLLER's environment, which is where
+  # known_hosts actually lives.
   ansible.builtin.command:
     argv:
       - ssh-keygen
       - -R
       - "{{ ansible_host }}"
       - -f
-      - "{{ ansible_env.HOME }}/.ssh/known_hosts"
+      - "{{ lookup('env', 'HOME') }}/.ssh/known_hosts"
   register: lxc_known_hosts_removed
   changed_when: >-
     lxc_known_hosts_removed.rc == 0
@@ -326,9 +345,7 @@
   failed_when: false
   delegate_to: localhost
   become: false
-  when:
-    - not lxc_existing.stat.exists
-    - ansible_env.HOME is defined
+  when: not lxc_existing.stat.exists
 
 - name: Wait for the guest to accept SSH again with the fresh key
   # The previous connection was refused on the key, so the wait is repeated to
@@ -340,6 +357,4 @@
     state: started
   delegate_to: localhost
   become: false
-  when:
-    - not lxc_existing.stat.exists
-    - ansible_env.HOME is defined
+  when: not lxc_existing.stat.exists

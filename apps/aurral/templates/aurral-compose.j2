@@ -33,10 +33,32 @@ services:
       # AURRAL_DATA_DIR, which is also the canonical container path, so the
       # entrypoint and the server agree without an override.
       - {{ aurral_config_dir }}:/config
-      # The music. Aurral's Library folder defaults to /data/downloads/aurral
-      # inside it. A media server that shares files with Aurral mounts the same
-      # host folder at the same container path.
+{% if aurral_shared_music_dir | length > 0 %}
+      # The music. Aurral's Library folder is /data/downloads/aurral, and this
+      # mount is what puts it there.
+      #
+      # The source is the `music` tree of the shared media volume, not the
+      # volume root: the volume also holds the movies, and a media server
+      # that shares files with Aurral must not be able to reach them.
+      #
+      # A subtree of an idmapped mount binds correctly. Measured:
+      #
+      #   $ docker run --rm -v /mnt/media/music:/data alpine \
+      #       stat -c '%n uid=%u' /data/a.mp3
+      #   /data/a.mp3 uid=1000
+      #
+      # and 1000 is the uid the idmap maps to, so the files Aurral writes are
+      # the files Jellyfin reads.
+      - {{ aurral_shared_music_dir }}:/data/downloads/aurral
+{% else %}
+      # The music, on this guest's own disk. Aurral's Library folder is
+      # /data/downloads/aurral inside it.
+      #
+      # This is the bind rather than a Docker named volume: a named volume
+      # lives in /var/lib/docker on the guest's rootfs, where a backup cannot
+      # see it and a rebuilt guest destroys it.
       - {{ aurral_media_dir }}:/data
+{% endif %}
 
     ports:
       - "{{ aurral_bind_host }}:{{ app_port }}:3001"

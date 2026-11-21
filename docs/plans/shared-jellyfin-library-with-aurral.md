@@ -1,7 +1,9 @@
 # Plan: A shared disk for Jellyfin and Aurral, reproducible through deployflow
 
-**Status:** ready for review. The shared-disk feature it depends on is built
-and proven; §2 is the measurement record for it.
+**Status:** executed. The shared-disk feature it depends on is built and
+proven; §2 is the measurement record for it. §5 carries the steps as they
+were run, and §5.1 records the places where the implementation departed from
+the plan below, with the reason for each.
 
 **What was measured on `kvm.bruj0.net` on 2026-11-20:**
 
@@ -287,6 +289,12 @@ $ docker run --rm -v /mnt/volume/music:/data alpine stat -c '%n uid=%u' /data/a.
 /data/a.mp3 uid=1000
 ```
 
+> **This section uses `/mnt/volume`; production uses `/mnt/media`.** The proof
+> had no state to preserve, so the mount point was free. The production mount
+> point is fixed by the state the old server wrote down (§5.1), and it is
+> `/mnt/media` for that reason and no other. Nothing in this section depends
+> on which path was used.
+
 ### 2.10 `pct create` fails when the caller has a umask of 077
 
 ```
@@ -348,7 +356,7 @@ belongs with:
 # inventory/group_vars/jf/main.yml
 shared_disk_mounts:
   - disk: media
-    mountpoint: /mnt/volume
+    mountpoint: /mnt/media
     read_only: true
 ```
 
@@ -376,7 +384,7 @@ It is idempotent: a second run finds everything and changes nothing.
 `common/lxc`, between "Create the container" and "Start the container":
 
 ```
-pct set <vmid> -mp0 data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1[,ro=1]
+pct set <vmid> -mp0 data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1[,ro=1]
 ```
 
 The task reads `pct config` first and skips the attach when the line is
@@ -384,8 +392,8 @@ already there. The comparison is a prefix match, because Proxmox appends
 `size=` to the line it stores:
 
 ```
-written: mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1
-stored:  mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1,size=1000G
+written: mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1
+stored:  mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1,size=1T
 ```
 
 The attach runs before the container starts, because Proxmox attaches the
@@ -453,9 +461,9 @@ Jellyfin moves from CT 100 to a new guest that deployflow owns.
 | VMID | 100 | 100 (reused) |
 | Root disk | `data2:vm-100-disk-0` (1 TiB) | `data1:vm-100-disk-0` (16 G) |
 | Shared disk | — | `data2:vm-900-disk-0`, `ro=1` |
-| Media path | `/mnt/media/music` | `/mnt/volume/music` |
+| Media path | `/mnt/media/music` | `/mnt/media/music` |
 | Version | 10.11.11 | 12.4 |
-| Service account | jellyfin (uid 107) | jellyfin (uid 107) |
+| Service account | jellyfin (uid 107) | jellyfin (uid 999, reported) |
 
 **The new root disk goes on `data1`.** `data2` holds the shared volume; the
 root disk is a different thing and `data1` is where the other guests' root
@@ -487,26 +495,22 @@ package** application, not a container, so it is its own shape:
 | Service | `jellyfin.service`, already shipped by the package |
 | Config | `/etc/jellyfin`, owned by the service account |
 | State | `/var/lib/jellyfin` — the database, metadata and thumbnails |
-| Media | the shared volume, read-only, mounted at `/mnt/volume` |
+| Media | the shared volume, read-only, mounted at `/mnt/media` |
 
 Three things the role must do that are not obvious:
 
 1. **Disable the metadata savers.** Jellyfin writes thumbnails and metadata
    into the media folder by default. On a read-only mount that is an
    `IOException: Read-only file system` on every library scan
-   (jellyfin/jellyfin#6605). The role sets:
+   (jellyfin/jellyfin#6605). The role turns the saver off through the API
+   (`Library/VirtualFolders/LibraryOptions`), because that is the interface
+   the server itself uses, and it points `MetadataPath` at the state
+   directory rather than the media folder.
 
-   ```xml
-   <SaveImageTagsInPortableMode>false</SaveImageTagsInPortableMode>
-   <SaveAlbumArtInPortableMode>false</SaveAlbumArtInPortableMode>
-   <SaveThumbsInPortableMode>false</SaveThumbsInPortableMode>
-   ```
-
-   and points `MetadataPath` at the state directory, not the media folder.
-
-2. **Own the service account.** The package creates `jellyfin` (uid 107) on
-   install. The role asserts that uid, because the media's ownership inside
-   the container depends on it (§2.4).
+2. **Own the service account.** The package creates `jellyfin` on install,
+   but only when it does not already exist — and `common/python` creates it
+   first, so the uid is the framework's choice rather than the package's.
+   The role reports the uid it found rather than asserting one (§5.1).
 
 3. **Assert the library is readable.** The role's own postcondition: Jellyfin
    answers on its port, the shared mount is present and `ro`, and the media
@@ -548,14 +552,14 @@ service is worse than a red one.
 
 Aurral's role gains one bind mount and one change to its Compose file.
 
-The shared volume is attached to CT 127 read-write at `/mnt/volume`. The
+The shared volume is attached to CT 127 read-write at `/mnt/media`. The
 Compose project binds the **music subtree** of it, so Aurral's container
 never sees the movies:
 
 ```yaml
     volumes:
       - /opt/aurral/state/config:/config
-      - /mnt/volume/music:/data/downloads/aurral
+      - /mnt/media/music:/data/downloads/aurral
 ```
 
 The current line is `/opt/aurral/state/media:/data`, and Aurral's Library
@@ -563,11 +567,11 @@ folder is `/data/downloads/aurral`. The new line mounts the shared tree
 directly at that path, so Aurral's own Library folder setting does not change
 and the container sees exactly the same path it sees today.
 
-`/mnt/volume/music` is a subtree of an idmapped mount. Docker binds it
+`/mnt/media/music` is a subtree of an idmapped mount. Docker binds it
 correctly (§2.9), measured:
 
 ```
-$ docker run --rm -v /mnt/volume/music:/data alpine stat -c '%n uid=%u' /data/a.mp3
+$ docker run --rm -v /mnt/media/music:/data alpine stat -c '%n uid=%u' /data/a.mp3
 /data/a.mp3 uid=1000
 ```
 
@@ -666,11 +670,10 @@ run-remote kvm.bruj0.net -- lvs data2 | grep vm-900-disk-0
 
 ```bash
 run-remote kvm.bruj0.net -- mount /dev/data2/vm-900-disk-0 /srv/shared-disk/vm-900-disk-0
-run-remote kvm.bruj0.net -- mkdir -p /srv/shared-disk/vm-900-disk-0/music /srv/shared-disk/vm-900-disk-0/movies
-run-remote kvm.bruj0.net -- mv /srv/shared-disk/vm-900-disk-0/mnt/media/music/. \
-    /srv/shared-disk/vm-900-disk-0/music/
-run-remote kvm.bruj0.net -- mv /srv/shared-disk/vm-900-disk-0/mnt/media/movies/. \
-    /srv/shared-disk/vm-900-disk-0/movies/
+run-remote kvm.bruj0.net -- mv /srv/shared-disk/vm-900-disk-0/mnt/media/music \
+    /srv/shared-disk/vm-900-disk-0/music
+run-remote kvm.bruj0.net -- mv /srv/shared-disk/vm-900-disk-0/mnt/media/movies \
+    /srv/shared-disk/vm-900-disk-0/movies
 run-remote kvm.bruj0.net -- chown -R 101000:101000 /srv/shared-disk/vm-900-disk-0/music \
     /srv/shared-disk/vm-900-disk-0/movies
 run-remote kvm.bruj0.net -- chmod 0755 /srv/shared-disk/vm-900-disk-0/music \
@@ -679,6 +682,17 @@ run-remote kvm.bruj0.net -- umount /srv/shared-disk/vm-900-disk-0
 ```
 
 The `mv` is a rename inside one filesystem, so the 4.9 GB does not move.
+
+> **The trailing `/.` is wrong.** GNU `mv` resolves `src/.` to the source
+> directory itself, and renaming a directory into itself is refused:
+>
+> ```
+> mv: cannot move '/srv/shared-disk/vm-900-disk-0/mnt/media/music/.' to
+> '/srv/shared-disk/vm-900-disk-0/music/.': Device or resource busy
+> ```
+>
+> The trees are moved with a plain rename. `mv src dst` where `dst` does not
+> exist is the same operation and it works.
 
 The `chown` is the one destructive step (§4.3).
 
@@ -745,7 +759,7 @@ lxc_onboot: 1
 # The shared media volume, attached read-only.
 shared_disk_mounts:
   - disk: media
-    mountpoint: /mnt/volume
+    mountpoint: /mnt/media
     read_only: true
 ```
 
@@ -755,7 +769,7 @@ shared_disk_mounts:
 # The same volume, attached read-write.
 shared_disk_mounts:
   - disk: media
-    mountpoint: /mnt/volume
+    mountpoint: /mnt/media
     read_only: false
 ```
 
@@ -764,16 +778,21 @@ shared_disk_mounts:
 `apps/jellyfin/` with `defaults/main.yml`, `meta/main.yml` and
 `tasks/main.yml`, modeled on `apps/aurral/`. The role:
 
-1. installs the `jellyfin` package from `repo.jellyfin.org`;
-2. asserts the service account is uid 107;
+1. installs the `jellyfin` package from `repo.jellyfin.org`, pinned to the
+   version the manifest names;
+2. reports the service account the package created, rather than asserting a
+   uid (see §5.1);
 3. creates `/var/lib/jellyfin` and `/etc/jellyfin` with the right ownership;
-4. writes `system.xml` with the metadata savers disabled and
-   `MetadataPath` pointing at the state directory;
-5. restores the database from the copy in Step 1;
-6. points the libraries at `/mnt/volume/music` and `/mnt/volume/movies`;
+4. restores the state archive from Step 1 when the database is not there
+   yet, and leaves it alone after that;
+5. waits for the database migration to finish before it writes anything
+   (see §5.1);
+6. points the libraries at `/mnt/media/music` and `/mnt/media/movies`, and
+   turns their metadata savers off;
 7. installs the tunnel connector and its ingress file;
 8. starts Jellyfin and the tunnel;
-9. asserts the library is readable and the tunnel registered.
+9. asserts the library is where the role put it, and that the tunnel
+   registered.
 
 ### Step 9 — install
 
@@ -790,7 +809,7 @@ the volume read-only, and the Jellyfin role installs the server.
 
 ```bash
 run-remote kvm.bruj0.net -- pct config 100 | grep mp0
-# mp0: data2:vm-900-disk-0,mp=/mnt/volume,idmap=u:1000:101000:1;g:1000:101000:1,ro=1,size=1000G
+# mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1,ro=1,size=1T
 ```
 
 ### Step 10 — attach the volume to Aurral
@@ -825,19 +844,19 @@ curl -s -o /dev/null -w "%{http_code}\n" https://movies.bruj0.net/
 ```bash
 # the reader sees the files
 run-remote kvm.bruj0.net -- pct exec 100 -- su -s /bin/sh jellyfin -c \
-  'ls /mnt/volume/music | wc -l'
+  'ls /mnt/media/music | wc -l'
 # 873
 
 # the reader cannot write
 run-remote kvm.bruj0.net -- pct exec 100 -- su -s /bin/sh jellyfin -c \
-  'touch /mnt/volume/music/x'
-# touch: cannot touch '/mnt/volume/music/x': Read-only file system
+  'touch /mnt/media/music/x'
+# touch: cannot touch '/mnt/media/music/x': Read-only file system
 
 # the writer writes, and the reader sees it
 run-remote kvm.bruj0.net -- pct exec 127 -- docker exec aurral sh -c \
   'touch /data/downloads/aurral/probe.m4a'
-run-remote kvm.bruj0.net -- pct exec 100 -- ls /mnt/volume/music/probe.m4a
-# /mnt/volume/music/probe.m4a
+run-remote kvm.bruj0.net -- pct exec 100 -- ls /mnt/media/music/probe.m4a
+# /mnt/media/music/probe.m4a
 
 # clean up the probe
 run-remote kvm.bruj0.net -- pct exec 127 -- docker exec aurral rm \
@@ -847,6 +866,66 @@ run-remote kvm.bruj0.net -- pct exec 127 -- docker exec aurral rm \
 curl -s -o /dev/null -w "%{http_code}\n" https://movies.bruj0.net/
 curl -s -o /dev/null -w "%{http_code}\n" https://music.bruj0.net/
 ```
+
+---
+
+## 5.1 Where the implementation departed from the plan
+
+The plan was written before the role was built. Five things changed, each for
+a reason that was measured rather than chosen.
+
+**1. The mount point is `/mnt/media`, not `/mnt/volume`.** Jellyfin records a
+media path in three places — the library's `.mblink` shortcut, the
+`PathInfos` in its `options.xml`, and the `Path` of every tracked item in its
+database. The state that was copied from the old server names
+`/mnt/media/music` and `/mnt/media/movies` in all three. Mounting the volume
+at `/mnt/volume` would have left the migrated server pointing at paths that
+do not exist: every tracked item orphaned, the watch history and the
+favourites gone, and the library rescanned from scratch as 873 new items.
+The mount point is therefore not a free choice, and the role's libraries
+point at the paths the state already knows.
+
+**2. The role restores the state instead of only installing the package.**
+The plan's Step 8 wrote the libraries through the API and left the database
+alone. That throws away the accounts, the watch history, the favourites and
+the per-library options that the Step 1 copy exists to preserve. The role
+unpacks the archive on its first install and leaves it alone after that.
+
+**3. The role waits for the database migration, and the wait is on the
+migration count.** A restored server migrates its database on the first
+start, and the migration runs *inside* the startup: the API answers before
+the migration finishes. The role writing its API key as soon as the API
+answered wrote into a database the migration was holding, and the database
+was left corrupt:
+
+```
+18:06:20  the migration starts
+18:06:29  the role creates its API key — a WRITE, into the migrating database
+18:06:30  SQLite Error 11: 'database disk image is malformed'
+```
+
+The migration leaves no "done" line in the log, so the wait is on the
+number of rows in `__EFMigrationsHistory`: 71 in the restored database, 107
+in the migrated one. The log window that watch reads is anchored to an
+absolute epoch taken on the guest, because the guest's clock runs an hour
+behind the controller's and a relative window reaches into the previous run.
+
+**4. The role reports the service account's uid instead of asserting it.**
+The plan asserted uid 107. The package's own postinst only creates the
+account when it does not exist, and `common/python` creates it first, so the
+uid is the framework's choice rather than the package's — 999 on a guest
+this role built, 107 on the hand-built one that was migrated. The role
+reports the uid it found.
+
+**5. The token goes in the `Authorization` header, and the JSON is read
+under both spellings.** `X-Emby-Token` is only read when the server's
+`EnableLegacyAuthorization` is true, and a 12.4 server has it false — the
+header alone answers 401. The token therefore goes in the `Authorization`
+header's `Token=` part, with `X-Emby-Token` still sent for older servers.
+The JSON casing is not stable either: a fresh database answers
+`{"localAddress":…}` and a migrated one `{"LocalAddress":…}`, and the
+`Accept` profile header does not pin it. Every read looks the key up under
+both spellings.
 
 ---
 
@@ -888,6 +967,88 @@ run-remote kvm.bruj0.net -- pct start 100
 After Step 5: the media is still on the volume and the state is in the copy.
 Recreate CT 100 from a stock template, restore the state copy, and either
 keep the volume as the media source or convert it back.
+
+---
+
+## 6.1 What the cutover produced
+
+The cutover ran on 2026-11-21. Every number below was read back from the
+running system.
+
+**The volume.** `data2/vm-900-disk-0`, 1 TiB, btrfs, one thin pool, named
+after a VMID that is not a guest. The conversion reported `Conversion
+complete`, and the media was there after it: 873 music files, 2 movie
+entries, 9.0 GB, owned by `101000:101000`.
+
+**The reader.** CT 100, rebuilt by the role from a stock template:
+
+```
+mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1,ro=1,size=1T
+rootfs: data1:vm-100-disk-0,size=16G
+```
+
+and inside the guest:
+
+```
+/dev/mapper/data2-vm--900--disk--0 on /mnt/media type btrfs (ro,relatime,idmapped,...)
+```
+
+**The state.** Restored and migrated on the guest's first start:
+
+```
+integrity: ok
+users: admin bruj0
+items: 1255
+migrations: 107
+```
+
+The API agrees: 874 audio items (873 tracks and one folder), and the two
+libraries point where the state already knew:
+
+```
+Movies -> ['/mnt/media/movies']  save_local_metadata=False
+Music  -> ['/mnt/media/music']   save_local_metadata=False
+```
+
+**The writer.** Aurral's guest, same volume, read-write:
+
+```
+mp0: data2:vm-900-disk-0,mp=/mnt/media,idmap=u:1000:101000:1;g:1000:101000:1
+```
+
+**The sharing, measured.** A file written by Aurral's process, as uid 1000:
+
+```
+host side:   -rw-r--r-- 1 101000 101000 0 ... /srv/shared-disk/.../music/node-probe.m4a
+reader side: -rw-r--r-- 1 1000 1000 0 ... /mnt/media/music/node-probe.m4a
+reader as the jellyfin account: the file reads
+reader writing: touch: cannot touch '/mnt/media/music/probe2': Read-only file system
+```
+
+The writer's uid becomes the host's `101000` and the reader's `1000` — the
+same file, the same bytes, the same ownership on both sides, and the reader
+cannot write.
+
+**The endpoints.**
+
+```
+https://movies.bruj0.net/  → 302
+https://music.bruj0.net/   → 200
+https://movies.bruj0.net/System/Info/Public
+  → {"LocalAddress":"http://127.0.0.1:8096","ServerName":"media.bruj0.net",
+     "Version":"12.4.0","ProductName":"Jellyfin Server", ...}
+```
+
+**Convergence.** A second `appctl install` of each application reports
+`0 changed, 0 failed` — 108 tasks for Jellyfin, 103 for Aurral.
+
+**Two things the plan got wrong, and what happened instead.** The plan's
+`mv .../music/. .../music/` fails with `Device or resource busy`: GNU `mv`
+resolves `src/.` to the directory itself, and renaming a directory into
+itself is refused. The trees were moved with a plain rename instead. And
+`pct set -mp0` writes the configuration but the guest keeps the volume it
+was running with until it restarts, so Aurral had to be rebooted before it
+saw `vm-900-disk-0` rather than the scratch volume the proof had used.
 
 ---
 
