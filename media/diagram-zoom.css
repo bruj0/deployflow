@@ -1,0 +1,175 @@
+/* --- The diagram viewer --------------------------------------------- */
+
+/* The button sits above a diagram, never over it, so it never covers part
+   of the drawing and never intercepts a click meant for the diagram. It is
+   right-aligned so it reads as a control attached to the diagram's edge
+   rather than as a label for the paragraph above it. */
+.dgz__open {
+  display: block;
+  width: fit-content;
+  margin: 0 0 0.4rem auto;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color 125ms, color 125ms;
+}
+
+.dgz__open:hover {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.dgz__open:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 1px;
+}
+
+/* The overlay covers the viewport and holds the enlarged diagram. */
+.dgz {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--md-default-bg-color);
+}
+
+/* The stage is the pannable area. The diagram sits inside it and is
+   moved by a CSS transform, so the stage is what the pointer interacts
+   with. */
+.dgz__stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background:
+    radial-gradient(circle at 1px 1px, var(--md-default-fg-color--lightest) 1px, transparent 0)
+    0 0 / 24px 24px;
+}
+
+.dgz__content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.dgz__content svg {
+  max-width: none;
+  height: auto;
+  display: block;
+}
+
+/* The 3x3 control grid, in the bottom-right corner. */
+.dgz__controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, 2rem);
+  grid-template-rows: repeat(3, 2rem);
+  gap: 1px;
+  padding: 3px;
+  border-radius: 0.3rem;
+  background: var(--md-default-fg-color--lightest);
+  box-shadow: 0 0.2rem 0.6rem rgba(0, 0, 0, 0.25);
+}
+
+.dgz__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0.15rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 125ms, color 125ms;
+}
+
+.dgz__cell:hover {
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color-bg, #fff);
+}
+
+.dgz__cell:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: -2px;
+}
+
+.dgz__cell--empty {
+  background: var(--md-default-bg-color);
+  pointer-events: none;
+}
+
+/* The close button, in the top-right corner. */
+.dgz__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dgz__close:hover {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.dgz__close:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 1px;
+}
+
+/* The zoom level, in the top-left corner. */
+.dgz__level {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color--light);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* While the viewer is open, the page behind it must not scroll. */
+body.dgz--open {
+  overflow: hidden;
+}
+
+/* On a small screen the control grid would cover the diagram, so it
+   shrinks and the diagram gets the room. */
+@media screen and (max-width: 40rem) {
+  .dgz__controls {
+    grid-template-columns: repeat(3, 1.7rem);
+    grid-template-rows: repeat(3, 1.7rem);
+    right: 0.5rem;
+    bottom: 0.5rem;
+  }
+
+  .dgz__cell {
+    font-size: 0.85rem;
+  }
+}

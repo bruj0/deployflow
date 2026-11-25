@@ -1,0 +1,1868 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Application delivery to a target container, with a contract an agent can extend and checks that can refuse a plausible but broken deployment.">
+      
+      
+      
+        <link rel="canonical" href="https://bruj0.github.io/deployflow/apps/aurral/">
+      
+      
+        <link rel="prev" href="../homarr/">
+      
+      
+        <link rel="next" href="../jellyfin/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-icon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>aurral - DeployFlow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../media/mermaid-card.css">
+    
+      <link rel="stylesheet" href="../../media/diagram-zoom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#aurral" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DeployFlow" class="md-header__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DeployFlow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              aurral
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DeployFlow" class="md-nav__button md-logo" aria-label="DeployFlow" data-md-component="logo">
+      
+  <img src="../../assets/logo-icon.png" alt="logo">
+
+    </a>
+    DeployFlow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/bruj0/deployflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bruj0/deployflow
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Essay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    The project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/readme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Readme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/add-app-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add-app skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project/init-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init skill
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/targets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Targets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/build-pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/site/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    example-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute-release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    omniroute
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../xerj/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    xerj
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../homarr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    homarr
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    aurral
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    aurral
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deployed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deployed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-mounts-not-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two mounts, not one
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-media-directory-is-the-integration-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The media directory is the integration point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-admin-api-key-is-generated-once-and-never-regenerated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The admin API key is generated once and never regenerated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-image-is-pinned-by-digest-and-the-pin-is-checked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The image is pinned by digest, and the pin is checked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-guest-is-sized-for-the-workers-not-for-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The guest is sized for the workers, not for the server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-cloudflare-tunnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Cloudflare tunnel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Cloudflare tunnel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-the-tunnel-is-an-operator-act" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating the tunnel is an operator act
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-role-proves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the role proves
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jellyfin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    jellyfin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../omniroute-building-from-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building OmniRoute from source
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deployed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deployed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-mounts-not-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two mounts, not one
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-media-directory-is-the-integration-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The media directory is the integration point
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-admin-api-key-is-generated-once-and-never-regenerated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The admin API key is generated once and never regenerated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-image-is-pinned-by-digest-and-the-pin-is-checked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The image is pinned by digest, and the pin is checked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-guest-is-sized-for-the-workers-not-for-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The guest is sized for the workers, not for the server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-cloudflare-tunnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Cloudflare tunnel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Cloudflare tunnel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-the-tunnel-is-an-operator-act" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating the tunnel is an operator act
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-role-proves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the role proves
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="aurral">aurral<a class="headerlink" href="#aurral" title="Permanent link">&para;</a></h1>
+<p>Aurral, the self-hosted music app, as one container on one guest.</p>
+<p>Aurral is a single image: a Hono server on Node 26 with SQLite inside, a React
+frontend it serves itself, and <code>yt-dlp</code>, <code>ffmpeg</code> and <code>cloudflared</code> baked into
+the image. There is no database server to run beside it, so this is the same
+shape as <code>homarr</code> — one image, one Compose file, one unit.</p>
+<h2 id="what-is-deployed">What is deployed<a class="headerlink" href="#what-is-deployed" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Guest</td>
+<td><code>aurral</code>, CT 127</td>
+</tr>
+<tr>
+<td>Image</td>
+<td><code>ghcr.io/lklynet/aurral@sha256:41008fa4…</code>, pinned by digest</td>
+</tr>
+<tr>
+<td>Version</td>
+<td><code>3.0.0</code></td>
+</tr>
+<tr>
+<td>Install root</td>
+<td><code>/opt/aurral/app</code>, beside the inert Python venv</td>
+</tr>
+<tr>
+<td>Compose project</td>
+<td><code>/opt/aurral/app/project/docker-compose.yml</code>, written by this role</td>
+</tr>
+<tr>
+<td>Environment</td>
+<td><code>/opt/aurral/app/project/.env</code>, mode <code>0600</code>, root-owned</td>
+</tr>
+<tr>
+<td>Unit</td>
+<td><code>aurral.service</code></td>
+</tr>
+<tr>
+<td>Port</td>
+<td>3001</td>
+</tr>
+<tr>
+<td>State</td>
+<td><code>/opt/aurral/state/config</code> — the database, the settings, the users, the job queue</td>
+</tr>
+<tr>
+<td>Media</td>
+<td><code>/opt/aurral/state/media</code> — the Library, at <code>/data/downloads/aurral</code> inside the container</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>none in <code>.env</code>. The admin API key is generated on the guest, once, and kept</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install-it">Install it<a class="headerlink" href="#install-it" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>appctl<span class="w"> </span>install<span class="w"> </span>aurral
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>appctl<span class="w"> </span>install<span class="w"> </span>aurral<span class="w">        </span><span class="c1"># must report changed=0</span>
+</code></pre></div>
+<p>The manifest key is <code>aurral</code> and the role directory is <code>apps/aurral/</code>. They
+match: <code>appctl install</code> selects the role with <code>--tags lxc,&lt;key&gt;</code>, and a key that
+is not a role name selects nothing — the play runs, changes nothing and reports
+success.</p>
+<h2 id="two-mounts-not-one">Two mounts, not one<a class="headerlink" href="#two-mounts-not-one" title="Permanent link">&para;</a></h2>
+<p>This is the difference between Aurral and every other container application in
+this repository.</p>
+<p><code>/config</code> holds Aurral's own state: the SQLite database, the settings, the
+users, the job queue, and every stored integration credential encrypted with a
+key Aurral derives. <code>/data</code> holds the music.</p>
+<p>They must not be the same directory, and <code>/config</code> must never be the directory
+a media server reads. A server that can read <code>/config</code> can read every stored
+credential. Both are bind mounts under <code>app_state_dir</code>, so reinstalling the
+container never destroys either, and neither lives in <code>/var/lib/docker</code> where a
+backup cannot see it and a rebuilt guest destroys it.</p>
+<h2 id="the-media-directory-is-the-integration-point">The media directory is the integration point<a class="headerlink" href="#the-media-directory-is-the-integration-point" title="Permanent link">&para;</a></h2>
+<p>Aurral's Library folder defaults to <code>/data/downloads/aurral</code> inside the
+container, which is <code>&lt;state&gt;/media/downloads/aurral</code> on the guest.</p>
+<p><strong>A second service that shares files with Aurral has to see the same host
+folder at the same container path.</strong> Aurral writes an M3U file per flow and per
+static playlist into <code>_playlists</code>, and each file lists tracks by the full path
+Aurral saw. A media server that sees the same folder at a different path finds
+no tracks, and its playlist import produces an empty playlist. This is why the
+<code>storage.mdx</code> documentation says the same container path everywhere rather
+than using a path mapping.</p>
+<p>The directory is currently the guest's own. It is not the Jellyfin library:
+Jellyfin's media lives inside CT 100's own rootfs on the <code>data2</code> volume, and
+nothing mounts it into another guest. Sharing it would mean moving the media to
+a volume both guests mount, which is a change to the Jellyfin guest rather than
+to this one.</p>
+<h2 id="the-admin-api-key-is-generated-once-and-never-regenerated">The admin API key is generated once and never regenerated<a class="headerlink" href="#the-admin-api-key-is-generated-once-and-never-regenerated" title="Permanent link">&para;</a></h2>
+<p><code>AURRAL_API_KEY</code> is the admin API credential, and Aurral refuses to start when
+it is set and shorter than 32 characters.</p>
+<p>A regenerated key does not fail the install — Aurral stores its own API key in
+the settings table when the environment variable is absent, so the server keeps
+serving. What breaks is every script and every automation that authenticates
+with the old key, with the symptom "the API key stopped working" rather than
+"the install failed".</p>
+<p>So the role reads the existing <code>.env</code> before writing it and keeps the value it
+finds. The key is generated on the guest rather than kept in <code>.env</code> on the
+controller, because it has no external issuer and because a key in <code>.env</code> is a
+key that can be rotated by accident.</p>
+<h2 id="the-image-is-pinned-by-digest-and-the-pin-is-checked">The image is pinned by digest, and the pin is checked<a class="headerlink" href="#the-image-is-pinned-by-digest-and-the-pin-is-checked" title="Permanent link">&para;</a></h2>
+<p><code>aurral_image</code> in <code>apps/aurral/defaults/main.yml</code> names a digest, not a tag.
+<code>latest</code> and <code>3.0.0</code> resolved to the same digest on 2026-11-20, which is
+convenient and temporary: a tag is a moving name and the digest is the thing.</p>
+<p>Two things make the pin real:</p>
+<ul>
+<li><code>--pull never</code> on the Compose invocation, so a later <code>up</code> cannot fetch
+  whatever the tag names today;</li>
+<li>an assertion that reads <code>docker image inspect --format '{{ json .RepoDigests }}'</code>
+  and fails unless the pinned digest is in it.</li>
+</ul>
+<p>That assertion reads <strong><code>RepoDigests</code>, not <code>.Id</code></strong>, and the distinction matters.
+The pinned digest is an OCI <em>index</em> digest — one entry covering amd64 and arm64
+— and <code>docker pull</code> resolves it to the manifest for this platform. <code>.Id</code> is
+therefore the platform manifest's digest, a different string, and comparing the
+two fails on a perfectly correct pull.</p>
+<h2 id="the-guest-is-sized-for-the-workers-not-for-the-server">The guest is sized for the workers, not for the server<a class="headerlink" href="#the-guest-is-sized-for-the-workers-not-for-the-server" title="Permanent link">&para;</a></h2>
+<p>Aurral runs one main server plus background worker child processes, and each
+worker may take a 2 GB JavaScript heap (<code>AURRAL_WORKER_MAX_HEAP_MB</code>, default
+2048). The image is roughly 1.5 GB.</p>
+<p>The role refuses a guest below 4096 MB, 2 cores or 10 GB free, so a guest that
+is too small fails at a task boundary instead of being OOM-killed hours later
+with a message that names a process rather than the guest. <code>inventory/group_vars/au/main.yml</code>
+sets <code>lxc_memory: 4096</code> and <code>lxc_rootfs_gb: 24</code>, which is the floor plus room
+for a library.</p>
+<h2 id="the-cloudflare-tunnel">The Cloudflare tunnel<a class="headerlink" href="#the-cloudflare-tunnel" title="Permanent link">&para;</a></h2>
+<p><code>aurral_tunnel_enabled</code> is <code>false</code> by default, so a play without a credential
+does not fail on a missing secret. Turn it on in the guest's <code>group_vars</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># inventory/group_vars/au/main.yml</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">aurral_tunnel_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">aurral_tunnel_id</span><span class="p">:</span><span class="w"> </span><span class="s">"&lt;the</span><span class="nv"> </span><span class="s">tunnel's</span><span class="nv"> </span><span class="s">id&gt;"</span>
+</code></pre></div>
+<p>The connector's token is a secret:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>appctl<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>aurral_tunnel_token<span class="w"> </span><span class="s1">'&lt;the tunnel token&gt;'</span>
+</code></pre></div>
+<p><code>appctl install</code> refuses to run while it is absent, rather than deploying a
+connector that starts, fails to authenticate and retries forever while the
+hostname stays dead.</p>
+<p><strong>The tunnel is locally managed.</strong> cloudflared reads its ingress from the file
+the role writes, and the edge does not push a configuration over it. That
+matters: a <strong>remotely managed</strong> tunnel overwrites the local file within a
+second of the connector starting, and the hostname then goes wherever the edge
+says rather than where the file says. Measured, not assumed.</p>
+<p><strong>The origin is the guest's own loopback</strong> — <code>http://127.0.0.1:3001</code> — because
+the connector runs on this guest. A DHCP lease can move, and an origin naming
+the guest's address breaks the moment it does. Loopback cannot.</p>
+<p><strong>The binary is pinned and fetched onto the guest</strong>, by version and by the
+sha256 the release publishes, rather than taken from the Aurral image. The
+image's copy of <code>cloudflared</code> exists for Aurral's own file sharing, and a
+connector that reports its own version is a connector whose version can be
+asserted.</p>
+<p><strong>The token is delivered through an EnvironmentFile</strong>, not through argv. A token
+on the command line is visible in <code>ps</code> to every process on the guest for the
+life of the connector.</p>
+<h3 id="creating-the-tunnel-is-an-operator-act">Creating the tunnel is an operator act<a class="headerlink" href="#creating-the-tunnel-is-an-operator-act" title="Permanent link">&para;</a></h3>
+<p>The role deploys a connector; it does not create the tunnel, because creating
+one needs the Cloudflare API with the <strong>Cloudflare Tunnel</strong> permission, or an
+origin certificate (<code>cert.pem</code>) from <code>cloudflared tunnel login</code>. A token with
+only <strong>DNS edit</strong> can create the CNAME and nothing else.</p>
+<p>A token that can <em>mint</em> other tokens is enough, and that is the cheapest way
+to get the scope without widening the one you already have:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Mint a temporary token with exactly the two permissions the role needs.</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$CLOUDFLARE_TOKEN_CREATOR</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--data<span class="w"> </span><span class="s1">'{</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="s1">    "name": "deployflow-aurral-tunnel",</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="s1">    "status": "active",</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="s1">    "policies": [{</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="s1">      "effect": "allow",</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="s1">      "permission_groups": [</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="s1">        {"id": "efea2ab8357b47888938f101ae5e053f", "name": "Cloudflare Tunnel Read"},</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="s1">        {"id": "c07321b023e944ff818fec44d8203567", "name": "Cloudflare Tunnel Write"},</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="s1">        {"id": "4755a26eedb94da69e1066d98aa820be", "name": "DNS Write"}</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="s1">      ],</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="s1">      "resources": {</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="s1">        "com.cloudflare.api.account.&lt;ACCOUNT_ID&gt;": "*",</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="s1">        "com.cloudflare.api.account.zone.&lt;ZONE_ID&gt;": "*"</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="s1">      }</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="s1">    }]</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="s1">  }'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">  </span><span class="s2">"https://api.cloudflare.com/client/v4/accounts/&lt;ACCOUNT_ID&gt;/tokens"</span>
+</code></pre></div>
+<p>Then create the tunnel, set its ingress, point the DNS at it, and fetch the
+<strong>connector token</strong> — which is not the API token, and is the one the
+<code>aurral_tunnel_token</code> secret holds:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">TID</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$T</span><span class="s2">"</span><span class="w"> </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--data<span class="w"> </span><span class="s1">'{"name":"aurral","tunnel_type":"caddy"}'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="s2">"https://api.cloudflare.com/client/v4/accounts/</span><span class="nv">$ACCOUNT_ID</span><span class="s2">/cfd_tunnel"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">'import json,sys; print(json.load(sys.stdin)["result"]["id"])'</span><span class="k">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$T</span><span class="s2">"</span><span class="w"> </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span>--data<span class="w"> </span><span class="s1">'{"config":{"ingress":[</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="s1">    {"hostname":"music.bruj0.net","service":"http://127.0.0.1:3001"},</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s1">    {"service":"http_status:404"}]}}'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="s2">"https://api.cloudflare.com/client/v4/accounts/</span><span class="nv">$ACCOUNT_ID</span><span class="s2">/cfd_tunnel/</span><span class="nv">$TID</span><span class="s2">/configurations"</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$T</span><span class="s2">"</span><span class="w"> </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span>--data<span class="w"> </span><span class="s2">"{\"type\":\"CNAME\",\"name\":\"music.bruj0.net\",\"content\":\"</span><span class="nv">$TID</span><span class="s2">.cfargotunnel.com\",\"proxied\":true,\"ttl\":1}"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="s2">"https://api.cloudflare.com/client/v4/zones/</span><span class="nv">$ZONE_ID</span><span class="s2">/dns_records"</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>curl<span class="w"> </span>-s<span class="w"> </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$T</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">  </span><span class="s2">"https://api.cloudflare.com/client/v4/accounts/</span><span class="nv">$ACCOUNT_ID</span><span class="s2">/cfd_tunnel/</span><span class="nv">$TID</span><span class="s2">/token"</span>
+</code></pre></div>
+<p>The last call returns the connector token. It is the one the secret holds.</p>
+<h2 id="what-the-role-proves">What the role proves<a class="headerlink" href="#what-the-role-proves" title="Permanent link">&para;</a></h2>
+<p>The postconditions are the application's own answer about itself, not a count
+of tasks:</p>
+<table>
+<thead>
+<tr>
+<th>Assertion</th>
+<th>What it catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the container is running</td>
+<td>a Compose project that came up with nothing in it</td>
+</tr>
+<tr>
+<td><code>/api/health/live</code> answers 200</td>
+<td>a process listening that cannot serve</td>
+</tr>
+<tr>
+<td><code>/api/health/bootstrap</code> reports the version</td>
+<td>a container left over from an earlier play</td>
+</tr>
+<tr>
+<td>the guest's own LAN address answers</td>
+<td>a container bound to loopback and published on the wildcard</td>
+</tr>
+<tr>
+<td>the controller reaches the guest's address</td>
+<td>a firewall rule Docker bypassed</td>
+</tr>
+<tr>
+<td><code>aurral.db</code> exists in the state directory</td>
+<td>a container serving with no database behind it</td>
+</tr>
+<tr>
+<td>the image's <code>RepoDigests</code> holds the pinned digest</td>
+<td>the registry serving a different build</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../homarr/" class="md-footer__link md-footer__link--prev" aria-label="Previous: homarr">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                homarr
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../jellyfin/" class="md-footer__link md-footer__link--next" aria-label="Next: jellyfin">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                jellyfin
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.top", "navigation.footer", "navigation.indexes", "navigation.sections", "search.suggest", "search.highlight", "search.share", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../../media/mermaid.min.js"></script>
+      
+        <script src="../../media/mermaid-theme-patch.js"></script>
+      
+        <script src="../../media/panzoom.min.js"></script>
+      
+        <script src="../../media/diagram-zoom.js"></script>
+      
+    
+  </body>
+</html>

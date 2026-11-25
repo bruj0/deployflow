@@ -1,0 +1,55 @@
+/* --- The fixed diagram card ------------------------------------------- */
+
+/* Material draws a Mermaid diagram into a closed shadow root, so the SVG's
+   own surface is out of reach of a site stylesheet. What a reader sees is
+   the host element that holds the shadow root, and that is where the card
+   belongs.
+
+   The card is white in both colour schemes. The labels inside the diagram
+   are corrected to a single dark colour by media/mermaid-theme-patch.js, so
+   the surface under them must stay light in the slate scheme too. A dark
+   card would leave dark text on a dark diagram.
+
+   The card does not apply to the full-screen viewer: that overlay has its
+   own surface, and it draws the diagram on the page background so the
+   diagram is not a white rectangle on a white page. */
+
+.md-typeset div.mermaid {
+  padding: 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+  background-color: #ffffff;
+  overflow-x: auto;
+}
+
+/* The enlarged diagram in the viewer needs the same light surface. The
+   overlay draws on the page background, which is dark in the slate scheme,
+   and Mermaid's node fills are translucent: a dark label on a dark
+   background is unreadable. The card travels with the diagram. */
+.dgz__content {
+  padding: 1rem;
+  border-radius: 0.3rem;
+  background-color: #ffffff;
+}
+
+/* The host element has no width of its own before the shadow root is
+   attached, so it collapses to nothing and the diagram is clipped. */
+.md-typeset div.mermaid:not(:has(svg)) {
+  min-height: 1rem;
+}
+
+/* Material replaces the source element with the host, and the host keeps the
+   `mermaid` class. Before the diagram is drawn the source element is still
+   a <pre>, and Material's own margin rule does not apply to it. */
+.md-typeset pre.mermaid {
+  margin: 1em 0;
+  padding: 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+  background-color: #ffffff;
+  overflow-x: auto;
+}
+
+/* The diagram's own title, drawn by Mermaid inside the shadow root, is
+   positioned against the top of the card. Nothing here can reach it, and
+   nothing needs to: the card is the surface, not a frame around a title. */
